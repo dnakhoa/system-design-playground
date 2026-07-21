@@ -370,6 +370,23 @@ Coordination services that provide distributed primitives.
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Design a distributed counter service:
+
+- Count likes on social media posts
+- 10K likes/second
+- Must be eventually consistent
+- Can tolerate brief inaccuracies
+
+**Key decisions**:
+1. Would you use CRDTs? Which type?
+2. How do you handle concurrent updates?
+3. How do you aggregate counts across nodes?
+4. What's the trade-off between accuracy and performance?
+
+---
+
 ## Discussion Questions
 
 1. You're building a distributed lock service. What happens if the lock holder crashes? How do you prevent deadlock?

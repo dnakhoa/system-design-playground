@@ -480,6 +480,23 @@ Netflix serves 230M+ subscribers with a sophisticated multi-layer caching strate
 
 ---
 
+## Practice Exercise
+
+**15-minute design**: Design a caching strategy for a news website:
+
+- Articles are published once, read millions of times
+- 100M page views/day, 80% on homepage
+- Articles have images (200KB each)
+- CDN already serves static assets
+
+**Key decisions**:
+1. What cache layers would you use?
+2. What's the TTL for article content?
+3. How do you handle cache invalidation when an article is updated?
+4. How do you prevent cache stampede when a breaking news story goes viral?
+
+---
+
 ## Discussion Questions
 
 1. You're building a social media app. Users have a "following feed" that shows posts from people they follow. What cache pattern would you use, and what invalidation strategy?

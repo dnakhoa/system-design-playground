@@ -412,6 +412,23 @@ Split model into stages across GPUs.
 
 ---
 
+## Practice Exercise
+
+**25-minute design**: Design an LLM serving system:
+
+- 1000 queries/second
+- Average response: 200 tokens
+- Must support 8K context window
+- Cost budget: $10K/month
+
+**Key decisions**:
+1. How many GPUs do you need?
+2. Which serving framework would you use?
+3. What batching strategy would you implement?
+4. How do you handle KV cache memory?
+
+---
+
 ## Discussion Questions
 
 1. Why is LLM inference memory-bound rather than compute-bound? What implications does this have for system design?

@@ -503,6 +503,23 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 
 ---
 
+## Practice Exercise
+
+**15-minute design**: Design a rate limiting system for an API:
+
+- 3 tiers: Free (100 req/min), Pro (1000 req/min), Enterprise (10000 req/min)
+- 10 API servers behind a load balancer
+- Must be accurate (no double-counting)
+- Redis available for centralized counters
+
+**Key decisions**:
+1. Which rate limiting algorithm would you use?
+2. How do you handle distributed counting across 10 servers?
+3. What happens when Redis is unavailable?
+4. How do you handle clock skew across servers?
+
+---
+
 ## Discussion Questions
 
 1. You're designing a URL shortener. At what scale do you need a load balancer? What happens if the single server dies before that?

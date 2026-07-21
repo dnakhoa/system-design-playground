@@ -1,11 +1,10 @@
 # System Design: From Fundamentals to LLM AI Systems
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Modules](https://img.shields.io/badge/modules-16-blue.svg)]()
 [![Theory](https://img.shields.io/badge/type-theory%20%2B%20design-orange.svg)]()
 
-> **The most comprehensive open-source system design course** — 16 modules covering distributed systems fundamentals, classic design cases, and LLM AI system architecture. Theory-first with diagrams, trade-off tables, and real-world case studies.
+> **The most comprehensive open-source system design course** — 16 modules covering distributed systems fundamentals, classic design cases, and LLM AI system architecture. Theory-first with diagrams, trade-off tables, real-world case studies, and hands-on exercises.
 
 ## What You'll Learn
 
@@ -28,6 +27,7 @@ This course takes you from system design fundamentals to designing production LL
 | Production AI observability | ❌ | ✅ Module 16 |
 | Classic fundamentals | ✅ | ✅ Modules 01-08 |
 | Real-world case studies | Partial | ✅ Every module |
+| Hands-on exercises | Partial | ✅ Every module |
 | ASCII diagrams | Rare | ✅ Every module |
 | **Total coverage** | 10-12 modules | **16 modules** |
 
@@ -40,6 +40,67 @@ This course takes you from system design fundamentals to designing production LL
 - **Teams** needing a shared reference for design patterns
 
 **Prerequisites:** Basic programming knowledge. No distributed systems background required — we start from fundamentals.
+
+---
+
+## Learning Paths
+
+Choose your path based on your goals:
+
+### Path A: System Design Interview Prep (~16 hours)
+
+Focus on the most commonly asked topics:
+
+```
+Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News Feed)
+    → Module 12 (Payments) → Module 03 (Caching) → Module 04 (Load Balancing)
+```
+
+| Priority | Module | Why |
+|----------|--------|-----|
+| **Must** | 01 | 9-step framework, estimation, CAP theorem |
+| **Must** | 09 | URL shortener is the #1 most-asked question |
+| **Must** | 10 | Chat/news feed tests real-time design |
+| **Must** | 12 | Payments tests consistency and idempotency |
+| **Should** | 03 | Caching comes up in every design |
+| **Should** | 04 | Rate limiting is a common follow-up |
+| Nice to have | 06 | Microservices for architecture discussions |
+
+### Path B: Build LLM AI Systems (~12 hours)
+
+Focus on LLM-specific architecture:
+
+```
+Module 13 (Inference Serving) → Module 14 (RAG at Scale)
+    → Module 15 (Agent Architecture) → Module 16 (Production AI)
+```
+
+| Priority | Module | Why |
+|----------|--------|-----|
+| **Must** | 13 | How to serve LLMs at scale (PagedAttention, batching) |
+| **Must** | 14 | RAG is the most common LLM pattern |
+| **Should** | 15 | Agents are the future of LLM applications |
+| **Should** | 16 | Putting it all together in production |
+| Nice to have | 01 | Foundation concepts still apply |
+
+### Path C: Full Curriculum (~32 hours)
+
+Work through all 16 modules in order. Each builds on the previous.
+
+### Path D: Fill Your Gaps
+
+| Your Gap | Go to |
+|----------|-------|
+| Can't estimate QPS/storage | Module 01 (Fundamentals) |
+| Don't know when to use SQL vs NoSQL | Module 02 (Databases) |
+| Cache invalidation keeps breaking | Module 03 (Caching) |
+| Need to design a chat system | Module 10 (Chat/News Feed) |
+| Building a RAG system | Module 14 (RAG at Scale) |
+| Need to serve LLMs at scale | Module 13 (Inference Serving) |
+| Building autonomous agents | Module 15 (Agent Architecture) |
+| Don't know how to monitor AI systems | Module 16 (Production AI) |
+
+---
 
 ## Curriculum
 
@@ -79,29 +140,11 @@ This course takes you from system design fundamentals to designing production LL
 | 15 | Agent Architecture | ReAct, middleware stack, multi-agent, cost control | ~2h |
 | 16 | Production AI System | Model routing, guardrails, observability, scaling | ~2h |
 
-## How to Use This Course
-
-### For Self-Study
-1. Start with Module 01 — even if you're experienced, review the fundamentals
-2. Follow the sequence — each module builds on previous concepts
-3. Read the case studies — they show how theory applies to real systems
-4. Answer the discussion questions — they test your understanding
-
-### For Interview Prep
-1. Complete Phase 1 (Foundations) for the basics
-2. Work through Phase 3 (Design Cases) for common interview questions
-3. Review Phase 4 (LLM AI) for AI/ML system design questions
-4. Practice the 9-step framework from Module 01
-
-### For Teams
-1. Use as training material for new team members
-2. Reference architecture decisions in design docs
-3. Share the LLM modules (13-16) with AI/ML teams
-4. Establish common vocabulary and patterns
+---
 
 ## Complementary Courses
 
-This course pairs with the **LLM Engineering Course**:
+This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa/llm-engineering-playground)**:
 
 | System Design (This Course) | LLM Engineering |
 |---------------------------|-----------------|
@@ -112,6 +155,34 @@ This course pairs with the **LLM Engineering Course**:
 
 **System Design** teaches you *how to think about architecture*.  
 **LLM Engineering** teaches you *how to build the implementations*.
+
+**Recommended order**: Take LLM Engineering first (build the skills), then System Design (learn to architect at scale). Or take them in parallel — each System Design module links to the relevant LLM Engineering module.
+
+---
+
+## How to Use This Course
+
+### For Self-Study
+1. Start with Module 01 — even if you're experienced, review the fundamentals
+2. Follow the sequence — each module builds on previous concepts
+3. Read the case studies — they show how theory applies to real systems
+4. **Do the exercises** — they test your understanding better than reading
+5. Answer the discussion questions — they test your understanding
+
+### For Interview Prep
+1. Complete Phase 1 (Foundations) for the basics
+2. Work through Phase 3 (Design Cases) for common interview questions
+3. Review Phase 4 (LLM AI) for AI/ML system design questions
+4. Practice the 9-step framework from Module 01
+5. Time yourself: 45 minutes per design problem
+
+### For Teams
+1. Use as training material for new team members
+2. Reference architecture decisions in design docs
+3. Share the LLM modules (13-16) with AI/ML teams
+4. Establish common vocabulary and patterns
+
+---
 
 ## References
 

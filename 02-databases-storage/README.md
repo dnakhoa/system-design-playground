@@ -410,6 +410,17 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Choose the right database for these scenarios:
+
+1. **Social media platform**: User profiles, posts, followers. Write-heavy, eventual consistency OK. Which database? Why?
+2. **E-commerce inventory**: Product stock counts. Strong consistency required, high read throughput. Which database? Why?
+3. **Session store**: User login sessions. Sub-millisecond reads, TTL support. Which database? Why?
+4. **Time-series metrics**: Server metrics (CPU, memory) at 1-second intervals. Write-heavy, range queries. Which database? Why?
+
+---
+
 ## Discussion Questions
 
 1. You're building an e-commerce platform. Products have varying attributes (electronics have wattage, clothing has sizes). Would you use SQL or NoSQL for the product catalog? Why?

@@ -324,5 +324,22 @@ When a user posts, their content must appear in all followers' feeds.
 
 ---
 
+## Practice Exercise
+
+**25-minute design**: Design a chat system for 10M users:
+
+- 1-on-1 and group chats (up to 50 members)
+- Message history (30 days)
+- Online presence indicators
+- Read receipts
+
+**Key decisions**:
+1. How do you handle WebSocket connections at scale?
+2. How do you store and retrieve message history?
+3. How do you implement presence (online/offline)?
+4. How do you handle group chat fan-out?
+
+---
+
 **Previous**: [Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md)
 **Next**: [Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)

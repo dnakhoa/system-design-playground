@@ -366,6 +366,23 @@ Perplexity built a production search-augmented LLM that cites its sources.
 
 ---
 
+## Practice Exercise
+
+**25-minute design**: Design a RAG system for customer support:
+
+- 100K support articles
+- 10K queries/day
+- Must cite sources
+- Must handle follow-up questions
+
+**Key decisions**:
+1. What chunking strategy would you use?
+2. How would you implement two-stage retrieval?
+3. How do you evaluate answer quality?
+4. How do you handle questions that can't be answered from the knowledge base?
+
+---
+
 ## Discussion Questions
 
 1. You're building a RAG system for a legal document search engine. Documents are 50-200 pages long. What chunking strategy would you use and why?

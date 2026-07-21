@@ -390,6 +390,24 @@ Uber processes millions of events per second across ride matching, pricing, driv
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Design an event-driven order system:
+
+When a user places an order:
+1. Charge their card (payment service)
+2. Update inventory (inventory service)
+3. Send confirmation email (email service)
+4. Update analytics (analytics service)
+
+**Key decisions**:
+1. Which events do you need?
+2. What happens if the email service is down?
+3. How do you handle duplicate events?
+4. How do you track the order's progress through the pipeline?
+
+---
+
 ## Discussion Questions
 
 1. You're building an e-commerce order system. When a user places an order, you need to: (a) charge their card, (b) update inventory, (c) send confirmation email, (d) update analytics. Design this with event-driven architecture.

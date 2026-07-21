@@ -509,6 +509,21 @@ Never say "I'd use a relational database." Say:
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Using the 9-step framework, design a URL shortener.
+
+1. (2 min) Clarify requirements — what's in scope?
+2. (3 min) Estimate capacity — QPS, storage, bandwidth
+3. (3 min) Design API — 3-5 endpoints
+4. (2 min) Design data model — tables, indexes
+5. (5 min) Sketch architecture — services, data stores
+6. (5 min) Deep dive — ID generation strategy
+
+**Follow-up**: At what scale do you need to shard the database? What's the caching strategy?
+
+---
+
 ## Discussion Questions
 
 1. You're designing a URL shortener. Your manager says "we need 99.999% availability." What does this imply about your architecture? What trade-offs does it force?

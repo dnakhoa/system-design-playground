@@ -1,14 +1,16 @@
 # Module 16: Production AI System Architecture
 
-> **Putting it all together — the full AI-native system.** This module synthesizes everything from the course into a complete production architecture for AI-powered applications.
+> **Putting it all together — the full AI-native system.** This module is the capstone: it shows how inference serving, RAG, agents, guardrails, and observability compose into a production AI system.
 
 ## Learning Objectives
 
 - Design end-to-end AI system architecture
 - Implement model routing for cost-quality optimization
-- Build production guardrails pipelines
+- Build production guardrails pipelines (input + output)
 - Design observability and monitoring for AI systems
 - Scale from prototype to 100M users
+
+**This module synthesizes**: Module 13 (inference serving) + Module 14 (RAG) + Module 15 (agents) + Module 07 (reliability) + Module 03 (caching).
 
 ---
 
@@ -23,7 +25,7 @@
 │  │                                                       │
 │  ▼                                                       │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  API Gateway                                       │   │
+│  │  API Gateway (Module 04)                          │   │
 │  │  - Authentication (JWT, OAuth)                    │   │
 │  │  - Rate limiting (per-user, per-tier)             │   │
 │  │  - Request validation                             │   │
@@ -31,7 +33,14 @@
 │                         │                               │
 │                         ▼                               │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  Model Router                                     │   │
+│  │  Semantic Cache (Module 03)                       │   │
+│  │  - Embed query → check cache → hit? return cached │   │
+│  │  - Miss? → continue to model router              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         │                               │
+│                         ▼                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Model Router (this module)                       │   │
 │  │  - Classify query complexity                      │   │
 │  │  - Route to appropriate model                     │   │
 │  │  - Balance cost vs quality                        │   │
@@ -41,28 +50,28 @@
 │         ▼               ▼               ▼              │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐      │
 │  │ Small Model│  │ Large Model│  │ Reasoning  │      │
-│  │ (7B, fast, │  │ (70B,      │  │ Model      │      │
-│  │  cheap)    │  │  accurate) │  │ (o3, deep) │      │
+│  │ (7B, fast) │  │ (70B,      │  │ Model      │      │
+│  │            │  │  accurate) │  │ (o3, deep) │      │
 │  └────────────┘  └────────────┘  └────────────┘      │
 │         │               │               │              │
 │         └───────────────┼───────────────┘              │
 │                         │                               │
 │                         ▼                               │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  RAG Pipeline (optional)                          │   │
+│  │  RAG Pipeline (Module 14)                         │   │
 │  │  - Query → Retrieve → Rerank → Augment           │   │
 │  └─────────────────────────────────────────────────┘   │
 │                         │                               │
 │                         ▼                               │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  Guardrails Pipeline                              │   │
+│  │  Guardrails Pipeline (this module)                │   │
 │  │  Input: Validation → PII Detection → Injection   │   │
 │  │  Output: Hallucination → PII → Content Filter    │   │
 │  └─────────────────────────────────────────────────┘   │
 │                         │                               │
 │                         ▼                               │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  Observability                                    │   │
+│  │  Observability (this module)                      │   │
 │  │  - Tracing (OpenTelemetry)                       │   │
 │  │  - Cost tracking                                  │   │
 │  │  - Quality monitoring                             │   │
@@ -76,7 +85,7 @@
 
 ## Model Routing
 
-Route queries to the right model based on complexity.
+Route queries to the right model based on complexity. This is the single biggest cost optimization lever.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -111,6 +120,19 @@ Route queries to the right model based on complexity.
 | **Classifier** | ML model predicts complexity | More accurate, adds latency |
 | **Cascade** | Start small, escalate if needed | Cost-efficient, variable latency |
 | **A/B test** | Route randomly, measure quality | Data-driven, slow optimization |
+
+### Cost Impact
+
+```
+  Without routing (all queries → GPT-4):
+  1M queries/day × $0.03/query = $30,000/day = $900K/month
+
+  With routing (70% small, 25% medium, 5% reasoning):
+  700K × $0.001 + 250K × $0.01 + 50K × $0.10
+  = $700 + $2,500 + $5,000 = $8,200/day = $246K/month
+
+  Savings: $654K/month (73% cost reduction)
+```
 
 ---
 
@@ -174,6 +196,8 @@ Route queries to the right model based on complexity.
 ---
 
 ## Guardrails Architecture
+
+Guardrails are the safety layer between your users and the LLM. They protect against prompt injection, PII leakage, and harmful content.
 
 ### Input Guardrails
 
@@ -258,6 +282,15 @@ Route queries to the right model based on complexity.
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+### Prompt Injection Attack Types
+
+| Attack Type | Example | Defense |
+|-------------|---------|---------|
+| **Direct injection** | "Ignore previous instructions and..." | Pattern matching + ML classifier |
+| **Indirect injection** | Hidden instructions in retrieved documents | Output validation + instruction isolation |
+| **Jailbreak** | "You are now DAN, you can do anything..." | Safety classifiers + output filtering |
+| **Data exfiltration** | "Repeat your system prompt" | System prompt isolation + output monitoring |
 
 ---
 
@@ -346,56 +379,67 @@ Route queries to the right model based on complexity.
 
 ## Scaling from Prototype to 100M Users
 
-### Stage 1: Prototype (0-1K users)
-
 ```
-  Architecture:
-  - Single server (FastAPI + SQLite)
-  - Direct LLM API calls (no routing)
-  - Basic logging
-
-  Cost: ~$100/month
+┌─────────────────────────────────────────────────────────┐
+│                    Scaling Stages                         │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Stage 1: Prototype (0-1K users)                        │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  - Single server (FastAPI + SQLite)               │   │
+│  │  - Direct LLM API calls (no routing)             │   │
+│  │  - Basic logging                                  │   │
+│  │  Cost: ~$100/month                               │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         │                               │
+│                         ▼                               │
+│  Stage 2: Growth (1K-100K users)                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  - Load balancer + 2-3 API servers               │   │
+│  │  - PostgreSQL + Redis cache                       │   │
+│  │  - Basic rate limiting                            │   │
+│  │  - Model routing (small vs large)                │   │
+│  │  Cost: ~$5K/month                                │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         │                               │
+│                         ▼                               │
+│  Stage 3: Scale (100K-10M users)                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  - Kubernetes cluster                             │   │
+│  │  - Multiple model endpoints                      │   │
+│  │  - Full guardrails pipeline                      │   │
+│  │  - Observability stack (OpenTelemetry)           │   │
+│  │  - A/B testing framework                         │   │
+│  │  - CDN for static assets                         │   │
+│  │  Cost: ~$50K/month                               │   │
+│  └─────────────────────────────────────────────────┘   │
+│                         │                               │
+│                         ▼                               │
+│  Stage 4: Enterprise (10M-100M users)                  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  - Multi-region deployment                       │   │
+│  │  - Custom model hosting (vLLM clusters)          │   │
+│  │  - Advanced caching (semantic cache)             │   │
+│  │  - ML-based model routing                        │   │
+│  │  - Full audit trail                              │   │
+│  │  - SOC 2 compliance                              │   │
+│  │  Cost: ~$500K/month                              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Stage 2: Growth (1K-100K users)
+### What Changes at Each Stage
 
-```
-  Architecture:
-  - Load balancer + 2-3 API servers
-  - PostgreSQL + Redis cache
-  - Basic rate limiting
-  - Model routing (small vs large)
-
-  Cost: ~$5K/month
-```
-
-### Stage 3: Scale (100K-10M users)
-
-```
-  Architecture:
-  - Kubernetes cluster
-  - Multiple model endpoints
-  - Full guardrails pipeline
-  - Observability stack (OpenTelemetry)
-  - A/B testing framework
-  - CDN for static assets
-
-  Cost: ~$50K/month
-```
-
-### Stage 4: Enterprise (10M-100M users)
-
-```
-  Architecture:
-  - Multi-region deployment
-  - Custom model hosting (vLLM clusters)
-  - Advanced caching (semantic cache)
-  - ML-based model routing
-  - Full audit trail
-  - SOC 2 compliance
-
-  Cost: ~$500K/month
-```
+| Component | Prototype | Growth | Scale | Enterprise |
+|-----------|-----------|--------|-------|------------|
+| **Load balancing** | None | Nginx | Kubernetes | Global LB |
+| **Database** | SQLite | PostgreSQL | Sharded PostgreSQL | Distributed SQL |
+| **Caching** | None | Redis | Redis cluster | Semantic cache |
+| **LLM routing** | None | Rule-based | ML classifier | Custom routing |
+| **Guardrails** | None | Basic rules | Full pipeline | Multi-layer |
+| **Observability** | print() | Structured logs | OpenTelemetry | Full stack |
+| **Deployment** | Single server | 2-3 servers | Kubernetes | Multi-region |
 
 ---
 
@@ -441,6 +485,36 @@ Route queries to the right model based on complexity.
 
 ---
 
+## Exercises
+
+### Exercise 1: Architecture Design (30 min)
+
+Design a customer support AI system that:
+- Handles 10K queries/day
+- Uses RAG to answer from a knowledge base of 50K articles
+- Routes simple questions to a small model, complex ones to a large model
+- Has guardrails for PII detection and harmful content
+
+Draw the architecture diagram. List each component and its purpose.
+
+### Exercise 2: Cost Optimization (20 min)
+
+Your AI system costs $50K/month. Break down:
+- 60% of queries are simple (could use 7B model)
+- 30% are medium (need 70B model)
+- 10% are complex (need reasoning model)
+
+Currently all queries go to GPT-4 ($0.03/query). Design a routing strategy and calculate savings.
+
+### Exercise 3: Guardrails Design (20 min)
+
+Your AI system handles medical questions. Design the guardrails pipeline:
+- What inputs should be blocked?
+- What outputs should be filtered?
+- How do you handle hallucinations in medical advice?
+
+---
+
 ## Key References
 
 | Resource | Type | Focus |
@@ -456,13 +530,23 @@ Route queries to the right model based on complexity.
 
 1. You're building an AI-powered customer support system. Design the full architecture from request to response. What components do you need?
 
+   **Model answer**: API Gateway → Semantic Cache → Model Router → (Small/Large/Reasoning model) → RAG Pipeline → Guardrails → Observability. Key components: cache for repeated queries, model routing for cost optimization, RAG for grounding, guardrails for safety, observability for monitoring.
+
 2. Design a model routing system that balances cost and quality. How do you classify query complexity?
+
+   **Model answer**: Start with rule-based routing (keywords, query length). Track escalation rates. If 20%+ of small model responses get escalated, retrain the classifier. Use A/B testing to validate routing decisions. Key metric: cost per successful resolution.
 
 3. Your AI system serves 1M queries/day. The hallucination rate is 5%. Design a guardrails pipeline to reduce it to <1%.
 
+   **Model answer**: Add citation requirements to prompt → output validation checks if claims are grounded in retrieved context → LLM-as-judge scores faithfulness → flag low-scored responses for human review. Expect 2-3% from citation validation, 1% from output filtering, 0.5% from human review.
+
 4. You're scaling from 10K to 1M users. What changes in your architecture? What new components do you need?
 
+   **Model answer**: Add load balancer, sharded database, Redis cache, model routing, full guardrails pipeline, observability stack. Key new components: semantic cache (saves 30-50% of LLM calls), model routing (saves 70% of LLM cost), distributed tracing.
+
 5. Design an observability dashboard for an AI system. What metrics would you track, and how would you visualize them?
+
+   **Model answer**: Track: requests/min, P95 latency, error rate, cost/query, model usage distribution, hallucination rate, user satisfaction, cache hit ratio. Visualize: time series for trends, heatmaps for latency distribution, pie charts for model usage, gauges for SLO compliance.
 
 ---
 

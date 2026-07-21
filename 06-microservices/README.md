@@ -427,6 +427,22 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Decompose a food delivery app into microservices:
+
+- Features: User registration, restaurant browsing, ordering, payment, delivery tracking, reviews
+- 100K daily active users
+- 3 engineering teams
+
+**Key decisions**:
+1. What bounded contexts do you identify?
+2. How many microservices would you create?
+3. Which services communicate synchronously vs asynchronously?
+4. How do you handle the order saga across services?
+
+---
+
 ## Discussion Questions
 
 1. You're building a food delivery app. Start with a monolith. At what point would you split into microservices? What would be the first service to extract?

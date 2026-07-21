@@ -357,6 +357,23 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 
 ---
 
+## Practice Exercise
+
+**25-minute design**: Design a coding agent:
+
+- Can read files, run commands, write code
+- Must handle errors gracefully
+- Must not delete user files without confirmation
+- Must track progress on multi-step tasks
+
+**Key decisions**:
+1. What middleware concerns do you need?
+2. How do you implement the permission model?
+3. How do you handle long-running tasks?
+4. How do you control costs?
+
+---
+
 ## Discussion Questions
 
 1. You're building a coding agent that can read files, run commands, and write code. Design the harness architecture. What middleware concerns do you need?

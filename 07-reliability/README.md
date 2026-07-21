@@ -396,6 +396,22 @@ Google's SRE practices are the gold standard for reliability engineering.
 
 ---
 
+## Practice Exercise
+
+**20-minute design**: Design reliability for a payment system:
+
+- 99.99% availability required
+- Payments must not be lost
+- Must survive data center failure
+
+**Key decisions**:
+1. What SLOs would you set?
+2. How do you handle payment service failures?
+3. What's your disaster recovery strategy?
+4. How do you prevent cascading failures?
+
+---
+
 ## Discussion Questions
 
 1. You're designing an e-commerce checkout. What happens if the payment service is down? How do you handle this gracefully?
