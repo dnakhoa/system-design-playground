@@ -275,35 +275,110 @@ Serves cached content immediately while refreshing in the background.
 
 ### TTL (Time-To-Live)
 
-```
-  SET user:123 "..." EX 3600   # Expires in 1 hour
+```redis
+# Set key with 1-hour expiry
+SET user:123 '{"name": "Alice", "email": "..."}' EX 3600
 
-  Pros: Simple, automatic cleanup
-  Cons: Data may be stale for up to TTL duration
+# Check remaining TTL
+TTL user:123    # Returns: 3542 (seconds remaining)
+
+# Refresh TTL on access (extend by 1 hour)
+EXPIRE user:123 3600
 ```
+
+```python
+# Application-level TTL with Redis
+import redis
+import json
+
+r = redis.Redis()
+
+def get_user(user_id: int) -> dict:
+    key = f"user:{user_id}"
+    
+    # Try cache first
+    cached = r.get(key)
+    if cached:
+        r.expire(key, 3600)  # Refresh TTL on access
+        return json.loads(cached)
+    
+    # Cache miss: query DB
+    user = db.query("SELECT * FROM users WHERE id = %s", user_id)
+    
+    # Populate cache with 1-hour TTL
+    r.setex(key, 3600, json.dumps(user))
+    return user
+```
+
+| Pros | Cons |
+|------|------|
+| Simple, automatic cleanup | Data may be stale for up to TTL duration |
 
 ### Event-Driven Invalidation
 
-```
-  On write: DELETE cache:key
+```python
+# Write-through invalidation
+def update_user(user_id: int, name: str):
+    # 1. Update database
+    db.execute("UPDATE users SET name = %s WHERE id = %s", name, user_id)
+    
+    # 2. Invalidate cache (delete, don't update)
+    r.delete(f"user:{user_id}")
+    
+    # Next read will repopulate cache with fresh data
 
-  On user update:
-    UPDATE users SET name='New' WHERE id=123
-    DEL cache:user:123
-
-  Pros: Cache is always fresh (eventual consistency)
-  Cons: Race conditions (concurrent writes), missed invalidations
+# Problem: Race condition
+# Thread A: UPDATE users SET name = 'Alice' WHERE id = 123
+# Thread B: SELECT * FROM users WHERE id = 123  (reads OLD name)
+# Thread A: DEL cache:user:123
+# Thread B: SET cache:user:123 '{"name": "Bob"}'  (caches OLD data!)
+# 
+# Solution: Use a version column or lock
 ```
+
+```sql
+-- Version-based invalidation (safe)
+UPDATE users SET name = 'Alice', version = version + 1 WHERE id = 123;
+-- Cache key includes version: user:123:v5
+-- Old key user:123:v4 naturally expires
+```
+
+| Pros | Cons |
+|------|------|
+| Cache is always fresh (eventual consistency) | Race conditions (concurrent writes), missed invalidations |
 
 ### Versioned Keys
 
-```
-  user:123:v3 → "new data"
-  user:123:v2 → "old data" (will be evicted)
+```python
+# Versioned key pattern
+def get_user(user_id: int) -> dict:
+    # Get current version from metadata
+    version = r.get(f"user:{user_id}:version") or "1"
+    key = f"user:{user_id}:v{version}"
+    
+    cached = r.get(key)
+    if cached:
+        return json.loads(cached)
+    
+    user = db.query("SELECT * FROM users WHERE id = %s", user_id)
+    r.setex(key, 3600, json.dumps(user))
+    return user
 
-  Pros: No race conditions, old versions serve stale but valid data
-  Cons: Key management complexity
+def update_user(user_id: int, name: str):
+    db.execute("UPDATE users SET name = %s WHERE id = %s", name, user_id)
+    
+    # Bump version (old key expires naturally)
+    r.incr(f"user:{user_id}:version")
+    
+    # Optional: explicitly delete old version
+    old_version = r.get(f"user:{user_id}:version")
+    if old_version:
+        r.delete(f"user:{user_id}:v{old_version}")
 ```
+
+| Pros | Cons |
+|------|------|
+| No race conditions, old versions serve stale but valid data | Key management complexity |
 
 ---
 
@@ -330,32 +405,98 @@ When a popular cache key expires, 1000+ simultaneous requests all miss and hit t
 
 **1. Mutex / Locking**
 
-```
-  on_cache_miss(key):
-    if try_lock(f"lock:{key}"):
-      data = db.query(key)
-      cache.set(key, data, ttl=3600)
-      release_lock(f"lock:{key}")
+```python
+import redis
+import time
+
+r = redis.Redis()
+
+def get_with_lock(key: str, ttl: int = 3600) -> str:
+    """Cache-aside with distributed lock to prevent stampede."""
+    # Try cache first
+    value = r.get(key)
+    if value:
+        return value
+    
+    lock_key = f"lock:{key}"
+    
+    # Try to acquire lock (NX = only if not exists, EX = auto-expire)
+    if r.set(lock_key, "1", nx=True, ex=10):  # Lock for 10 seconds
+        try:
+            # We won the lock: fetch from DB and populate cache
+            data = db.query(key)
+            r.setex(key, ttl, data)
+            return data
+        finally:
+            r.delete(lock_key)
     else:
-      sleep(50ms)  # Wait for other request to populate cache
-      return cache.get(key)  # Retry
+        # Another request is fetching: wait and retry
+        time.sleep(0.05)  # 50ms
+        return r.get(key) or get_with_lock(key, ttl)  # Retry
 ```
 
 **2. Probabilistic Early Expiration**
 
-```
-  Remaining TTL = original_ttl - (current_time - set_time)
-  Expiration probability = 1 - (remaining_ttl / original_ttl)
+```python
+import random
+import time
 
-  # If remaining TTL is 10% of original, 90% chance of "soft miss"
-  # Soft miss: serve stale + async refresh
+def get_with_early_expiration(key: str, ttl: int = 3600) -> str:
+    """Serve stale data before actual expiration to prevent stampede."""
+    value = r.get(key)
+    if not value:
+        return populate_cache(key, ttl)
+    
+    # Check remaining TTL
+    remaining_ttl = r.ttl(key)
+    if remaining_ttl < 0:
+        return populate_cache(key, ttl)
+    
+    # Probabilistic early expiration
+    # As TTL approaches 0, probability of "soft miss" increases
+    expiration_probability = 1 - (remaining_ttl / ttl)
+    
+    if random.random() < expiration_probability:
+        # Soft miss: serve stale data + async refresh
+        import threading
+        threading.Thread(target=populate_cache, args=(key, ttl)).start()
+    
+    return value
 ```
 
 **3. Request Coalescing**
 
-```
-  All concurrent requests for the same key are dedupled.
-  Only ONE request hits the DB; others wait for the result.
+```python
+import threading
+
+# Global lock map for request coalescing
+_inflight = {}
+_lock = threading.Lock()
+
+def get_with_coalescing(key: str, ttl: int = 3600) -> str:
+    """Deduplicate concurrent requests for the same key."""
+    value = r.get(key)
+    if value:
+        return value
+    
+    with _lock:
+        if key in _inflight:
+            # Another request is already fetching: wait for it
+            return _inflight[key].wait()
+        
+        # We're the first: create an event for others to wait on
+        event = threading.Event()
+        _inflight[key] = event
+    
+    try:
+        # Fetch from DB (only ONE request does this)
+        data = db.query(key)
+        r.setex(key, ttl, data)
+        event.set()  # Wake up all waiting requests
+        return data
+    finally:
+        with _lock:
+            del _inflight[key]
 ```
 
 ---
@@ -377,27 +518,89 @@ A single key receiving disproportionate traffic can overwhelm one cache node.
 
 **1. Local caching (L1)**
 
-```
-  App → Local cache (in-process) → Redis → DB
+```python
+from cachetools import TTLCache
 
-  Even 10ms of local caching absorbs thousands of requests.
+# In-process LRU cache (per application instance)
+_local_cache = TTLCache(maxsize=10000, ttl=60)  # 10K items, 60s TTL
+
+def get_with_local_cache(key: str) -> str:
+    """Two-layer cache: local (in-process) + Redis."""
+    # L1: Check local cache (fastest, ~0.01ms)
+    if key in _local_cache:
+        return _local_cache[key]
+    
+    # L2: Check Redis (~0.5ms)
+    value = r.get(key)
+    if value:
+        _local_cache[key] = value  # Populate L1
+        return value
+    
+    # L3: Check DB (~3ms)
+    value = db.query(key)
+    r.setex(key, 3600, value)  # Populate L2
+    _local_cache[key] = value  # Populate L1
+    return value
 ```
 
 **2. Key replication**
 
-```
-  hot_key → hot_key:1, hot_key:2, hot_key:3
-  Distributed across Redis shards via consistent hashing.
+```python
+import random
 
-  App randomly picks one replica per request.
+REPLICAS = 3  # Number of replicas per hot key
+
+def set_hot_key(key: str, value: str, ttl: int = 3600):
+    """Store hot key across multiple Redis shards."""
+    for i in range(REPLICAS):
+        replica_key = f"{key}:replica{i}"
+        r.setex(replica_key, ttl, value)
+
+def get_hot_key(key: str) -> str:
+    """Read from random replica to distribute load."""
+    replica = random.randint(0, REPLICAS - 1)
+    replica_key = f"{key}:replica{replica}"
+    
+    value = r.get(replica_key)
+    if value:
+        return value
+    
+    # Fallback: try all replicas
+    for i in range(REPLICAS):
+        value = r.get(f"{key}:replica{i}")
+        if value:
+            return value
+    
+    return None
 ```
 
 **3. Cache hierarchy**
 
-```
-  L1: In-process (fastest, per-instance)
-  L2: Redis cluster (shared, sub-millisecond)
-  L3: CDN (edge, for static content)
+```python
+class CacheHierarchy:
+    """Three-layer cache: L1 (local) → L2 (Redis) → L3 (CDN)."""
+    
+    def __init__(self):
+        self.l1 = TTLCache(maxsize=10000, ttl=60)   # In-process
+        self.l2 = redis.Redis()                       # Redis cluster
+        # L3 is handled by CDN (nginx/cloudflare)
+    
+    def get(self, key: str) -> str:
+        # L1: In-process (fastest)
+        if key in self.l1:
+            return self.l1[key]
+        
+        # L2: Redis (shared, sub-millisecond)
+        value = self.l2.get(key)
+        if value:
+            self.l1[key] = value
+            return value
+        
+        # L3: Origin (CDN misses go here)
+        value = origin_fetch(key)
+        self.l2.setex(key, 3600, value)
+        self.l1[key] = value
+        return value
 ```
 
 ---
