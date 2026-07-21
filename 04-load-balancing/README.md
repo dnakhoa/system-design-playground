@@ -1,0 +1,521 @@
+# Module 04: Load Balancing and Networking
+
+> **Distribute traffic intelligently and keep systems healthy.** A load balancer is the front door of your system — it determines which server handles each request, and its design affects latency, availability, and fault tolerance.
+
+## Learning Objectives
+
+- Understand load balancing algorithms and when to use each
+- Compare L4 vs L7 load balancing
+- Design rate limiting with appropriate algorithms
+- Implement health checks and failover
+- Understand API gateway patterns
+
+---
+
+## Why Load Balancing Matters
+
+A single server can handle ~1,000-10,000 concurrent connections. Beyond that, you need multiple servers and a way to distribute traffic.
+
+```
+  Without load balancing:           With load balancing:
+
+  ┌──────────┐                     ┌──────────┐
+  │  Client  │                     │  Client  │
+  └─────┬────┘                     └─────┬────┘
+        │                                │
+  ┌─────▼────┐                     ┌─────▼─────┐
+  │  Server  │ ◄── SPOF           │    LB     │ ◄── Distributes
+  │ (overloaded)│                  └──┬───┬───┬┘     traffic
+  └──────────┘                     ┌──▼─┐┌▼──┐┌▼──┐
+                                   │ S1 ││ S2 ││ S3 │
+                                   └────┘└────┘└────┘
+```
+
+### Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Scalability** | Add servers to handle more traffic |
+| **Availability** | If one server dies, others continue |
+| **Flexibility** | Rolling deployments, A/B testing |
+| **Performance** | Route to the least-loaded server |
+
+---
+
+## Load Balancing Algorithms
+
+### Round Robin
+
+Each request goes to the next server in rotation.
+
+```
+  Requests: R1, R2, R3, R4, R5, R6
+  Servers:  [S1, S2, S3]
+
+  R1 → S1
+  R2 → S2
+  R3 → S3
+  R4 → S1
+  R5 → S2
+  R6 → S3
+
+  ✓ Simple, no state needed
+  ✓ Even distribution (if servers are equal)
+  ✗ Ignores server load and response time
+```
+
+### Weighted Round Robin
+
+Servers get proportional traffic based on capacity.
+
+```
+  S1 (weight 5) gets 5/8 of traffic
+  S2 (weight 2) gets 2/8 of traffic
+  S3 (weight 1) gets 1/8 of traffic
+
+  ✓ Accounts for heterogeneous servers
+  ✗ Weights must be manually configured
+```
+
+### Least Connections
+
+Route to the server with fewest active connections.
+
+```
+  S1: 50 active connections
+  S2: 30 active connections  ◄── Next request goes here
+  S3: 45 active connections
+
+  ✓ Adapts to real-time load
+  ✓ Handles slow requests well
+  ✗ Requires tracking connection counts
+```
+
+### IP Hash
+
+Hash the client IP to determine which server handles all their requests.
+
+```
+  hash(client_ip) % num_servers = server_index
+
+  Client 1.2.3.4 → hash → server 0  (always)
+  Client 5.6.7.8 → hash → server 2  (always)
+
+  ✓ Sticky sessions (same client → same server)
+  ✓ No session replication needed
+  ✗ Uneven distribution (popular IPs)
+  ✗ Server failure loses all sessions
+```
+
+### Consistent Hashing
+
+Minimize reshuffling when servers are added or removed.
+
+```
+  Hash ring with servers at positions:
+
+       ┌─────── S1 ───────┐
+      /                     \
+    S4                       S2
+      \                     /
+       └─────── S3 ───────┘
+
+  Request → hash(key) → clockwise to nearest server
+
+  Adding S5 between S1 and S2:
+  - Only requests between S1 and S5 need to move
+  - All other requests stay with their server
+
+  ✓ Minimal disruption on scale events
+  ✓ Even distribution with virtual nodes
+  ✓ Used by: DynamoDB, Cassandra, CDN caches
+```
+
+---
+
+## L4 vs L7 Load Balancing
+
+### L4 (Transport Layer)
+
+Operates at TCP/UDP level. Routes based on IP + port.
+
+```
+  ┌──────────────────────────────────┐
+  │         L4 Load Balancer          │
+  │                                    │
+  │  Client IP:Port ──▶ Server IP:Port│
+  │  (no inspection of content)       │
+  └──────────────────────────────────┘
+
+  ✓ Very fast (no packet inspection)
+  ✓ Low latency (~microseconds)
+  ✓ Handles millions of connections
+  ✗ Can't route based on URL/header
+  ✗ No TLS termination (unless configured)
+```
+
+### L7 (Application Layer)
+
+Operates at HTTP level. Routes based on URL, headers, cookies.
+
+```
+  ┌──────────────────────────────────────┐
+  │         L7 Load Balancer              │
+  │                                        │
+  │  /api/users    → Server Pool A        │
+  │  /api/orders   → Server Pool B        │
+  │  /static/*     → CDN/Cache            │
+  │  Host: admin.* → Admin Servers        │
+  └──────────────────────────────────────┘
+
+  ✓ Content-based routing
+  ✓ TLS termination (SSL offloading)
+  ✓ HTTP header inspection
+  ✓ WebSocket support
+  ✗ Slower than L4 (packet inspection)
+  ✗ More complex configuration
+```
+
+### Comparison
+
+| Factor | L4 | L7 |
+|--------|----|----|
+| **Speed** | Faster (no content inspection) | Slower (inspects HTTP) |
+| **Routing** | IP + port only | URL, headers, cookies |
+| **TLS** | Passthrough | Terminate & re-encrypt |
+| **Health checks** | TCP connect | HTTP 200 check |
+| **Use case** | Internal service communication | Public-facing web apps |
+
+---
+
+## DNS-Based Load Balancing
+
+### GeoDNS
+
+Resolve domain to the nearest data center.
+
+```
+  User in New York:
+    api.example.com → 198.51.100.10 (US East)
+
+  User in London:
+    api.example.com → 203.0.113.10 (EU West)
+
+  User in Tokyo:
+    api.example.com → 192.0.2.10 (Asia Pacific)
+```
+
+### Weighted DNS
+
+Return multiple IPs with weighted probabilities.
+
+```
+  api.example.com:
+    60% → 10.0.0.1 (primary region)
+    30% → 10.0.1.1 (secondary region)
+    10% → 10.0.2.1 (disaster recovery)
+```
+
+### DNS Limitations
+
+| Limitation | Impact |
+|------------|--------|
+| TTL propagation | Changes take minutes to hours |
+| No health checks | DNS keeps returning dead IPs |
+| Client caching | Clients may ignore TTL changes |
+
+---
+
+## Rate Limiting
+
+Protect your system from abuse and overload.
+
+### Token Bucket
+
+Tokens are added at a fixed rate. Each request consumes one token.
+
+```
+  Bucket capacity: 10 tokens
+  Refill rate: 5 tokens/second
+
+  Time 0:  [■■■■■■■■■■] 10 tokens
+  Request: [■■■■■■■■■ ] 9 tokens (1 consumed)
+  Time 1:  [■■■■■■■■■■] 10 tokens (refilled)
+  Request: [■■■■■■■■■ ] 9 tokens
+  Burst:   [■■■■■     ] 5 tokens (5 consumed at once)
+
+  ✓ Allows bursts (up to bucket capacity)
+  ✓ Smooth rate over time
+  ✓ Simple to implement
+```
+
+### Leaky Bucket
+
+Requests enter a queue (bucket). Processed at a fixed rate.
+
+```
+  Queue capacity: 10
+  Process rate: 5/second
+
+  Requests:  R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11
+  Queue:     [R1 R2 R3 R4 R5 R6 R7 R8 R9 R10] ← R11 REJECTED
+  Output:    R1 R2 R3 R4 R5 (one per 200ms)
+
+  ✓ Smooth, constant output rate
+  ✓ Predictable latency
+  ✗ Bursts are queued (added latency)
+  ✗ Queue overflow = request drop
+```
+
+### Fixed Window
+
+Count requests in fixed time windows.
+
+```
+  Window: 1 minute
+  Limit: 100 requests
+
+  12:00:00 - 12:01:00: [████████░░] 80/100  ✓
+  12:01:00 - 12:02:00: [██████████] 100/100 ✓ (at limit)
+  12:01:45: Request → REJECTED (over limit)
+
+  ✓ Simple to implement
+  ✗ Boundary problem: 100 requests at 12:00:59 + 100 at 12:01:01 = 200 in 2 seconds
+```
+
+### Sliding Window
+
+Combines fixed window with sliding counter.
+
+```
+  Sliding window: 1 minute
+  Limit: 100 requests
+
+  Current window: 80 requests
+  Previous window: 60 requests
+  Elapsed in current: 30 seconds
+
+  Weighted count = 80 + 60 × (30/60) = 80 + 30 = 110
+
+  110 > 100 → REJECTED
+
+  ✓ No boundary problem
+  ✓ More accurate than fixed window
+  ✗ More complex to implement
+```
+
+### Algorithm Comparison
+
+| Algorithm | Burst Handling | Memory | Accuracy | Use Case |
+|-----------|---------------|--------|----------|----------|
+| Token Bucket | Allows controlled bursts | O(1) | High | API rate limiting |
+| Leaky Bucket | Smooths bursts | O(n) queue | High | Traffic shaping |
+| Fixed Window | Boundary burst risk | O(1) | Low | Simple limits |
+| Sliding Window | No boundary issues | O(n) | High | Precise limiting |
+
+### Distributed Rate Limiting
+
+```
+  ┌──────────┐     ┌──────────┐     ┌──────────┐
+  │  LB 1    │     │  LB 2    │     │  LB 3    │
+  └────┬─────┘     └────┬─────┘     └────┬─────┘
+       │                │                │
+       └────────────────┼────────────────┘
+                        │
+                 ┌──────▼──────┐
+                 │ Redis Cluster│ ◄── Centralized counters
+                 │ (atomic incr)│
+                 └─────────────┘
+
+  Problem: Each LB has partial view → need centralized counter
+  Solution: Redis INCR with TTL (atomic, fast)
+
+  GET /api/resource → INCR rate:user:123 → EXPIRE rate:user:123 60
+  If INCR > 100 → REJECT
+```
+
+---
+
+## Health Checks
+
+### Active Health Checks
+
+The load balancer periodically probes servers.
+
+```
+  Every 10 seconds:
+  LB → Server 1: GET /health → 200 OK ✓
+  LB → Server 2: GET /health → 503 Error ✗ → REMOVE from pool
+  LB → Server 3: GET /health → timeout ✗ → REMOVE from pool
+
+  After 3 consecutive failures → mark as DOWN
+  After 3 consecutive successes → mark as UP
+```
+
+### Passive Health Checks
+
+Detect failures from actual request traffic.
+
+```
+  If server returns 5xx or times out 3 times in 1 minute → mark as DOWN
+  No extra probes needed
+```
+
+### Readiness vs Liveness Probes
+
+| Probe | Purpose | Failure Action |
+|-------|---------|----------------|
+| **Readiness** | Can the server handle traffic? | Remove from load balancer pool |
+| **Liveness** | Is the server alive? | Restart the server (Kubernetes) |
+
+---
+
+## API Gateway Pattern
+
+An API gateway is a single entry point that handles cross-cutting concerns.
+
+```
+  ┌──────────────────────────────────────────────────┐
+  │                   API Gateway                     │
+  │                                                    │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
+  │  │  Auth    │  │  Rate    │  │   Routing    │   │
+  │  │ (JWT,    │  │  Limit   │  │  /api/v1/*   │   │
+  │  │  OAuth)  │  │          │  │  /api/v2/*   │   │
+  │  └──────────┘  └──────────┘  └──────────────┘   │
+  │                                                    │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
+  │  │  Logging │  │  TLS     │  │  Request     │   │
+  │  │  & Tracing│  │  Terminate│  │  Transform  │   │
+  │  └──────────┘  └──────────┘  └──────────────┘   │
+  └──────────────────────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          │               │               │
+     ┌────▼────┐    ┌─────▼────┐    ┌────▼────┐
+     │ User    │    │ Order    │    │ Payment │
+     │ Service │    │ Service  │    │ Service │
+     └─────────┘    └──────────┘    └─────────┘
+```
+
+### API Gateway Responsibilities
+
+| Concern | Description |
+|---------|-------------|
+| **Authentication** | Verify JWT tokens, OAuth flows |
+| **Rate Limiting** | Per-user, per-IP, per-API limits |
+| **Routing** | Direct requests to correct microservice |
+| **TLS Termination** | Handle SSL/TLS encryption |
+| **Request Transformation** | Protocol conversion, field mapping |
+| **Response Caching** | Cache frequent responses |
+| **Logging & Tracing** | Centralized observability |
+| **API Versioning** | Route v1/v2 requests |
+
+---
+
+## Service Mesh
+
+A service mesh adds transparent networking to microservices.
+
+```
+  Without service mesh:            With service mesh:
+
+  ┌─────────┐                     ┌─────────┐
+  │ Service │◄── Manual retry,    │ Service │
+  │    A    │    timeout, mTLS    │    A    │
+  └─────────┘                     └────┬────┘
+                                       │ sidecar proxy
+  ┌─────────┐                     ┌────▼────┐
+  │ Service │                     │ Envoy   │
+  │    B    │                     │ proxy   │
+  └─────────┘                     └────┬────┘
+                                       │
+  Applications handle               Proxy handles
+  networking logic                   retries, mTLS,
+                                     load balancing
+```
+
+**Popular service meshes**: Istio, Linkerd, Consul Connect
+
+---
+
+## Case Study: Cloudflare at Scale
+
+Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
+
+### Architecture
+
+```
+┌────────────────────────────────────────────────────────┐
+│                  Cloudflare Architecture                │
+├────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Anycast Network (IP routing)                    │   │
+│  │  - Same IP address in 310+ cities                │   │
+│  │  - BGP routes to nearest data center             │   │
+│  │  - Automatic failover if DC goes down            │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Load Balancing Layer                            │   │
+│  │  - Maglev (consistent hashing) for internal LB  │   │
+│  │  - L7 routing (URL, header, cookie-based)        │   │
+│  │  - Rate limiting (token bucket, per-IP)          │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Edge Compute (Workers)                          │   │
+│  │  - Run customer code at the edge                 │   │
+│  │  - DDoS mitigation                               │   │
+│  │  - WAF (Web Application Firewall)                │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Origin Shield                                    │   │
+│  │  - Caches responses before reaching origin       │   │
+│  │  - Reduces origin load by 60-80%                 │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+└────────────────────────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+1. **Anycast for global load balancing**: Same IP address announced from 310+ locations. BGP routes users to the nearest data center. No DNS-based routing needed.
+
+2. **Consistent hashing for internal load balancing**: Maglev (Google's consistent hashing) ensures minimal reshuffling when servers are added/removed. Handles millions of connections per second.
+
+3. **Edge-first architecture**: 95%+ of requests are served from the edge. Only cache misses reach origin servers. This reduces latency and origin load.
+
+4. **DDoS mitigation at the network layer**: Volumetric attacks are absorbed by the Anycast network itself (each data center absorbs its share). Application-layer attacks are mitigated by WAF rules.
+
+---
+
+## Key References
+
+| Resource | Type | Focus |
+|----------|------|-------|
+| Designing Data-Intensive Applications (Ch. 6) | Book | Replication, partitioning |
+| Cloudflare Blog | Blog | Anycast, Maglev, edge computing |
+| Nginx Documentation | Docs | Load balancing configuration |
+| "Understanding Distributed Systems" | Book | Networking fundamentals |
+
+---
+
+## Discussion Questions
+
+1. You're designing a URL shortener. At what scale do you need a load balancer? What happens if the single server dies before that?
+
+2. Compare L4 and L7 load balancing. You're building a gRPC-based microservice. Which would you choose and why?
+
+3. Design a rate limiting system for an API with 3 tiers: free (100 req/min), pro (1000 req/min), enterprise (10000 req/min). How would you implement this across multiple servers?
+
+4. Explain consistent hashing to a non-technical person. Why is it better than simple round-robin for a CDN?
+
+5. You're designing a health check system. What would you check beyond "is the server responding"? What's the difference between readiness and liveness probes?
+
+---
+
+**Previous**: [Caching Strategies](../03-caching/README.md)
+**Next**: [Asynchronous Systems and Message Queues](../05-async-systems/README.md)
