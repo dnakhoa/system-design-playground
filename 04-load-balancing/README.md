@@ -232,7 +232,45 @@ Protect your system from abuse and overload.
 
 ### Token Bucket
 
-Tokens are added at a fixed rate. Each request consumes one token.
+```python
+import time
+
+class TokenBucket:
+    """Token bucket rate limiter. Allows controlled bursts."""
+    
+    def __init__(self, capacity: int, refill_rate: float):
+        """
+        Args:
+            capacity: Maximum tokens in bucket (burst size)
+            refill_rate: Tokens added per second
+        """
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = capacity
+        self.last_refill = time.time()
+    
+    def _refill(self):
+        now = time.time()
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        self.last_refill = now
+    
+    def allow(self) -> bool:
+        self._refill()
+        if self.tokens >= 1:
+            self.tokens -= 1
+            return True
+        return False
+
+# Usage: 100 requests/minute, burst of 10
+limiter = TokenBucket(capacity=10, refill_rate=100/60)
+
+# In request handler:
+if limiter.allow():
+    process_request()
+else:
+    return 429, "Too Many Requests"
+```
 
 ```
   Bucket capacity: 10 tokens
@@ -251,7 +289,43 @@ Tokens are added at a fixed rate. Each request consumes one token.
 
 ### Leaky Bucket
 
-Requests enter a queue (bucket). Processed at a fixed rate.
+```python
+import time
+from collections import deque
+
+class LeakyBucket:
+    """Leaky bucket rate limiter. Smooths traffic to constant rate."""
+    
+    def __init__(self, capacity: int, leak_rate: float):
+        """
+        Args:
+            capacity: Maximum queue size
+            leak_rate: Requests processed per second
+        """
+        self.capacity = capacity
+        self.leak_rate = leak_rate
+        self.queue = deque()
+        self.last_leak = time.time()
+    
+    def _leak(self):
+        now = time.time()
+        elapsed = now - self.last_leak
+        leaked = int(elapsed * self.leak_rate)
+        for _ in range(min(leaked, len(self.queue))):
+            self.queue.popleft()
+        if leaked:
+            self.last_leak = now
+    
+    def allow(self) -> bool:
+        self._leak()
+        if len(self.queue) < self.capacity:
+            self.queue.append(time.time())
+            return True
+        return False  # Queue full, drop request
+
+# Usage: Queue up to 100, process 10/second
+limiter = LeakyBucket(capacity=100, leak_rate=10)
+```
 
 ```
   Queue capacity: 10
@@ -269,7 +343,30 @@ Requests enter a queue (bucket). Processed at a fixed rate.
 
 ### Fixed Window
 
-Count requests in fixed time windows.
+```python
+import time
+from collections import defaultdict
+
+class FixedWindow:
+    """Fixed window rate limiter. Simple but has boundary burst problem."""
+    
+    def __init__(self, limit: int, window_seconds: int = 60):
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self.counters = defaultdict(int)
+    
+    def _get_window_key(self) -> str:
+        window_start = int(time.time()) // self.window_seconds
+        return str(window_start)
+    
+    def allow(self, client_id: str) -> bool:
+        key = f"{client_id}:{self._get_window_key()}"
+        self.counters[key] += 1
+        return self.counters[key] <= self.limit
+
+# Usage: 100 requests per minute
+limiter = FixedWindow(limit=100, window_seconds=60)
+```
 
 ```
   Window: 1 minute
@@ -285,7 +382,44 @@ Count requests in fixed time windows.
 
 ### Sliding Window
 
-Combines fixed window with sliding counter.
+```python
+import time
+from collections import defaultdict
+
+class SlidingWindow:
+    """Sliding window rate limiter. No boundary burst problem."""
+    
+    def __init__(self, limit: int, window_seconds: int = 60):
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self.prev_counts = defaultdict(int)
+        self.curr_counts = defaultdict(int)
+        self.window_start = int(time.time())
+    
+    def _rotate_if_needed(self):
+        now = int(time.time())
+        if now >= self.window_start + self.window_seconds:
+            self.prev_counts = self.curr_counts
+            self.curr_counts = defaultdict(int)
+            self.window_start = now
+    
+    def allow(self, client_id: str) -> bool:
+        self._rotate_if_needed()
+        now = time.time()
+        elapsed = now - self.window_start
+        
+        # Weighted count: prev window's contribution decays over time
+        prev_weight = 1 - (elapsed / self.window_seconds)
+        count = self.prev_counts[client_id] * prev_weight + self.curr_counts[client_id]
+        
+        if count < self.limit:
+            self.curr_counts[client_id] += 1
+            return True
+        return False
+
+# Usage: 100 requests per minute
+limiter = SlidingWindow(limit=100, window_seconds=60)
+```
 
 ```
   Sliding window: 1 minute
@@ -315,6 +449,53 @@ Combines fixed window with sliding counter.
 
 ### Distributed Rate Limiting
 
+```python
+import redis
+
+class DistributedRateLimiter:
+    """Rate limiter using Redis for distributed coordination."""
+    
+    def __init__(self, redis_client: redis.Redis, limit: int, window: int = 60):
+        self.r = redis_client
+        self.limit = limit
+        self.window = window
+    
+    def allow(self, client_id: str) -> bool:
+        key = f"rate:{client_id}"
+        
+        # Atomic: increment and set expiry in one transaction
+        pipe = self.r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, self.window)
+        results = pipe.execute()
+        
+        count = results[0]
+        return count <= self.limit
+    
+    def allow_with_tier(self, client_id: str, tier: str) -> bool:
+        """Multi-tier rate limiting (free/pro/enterprise)."""
+        limits = {"free": 100, "pro": 1000, "enterprise": 10000}
+        limit = limits.get(tier, 100)
+        
+        key = f"rate:{client_id}:{tier}"
+        pipe = self.r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 60)
+        results = pipe.execute()
+        
+        return results[0] <= limit
+
+# Usage
+r = redis.Redis(host='redis-cluster', port=6379)
+limiter = DistributedRateLimiter(r, limit=100, window=60)
+
+# In request handler:
+if limiter.allow("user:123"):
+    process_request()
+else:
+    return 429, "Rate limit exceeded"
+```
+
 ```
   ┌──────────┐     ┌──────────┐     ┌──────────┐
   │  LB 1    │     │  LB 2    │     │  LB 3    │
@@ -340,7 +521,66 @@ Combines fixed window with sliding counter.
 
 ### Active Health Checks
 
-The load balancer periodically probes servers.
+```python
+import requests
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+
+class ServerStatus(Enum):
+    UP = "up"
+    DOWN = "down"
+    UNKNOWN = "unknown"
+
+@dataclass
+class HealthChecker:
+    """Active health checker with configurable thresholds."""
+    
+    check_interval: int = 10      # seconds between checks
+    failure_threshold: int = 3    # failures before marking DOWN
+    success_threshold: int = 3    # successes before marking UP
+    
+    # Track state per server
+    _failure_counts: dict = field(default_factory=dict)
+    _success_counts: dict = field(default_factory=dict)
+    _status: dict = field(default_factory=dict)
+    
+    def check(self, server_url: str) -> ServerStatus:
+        """Probe server and update status."""
+        try:
+            resp = requests.get(f"{server_url}/health", timeout=5)
+            if resp.status_code == 200:
+                self._on_success(server_url)
+            else:
+                self._on_failure(server_url)
+        except requests.RequestException:
+            self._on_failure(server_url)
+        
+        return self._status.get(server_url, ServerStatus.UNKNOWN)
+    
+    def _on_success(self, server_url: str):
+        self._failure_counts[server_url] = 0
+        self._success_counts[server_url] = self._success_counts.get(server_url, 0) + 1
+        if self._success_counts[server_url] >= self.success_threshold:
+            self._status[server_url] = ServerStatus.UP
+    
+    def _on_failure(self, server_url: str):
+        self._success_counts[server_url] = 0
+        self._failure_counts[server_url] = self._failure_counts.get(server_url, 0) + 1
+        if self._failure_counts[server_url] >= self.failure_threshold:
+            self._status[server_url] = ServerStatus.DOWN
+
+# Usage
+checker = HealthChecker(failure_threshold=3, success_threshold=3)
+
+# In background thread:
+while True:
+    for server in ["http://s1:8080", "http://s2:8080", "http://s3:8080"]:
+        status = checker.check(server)
+        if status == ServerStatus.DOWN:
+            remove_from_load_balancer(server)
+    time.sleep(checker.check_interval)
+```
 
 ```
   Every 10 seconds:
@@ -354,7 +594,40 @@ The load balancer periodically probes servers.
 
 ### Passive Health Checks
 
-Detect failures from actual request traffic.
+```python
+from collections import defaultdict
+import time
+
+class PassiveHealthChecker:
+    """Detect failures from actual request traffic (no extra probes)."""
+    
+    def __init__(self, failure_threshold: int = 3, window: int = 60):
+        self.failure_threshold = failure_threshold
+        self.window = window
+        self.failures = defaultdict(list)  # server -> [timestamps]
+    
+    def record_failure(self, server: str):
+        now = time.time()
+        self.failures[server].append(now)
+        # Clean old failures outside window
+        self.failures[server] = [t for t in self.failures[server] if now - t < self.window]
+    
+    def is_healthy(self, server: str) -> bool:
+        return len(self.failures[server]) < self.failure_threshold
+
+# Usage in request handler:
+checker = PassiveHealthChecker(failure_threshold=3, window=60)
+
+def handle_request(server):
+    try:
+        response = proxy_to_server(server)
+        if response.status_code >= 500:
+            checker.record_failure(server)
+        return response
+    except Timeout:
+        checker.record_failure(server)
+        return fallback_to_next_server()
+```
 
 ```
   If server returns 5xx or times out 3 times in 1 minute → mark as DOWN
