@@ -77,20 +77,46 @@ Prevent cascading failures by stopping calls to a failing service.
 ### Implementation
 
 ```python
+import time
+from enum import Enum
+from dataclasses import dataclass, field
+from typing import Callable, Any
+
+class CircuitState(Enum):
+    CLOSED = "closed"      # Normal operation
+    OPEN = "open"          # Failing, reject requests
+    HALF_OPEN = "half_open"  # Testing recovery
+
+class CircuitOpenError(Exception):
+    pass
+
+@dataclass
 class CircuitBreaker:
-    def __init__(self, failure_threshold=5, recovery_timeout=30):
-        self.failure_count = 0
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.state = "CLOSED"
-        self.last_failure_time = None
+    """Circuit breaker with configurable thresholds and timeouts."""
     
-    def call(self, func, *args, **kwargs):
-        if self.state == "OPEN":
-            if time.time() - self.last_failure_time > self.recovery_timeout:
-                self.state = "HALF_OPEN"
-            else:
-                raise CircuitOpenError("Circuit is OPEN")
+    failure_threshold: int = 5       # Failures before opening
+    recovery_timeout: int = 30       # Seconds before trying again
+    half_open_max_calls: int = 1     # Probe calls in HALF_OPEN state
+    
+    state: CircuitState = CircuitState.CLOSED
+    failure_count: int = 0
+    success_count: int = 0
+    last_failure_time: float = 0
+    half_open_calls: int = 0
+    
+    def call(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute function through the circuit breaker."""
+        self._check_state()
+        
+        if self.state == CircuitState.OPEN:
+            raise CircuitOpenError(
+                f"Circuit is OPEN. Retry after {self._time_until_half_open():.0f}s"
+            )
+        
+        if self.state == CircuitState.HALF_OPEN:
+            if self.half_open_calls >= self.half_open_max_calls:
+                raise CircuitOpenError("Circuit HALF_OPEN: max probe calls reached")
+            self.half_open_calls += 1
         
         try:
             result = func(*args, **kwargs)
@@ -100,15 +126,51 @@ class CircuitBreaker:
             self._on_failure()
             raise
     
+    def _check_state(self):
+        """Transition to HALF_OPEN if recovery timeout elapsed."""
+        if self.state == CircuitState.OPEN:
+            if time.time() - self.last_failure_time >= self.recovery_timeout:
+                self.state = CircuitState.HALF_OPEN
+                self.half_open_calls = 0
+    
     def _on_success(self):
-        self.failure_count = 0
-        self.state = "CLOSED"
+        if self.state == CircuitState.HALF_OPEN:
+            # Recovery successful → close circuit
+            self.state = CircuitState.CLOSED
+            self.failure_count = 0
+        elif self.state == CircuitState.CLOSED:
+            # Reset failure count on success
+            self.failure_count = 0
     
     def _on_failure(self):
         self.failure_count += 1
         self.last_failure_time = time.time()
-        if self.failure_count >= self.failure_threshold:
-            self.state = "OPEN"
+        
+        if self.state == CircuitState.HALF_OPEN:
+            # Probe failed → reopen circuit
+            self.state = CircuitState.OPEN
+        elif self.failure_count >= self.failure_threshold:
+            # Too many failures → open circuit
+            self.state = CircuitState.OPEN
+    
+    def _time_until_half_open(self) -> float:
+        elapsed = time.time() - self.last_failure_time
+        return max(0, self.recovery_timeout - elapsed)
+
+# Usage:
+breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=10)
+
+def call_external_api():
+    return requests.get("https://api.example.com/data", timeout=5)
+
+try:
+    response = breaker.call(call_external_api)
+    print(f"Success: {response.status_code}")
+except CircuitOpenError as e:
+    print(f"Circuit open: {e}")
+    # Fallback: return cached data or default
+except requests.RequestException as e:
+    print(f"Request failed: {e}")
 ```
 
 ---
@@ -116,6 +178,64 @@ class CircuitBreaker:
 ## Retry Strategies
 
 ### Exponential Backoff
+
+```python
+import time
+import random
+from typing import Callable, Any
+from dataclasses import dataclass
+
+@dataclass
+class RetryConfig:
+    max_retries: int = 5
+    base_delay: float = 0.1      # 100ms
+    max_delay: float = 10.0      # 10 seconds
+    exponential_base: float = 2.0
+    jitter: bool = True
+
+def retry_with_backoff(
+    func: Callable,
+    config: RetryConfig = RetryConfig(),
+    retryable_exceptions: tuple = (Exception,)
+) -> Any:
+    """Execute function with exponential backoff retry."""
+    last_exception = None
+    
+    for attempt in range(config.max_retries + 1):
+        try:
+            return func()
+        except retryable_exceptions as e:
+            last_exception = e
+            
+            if attempt == config.max_retries:
+                break  # All retries exhausted
+            
+            # Calculate delay with exponential backoff
+            delay = config.base_delay * (config.exponential_base ** attempt)
+            
+            # Add jitter to prevent thundering herd
+            if config.jitter:
+                delay = random.uniform(0, delay)
+            
+            # Cap at max delay
+            delay = min(delay, config.max_delay)
+            
+            print(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay:.2f}s")
+            time.sleep(delay)
+    
+    raise last_exception  # All retries failed
+
+# Usage:
+def call_flaky_service():
+    response = requests.get("https://api.example.com/data", timeout=5)
+    response.raise_for_status()
+    return response.json()
+
+try:
+    result = retry_with_backoff(call_flaky_service)
+except Exception as e:
+    print(f"All retries failed: {e}")
+```
 
 ```
   Attempt 1: Wait 100ms
@@ -132,7 +252,34 @@ class CircuitBreaker:
 
 ### Exponential Backoff with Jitter
 
-Add randomness to prevent synchronized retries (thundering herd).
+```python
+def retry_with_jitter(
+    func: Callable,
+    max_retries: int = 5,
+    base_delay: float = 0.1,
+    max_delay: float = 10.0
+) -> Any:
+    """Retry with jitter to prevent synchronized retries."""
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_retries:
+                raise
+            
+            # Exponential backoff + random jitter
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            jittered_delay = random.uniform(0, delay)
+            
+            print(f"Attempt {attempt + 1} failed. Retrying in {jittered_delay:.2f}s")
+            time.sleep(jittered_delay)
+
+# Different clients get different delays:
+# Client A retry: 45ms
+# Client B retry: 120ms
+# Client C retry: 87ms
+# → No thundering herd
+```
 
 ```
   Wait time = min(base × 2^attempt + random(0, 100ms), max_wait)
@@ -162,6 +309,51 @@ Timeouts prevent indefinite waiting. But what timeout should you set?
 
 ### Cascading Timeout Problem
 
+```python
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Timeout at every layer (seconds)
+TIMEOUT_CONFIG = {
+    "client": 30,      # Client gives up after 30s
+    "gateway": 25,     # Gateway has 25s budget
+    "service_a": 20,   # Service A has 20s budget
+    "service_b": 15,   # Service B has 15s budget
+    "database": 10,    # Database query has 10s budget
+}
+
+def call_with_timeout(url: str, timeout: int = 10) -> requests.Response:
+    """Make HTTP call with explicit timeout."""
+    return requests.get(url, timeout=(3.05, timeout))  # (connect, read)
+
+def service_b_handler(request):
+    """Service B calls database with shorter timeout."""
+    try:
+        result = call_with_timeout(
+            f"{DATABASE_URL}/query",
+            timeout=TIMEOUT_CONFIG["database"]
+        )
+        return result.json()
+    except requests.Timeout:
+        # Database is slow — fail fast, don't wait full timeout
+        return {"error": "Database timeout"}
+
+def service_a_handler(request):
+    """Service A calls Service B with shorter timeout."""
+    try:
+        result = call_with_timeout(
+            f"{SERVICE_B_URL}/process",
+            timeout=TIMEOUT_CONFIG["service_b"]
+        )
+        return result.json()
+    except requests.Timeout:
+        return {"error": "Service B timeout"}
+
+# Key principle: timeouts decrease downstream
+# Client(30s) → Gateway(25s) → ServiceA(20s) → ServiceB(15s) → DB(10s)
+```
+
 ```
   Client ──30s timeout──▶ API Gateway ──25s timeout──▶ Service A
                                                        │
@@ -189,6 +381,54 @@ Timeouts prevent indefinite waiting. But what timeout should you set?
 | **Use deadline propagation** | Pass remaining time budget downstream |
 
 ### Deadline Propagation
+
+```python
+import time
+from dataclasses import dataclass
+
+@dataclass
+class Deadline:
+    """Propagate time budget through service calls."""
+    start_time: float
+    timeout_seconds: float
+    
+    @classmethod
+    def from_timeout(cls, timeout: float) -> "Deadline":
+        return cls(start_time=time.time(), timeout_seconds=timeout)
+    
+    def remaining(self) -> float:
+        elapsed = time.time() - self.start_time
+        return max(0, self.timeout_seconds - elapsed)
+    
+    def is_expired(self) -> bool:
+        return self.remaining() <= 0
+    
+    def child_deadline(self, fraction: float = 0.8) -> "Deadline":
+        """Create child deadline with fraction of remaining time."""
+        remaining = self.remaining() * fraction
+        return Deadline(start_time=time.time(), timeout_seconds=remaining)
+
+# Usage in service chain:
+def api_gateway_handler(request):
+    deadline = Deadline.from_timeout(30.0)  # 30s total budget
+    
+    # Pass 80% of remaining time to Service A
+    return call_service_a(request, deadline=deadline)
+
+def call_service_a(request, deadline: Deadline):
+    child_deadline = deadline.child_deadline(fraction=0.8)  # 24s
+    
+    # Pass 80% to Service B
+    return call_service_b(request, deadline=child_deadline)
+
+def call_service_b(request, deadline: Deadline):
+    if deadline.is_expired():
+        raise TimeoutError("Deadline expired before call")
+    
+    # Use remaining time for database query
+    db_timeout = deadline.remaining() * 0.7  # 70% of remaining
+    return query_database(request, timeout=db_timeout)
+```
 
 ```
   Client sets deadline: T+30s
@@ -276,19 +516,67 @@ Timeouts prevent indefinite waiting. But what timeout should you set?
 | **SLA** (Service Level Agreement) | What you promise customers | 99.9% uptime, or credit |
 | **Error Budget** | How much failure is acceptable | 0.1% = 43 minutes/month |
 
-### Error Budget Calculation
+### Error Budget Calculator
 
-```
-  SLO: 99.9% availability
-  Error budget: 0.1% = 0.001
+```python
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
-  Per month: 0.001 × 30 days × 24 hours × 60 minutes = 43.2 minutes
+@dataclass
+class ErrorBudget:
+    """Track and manage error budgets."""
+    
+    slo_target: float  # e.g., 0.999 for 99.9%
+    window_days: int = 30
+    
+    @property
+    def error_rate(self) -> float:
+        return 1.0 - self.slo_target
+    
+    @property
+    def total_minutes(self) -> float:
+        return self.window_days * 24 * 60
+    
+    @property
+    def budget_minutes(self) -> float:
+        return self.error_rate * self.total_minutes
+    
+    def remaining_minutes(self, incidents_minutes: list) -> float:
+        """Calculate remaining budget after incidents."""
+        return self.budget_minutes - sum(incidents_minutes)
+    
+    def remaining_pct(self, incidents_minutes: list) -> float:
+        """Calculate remaining budget percentage."""
+        remaining = self.remaining_minutes(incidents_minutes)
+        return max(0, remaining / self.budget_minutes * 100)
+    
+    def status(self, incidents_minutes: list) -> str:
+        """Get deployment status based on remaining budget."""
+        pct = self.remaining_pct(incidents_minutes)
+        if pct > 50:
+            return "SHIP_FREELY"
+        elif pct > 20:
+            return "EXTRA_REVIEW"
+        elif pct > 0:
+            return "RELIABILITY_FOCUS"
+        else:
+            return "FREEZE_DEPLOYS"
 
-  Usage:
-  - Month starts: budget = 43.2 minutes
-  - Incident costs 10 minutes: budget = 33.2 minutes
-  - Another incident costs 15 minutes: budget = 18.2 minutes
-  - Budget exhausted: freeze deployments until next month
+# Usage:
+budget = ErrorBudget(slo_target=0.999)  # 99.9% SLO
+print(f"Monthly budget: {budget.budget_minutes:.1f} minutes")
+
+# Track incidents
+incidents = [10, 15]  # Two incidents: 10 min + 15 min
+remaining = budget.remaining_minutes(incidents)
+status = budget.status(incidents)
+
+print(f"Remaining: {remaining:.1f} minutes")
+print(f"Status: {status}")
+# Output:
+# Monthly budget: 43.2 minutes
+# Remaining: 18.2 minutes
+# Status: RELIABILITY_FOCUS
 ```
 
 ### Error Budget Policy
