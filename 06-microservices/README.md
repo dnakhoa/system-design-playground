@@ -195,6 +195,70 @@ Distributed transactions across multiple services. No 2PC (two-phase commit) —
 
 Each service listens for events and decides what to do next.
 
+```python
+from dataclasses import dataclass
+from typing import Callable
+import json
+
+# Event bus (simplified in-memory version)
+class EventBus:
+    def __init__(self):
+        self.handlers = {}
+    
+    def subscribe(self, event_type: str, handler: Callable):
+        self.handlers.setdefault(event_type, []).append(handler)
+    
+    def publish(self, event_type: str, data: dict):
+        for handler in self.handlers.get(event_type, []):
+            handler(data)
+
+bus = EventBus()
+
+# --- Order Service ---
+def create_order(order_id: str, items: list):
+    # Save order to DB
+    db.save_order({"id": order_id, "items": items, "status": "created"})
+    bus.publish("OrderCreated", {"order_id": order_id, "items": items})
+
+def on_order_confirmed(data):
+    db.update_order_status(data["order_id"], "confirmed")
+
+def on_order_cancelled(data):
+    db.update_order_status(data["order_id"], "cancelled")
+
+bus.subscribe("OrderConfirmed", on_order_confirmed)
+bus.subscribe("OrderCancelled", on_order_cancelled)
+
+# --- Inventory Service ---
+def on_order_created_reserve_stock(data):
+    try:
+        reserve_stock(data["items"])
+        bus.publish("StockReserved", {"order_id": data["order_id"]})
+    except OutOfStockError:
+        bus.publish("StockReservationFailed", {"order_id": data["order_id"]})
+
+def on_payment_failed_release_stock(data):
+    release_stock(data["order_id"])
+    bus.publish("StockReleased", {"order_id": data["order_id"]})
+
+bus.subscribe("OrderCreated", on_order_created_reserve_stock)
+bus.subscribe("PaymentFailed", on_payment_failed_release_stock)
+
+# --- Payment Service ---
+def on_stock_reserved_charge(data):
+    try:
+        charge_customer(data["order_id"])
+        bus.publish("PaymentCompleted", {"order_id": data["order_id"]})
+    except PaymentError:
+        bus.publish("PaymentFailed", {"order_id": data["order_id"]})
+
+bus.subscribe("StockReserved", on_stock_reserved_charge)
+
+# --- Flow ---
+# OrderCreated → StockReserved → PaymentCompleted → OrderConfirmed
+# If PaymentFailed → StockReleased → OrderCancelled
+```
+
 ```
   Order Service
   │
@@ -227,6 +291,68 @@ Each service listens for events and decides what to do next.
 
 A central orchestrator coordinates the saga.
 
+```python
+from dataclasses import dataclass, field
+from typing import List, Callable
+from enum import Enum
+
+class SagaStep(Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    COMPENSATED = "compensated"
+
+@dataclass
+class SagaStep:
+    name: str
+    action: Callable
+    compensation: Callable
+    status: SagaStep = SagaStep.PENDING
+
+class OrderSagaOrchestrator:
+    """Centralized orchestrator for the order saga."""
+    
+    def __init__(self):
+        self.steps: List[SagaStep] = []
+    
+    def add_step(self, name: str, action: Callable, compensation: Callable):
+        self.steps.append(SagaStep(name=name, action=action, compensation=compensation))
+    
+    def execute(self, order_data: dict) -> dict:
+        completed_steps = []
+        
+        for step in self.steps:
+            try:
+                print(f"Executing: {step.name}")
+                step.action(order_data)
+                step.status = SagaStep.COMPLETED
+                completed_steps.append(step)
+            except Exception as e:
+                print(f"Failed: {step.name} — {e}")
+                step.status = SagaStep.FAILED
+                
+                # Compensate in reverse order
+                for completed in reversed(completed_steps):
+                    try:
+                        print(f"Compensating: {completed.name}")
+                        completed.compensation(order_data)
+                        completed.status = SagaStep.COMPENSATED
+                    except Exception as comp_error:
+                        print(f"Compensation failed: {completed.name} — {comp_error}")
+                
+                return {"status": "failed", "failed_step": step.name}
+        
+        return {"status": "completed"}
+
+# Usage:
+saga = OrderSagaOrchestrator()
+saga.add_step("Reserve Stock", reserve_stock, release_stock)
+saga.add_step("Charge Payment", charge_customer, refund_customer)
+saga.add_step("Confirm Order", confirm_order, cancel_order)
+
+result = saga.execute({"order_id": "o123", "amount": 99.99})
+```
+
 ```
   ┌──────────────────────────────────────────┐
   │           Order Saga Orchestrator          │
@@ -250,18 +376,76 @@ A central orchestrator coordinates the saga.
 
 Services need to find each other in a dynamic environment.
 
-### Client-Side Discovery
+```python
+import random
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List
+import threading
+
+@dataclass
+class ServiceInstance:
+    host: str
+    port: int
+    health: str = "healthy"
+    last_heartbeat: float = field(default_factory=time.time)
+
+class ServiceRegistry:
+    """Simple in-memory service registry (production: use Consul, etcd, or K8s DNS)."""
+    
+    def __init__(self):
+        self.services: Dict[str, List[ServiceInstance]] = {}
+        self._lock = threading.Lock()
+    
+    def register(self, service_name: str, instance: ServiceInstance):
+        with self._lock:
+            self.services.setdefault(service_name, []).append(instance)
+    
+    def deregister(self, service_name: str, host: str, port: int):
+        with self._lock:
+            if service_name in self.services:
+                self.services[service_name] = [
+                    i for i in self.services[service_name]
+                    if not (i.host == host and i.port == port)
+                ]
+    
+    def get_instances(self, service_name: str) -> List[ServiceInstance]:
+        """Return healthy instances only."""
+        with self._lock:
+            return [
+                i for i in self.services.get(service_name, [])
+                if i.health == "healthy"
+            ]
+    
+    def discover(self, service_name: str) -> ServiceInstance:
+        """Client-side discovery: pick a random healthy instance."""
+        instances = self.get_instances(service_name)
+        if not instances:
+            raise ServiceUnavailable(f"No healthy instances for {service_name}")
+        return random.choice(instances)
+
+# --- Client-side discovery ---
+registry = ServiceRegistry()
+registry.register("order-service", ServiceInstance("10.0.1.1", 8080))
+registry.register("order-service", ServiceInstance("10.0.1.2", 8080))
+
+def call_order_service():
+    instance = registry.discover("order-service")
+    return requests.get(f"http://{instance.host}:{instance.port}/orders")
+
+# --- Server-side discovery (via load balancer) ---
+# Load balancer queries registry, routes traffic automatically
+# Service A → Load Balancer → Service B (any healthy instance)
+```
 
 ```
+  Client-Side Discovery:
   Service A ──▶ Service Registry ──▶ Get list of Service B instances
                     │
                     ▼
   Service A picks one (load balancing) ──▶ Service B
-```
 
-### Server-Side Discovery
-
-```
+  Server-Side Discovery:
   Service A ──▶ Load Balancer ──▶ Service B (any instance)
                     │
                     ▼
@@ -281,33 +465,68 @@ Services need to find each other in a dynamic environment.
 
 ## API Versioning
 
-### URL Versioning
+```python
+# --- URL Versioning (simplest, most explicit) ---
+# GET /api/v1/users
+# GET /api/v2/users
+
+from fastapi import FastAPI, APIRouter
+
+app = FastAPI()
+
+# v1 router
+v1 = APIRouter(prefix="/api/v1")
+@v1.get("/users")
+def get_users_v1():
+    return {"users": [{"id": 1, "name": "Alice"}]}
+
+# v2 router (breaking change: different response format)
+v2 = APIRouter(prefix="/api/v2")
+@v2.get("/users")
+def get_users_v2():
+    return {"data": [{"id": 1, "name": "Alice", "email": "alice@example.com"}]}
+
+app.include_router(v1)
+app.include_router(v2)
+
+# --- Header Versioning ---
+# Accept: application/vnd.myapp.v2+json
+
+@app.get("/users-header")
+def get_users_header(accept: str = Header(default="application/vnd.myapp.v1+json")):
+    if "v2" in accept:
+        return {"data": [...]}  # v2 format
+    return {"users": [...]}  # v1 format
+
+# --- Content Negotiation ---
+# GET /api/users
+# Accept: application/json; version=2
+
+@app.get("/users-negotiate")
+def get_users_negotiate(accept: str = Header(default="application/json")):
+    version = 2 if "version=2" in accept else 1
+    if version == 2:
+        return {"data": [...]}
+    return {"users": [...]}
+```
 
 ```
-/api/v1/users
-/api/v2/users
+  URL Versioning:
+  /api/v1/users
+  /api/v2/users
+  ✓ Simple, explicit
+  ✗ URL pollution
 
-✓ Simple, explicit
-✗ URL pollution
-```
+  Header Versioning:
+  Accept: application/vnd.myapp.v2+json
+  ✓ Clean URLs
+  ✗ Less discoverable
 
-### Header Versioning
-
-```
-Accept: application/vnd.myapp.v2+json
-
-✓ Clean URLs
-✗ Less discoverable
-```
-
-### Content Negotiation
-
-```
-GET /api/users
-Accept: application/json; version=2
-
-✓ RESTful
-✗ Complex implementation
+  Content Negotiation:
+  GET /api/users
+  Accept: application/json; version=2
+  ✓ RESTful
+  ✗ Complex implementation
 ```
 
 ---
