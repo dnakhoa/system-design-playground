@@ -138,6 +138,64 @@ Raft is designed for understandability. Used by etcd, TiKV, CockroachDB.
 
 Prevent stale leaders from acting on old data.
 
+```python
+import threading
+from dataclasses import dataclass, field
+
+@dataclass
+class FencedResource:
+    """Resource protected by fencing tokens."""
+    
+    _last_token: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+    _data: dict = field(default_factory=dict)
+    
+    def write(self, token: int, key: str, value: any) -> bool:
+        """Write only if token is higher than last seen."""
+        with self._lock:
+            if token < self._last_token:
+                print(f"REJECTED: token {token} < last token {self._last_token}")
+                return False
+            
+            self._last_token = token
+            self._data[key] = value
+            print(f"ACCEPTED: token {token}, wrote {key}={value}")
+            return True
+    
+    def read(self) -> dict:
+        return self._data.copy()
+
+@dataclass
+class Leader:
+    """Leader with fencing token."""
+    
+    node_id: str
+    fence_token: int = 0
+    
+    def acquire_lock(self) -> int:
+        """Increment token when acquiring lock."""
+        self.fence_token += 1
+        return self.fence_token
+
+# Simulate the problem:
+resource = FencedResource()
+leader_a = Leader("A", fence_token=0)
+leader_b = Leader("B", fence_token=0)
+
+# 1. A becomes leader, acquires lock (token=1)
+token_a = leader_a.acquire_lock()
+resource.write(token_a, "counter", 100)  # ACCEPTED
+
+# 2. Network partition: A can't reach others
+# 3. B becomes new leader, acquires lock (token=2)
+token_b = leader_b.acquire_lock()
+resource.write(token_b, "counter", 200)  # ACCEPTED (token 2 > 1)
+
+# 4. Partition heals: A thinks it's still leader
+# 5. A tries to write with old token
+resource.write(token_a, "counter", 300)  # REJECTED (token 1 < 2)
+```
+
 ```
   Problem:
   1. Leader A holds lock on resource
@@ -163,6 +221,59 @@ Physical clocks are unreliable in distributed systems (clock drift, NTP sync iss
 
 ### Lamport Timestamps
 
+```python
+from dataclasses import dataclass, field
+from typing import List, Tuple
+
+@dataclass
+class LamportClock:
+    """Lamport logical clock for causality ordering."""
+    
+    counter: int = 0
+    process_id: str = ""
+    
+    def tick(self) -> int:
+        """Local event: increment counter."""
+        self.counter += 1
+        return self.counter
+    
+    def send(self) -> int:
+        """Send message: include current timestamp."""
+        self.counter += 1
+        return self.counter
+    
+    def receive(self, received_ts: int) -> int:
+        """Receive message: take max(local, received) + 1."""
+        self.counter = max(self.counter, received_ts) + 1
+        return self.counter
+
+# Simulate the example:
+a = LamportClock(process_id="A")
+b = LamportClock(process_id="B")
+c = LamportClock(process_id="C")
+
+# Process A: local event
+ts_a1 = a.tick()
+print(f"A: event a1, ts={ts_a1}")  # A: event a1, ts=1
+
+# Process A sends to C
+ts_msg = a.send()
+print(f"A: sends msg, ts={ts_msg}")  # A: sends msg, ts=2
+
+# Process C receives
+ts_c1 = c.receive(ts_msg)
+print(f"C: receives msg, ts={ts_c1}")  # C: receives msg, ts=3
+
+# Process C sends to B
+ts_msg2 = c.send()
+
+# Process B receives
+ts_b1 = b.receive(ts_msg2)
+print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=4
+
+# Ordering: a1(1) < sends(2) < c_receives(3) < b_receives(4)
+```
+
 ```
   Rule 1: Before each event, increment local counter
   Rule 2: When sending a message, include current counter
@@ -183,6 +294,69 @@ Physical clocks are unreliable in distributed systems (clock drift, NTP sync iss
 ### Vector Clocks
 
 Track causality more precisely than Lamport timestamps.
+
+```python
+from dataclasses import dataclass, field
+from typing import Dict
+
+@dataclass
+class VectorClock:
+    """Vector clock for tracking causality across processes."""
+    
+    process_id: str
+    clock: Dict[str, int] = field(default_factory=dict)
+    
+    def tick(self) -> Dict[str, int]:
+        """Local event: increment own counter."""
+        self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
+        return self.clock.copy()
+    
+    def send(self) -> Dict[str, int]:
+        """Send message: include full vector."""
+        self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
+        return self.clock.copy()
+    
+    def receive(self, received_clock: Dict[str, int]) -> Dict[str, int]:
+        """Receive message: merge vectors (take max of each)."""
+        for process, ts in received_clock.items():
+            self.clock[process] = max(self.clock.get(process, 0), ts)
+        self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
+        return self.clock.copy()
+    
+    @staticmethod
+    def compare(a: Dict[str, int], b: Dict[str, int]) -> str:
+        """Compare two vector clocks.
+        Returns: 'before', 'after', or 'concurrent'
+        """
+        a_leq_b = all(a.get(k, 0) <= b.get(k, 0) for k in set(a) | set(b))
+        b_leq_a = all(b.get(k, 0) <= a.get(k, 0) for k in set(a) | set(b))
+        
+        if a_leq_b and b_leq_a:
+            return "equal"
+        elif a_leq_b:
+            return "before"  # a happened before b
+        elif b_leq_a:
+            return "after"   # a happened after b
+        else:
+            return "concurrent"  # neither caused the other
+
+# Simulate:
+va = VectorClock(process_id="A")
+vb = VectorClock(process_id="B")
+
+# A: local events
+va.tick()
+va.tick()
+print(f"A: {va.clock}")  # A: {'A': 2}
+
+# A sends to B
+msg = va.send()
+vb.receive(msg)
+print(f"B after receive: {vb.clock}")  # B: {'A': 3, 'B': 1}
+
+# Compare
+print(VectorClock.compare(va.clock, vb.clock))  # 'before'
+```
 
 ```
   Each process maintains a vector of counters (one per process):
@@ -261,6 +435,49 @@ Data structures that can be replicated across nodes and merged without conflicts
 
 ### G-Counter (Grow-Only Counter)
 
+```python
+from dataclasses import dataclass, field
+from typing import Dict
+
+@dataclass
+class GCounter:
+    """Grow-only counter CRDT. Can only increment."""
+    
+    node_id: str
+    counts: Dict[str, int] = field(default_factory=dict)
+    
+    def increment(self, amount: int = 1):
+        """Increment this node's counter."""
+        self counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
+    
+    def value(self) -> int:
+        """Get total count across all nodes."""
+        return sum(self.counts.values())
+    
+    def merge(self, other: "GCounter"):
+        """Merge with another GCounter (take max of each component)."""
+        for node, count in other.counts.items():
+            self.counts[node] = max(self.counts.get(node, 0), count)
+
+# Simulate distributed counters:
+node_a = GCounter(node_id="A")
+node_b = GCounter(node_id="B")
+
+# Each node increments independently
+node_a.increment(5)
+node_a.increment(3)
+node_b.increment(7)
+node_b.increment(1)
+
+print(f"Node A: {node_a.counts}")  # {'A': 8}
+print(f"Node B: {node_b.counts}")  # {'B': 8}
+
+# Merge: take max of each component
+node_a.merge(node_b)
+print(f"After merge: {node_a.counts}")  # {'A': 8, 'B': 8}
+print(f"Total: {node_a.value()}")  # 16
+```
+
 ```
   Each node maintains its own counter:
   Node A: {A: 5, B: 3, C: 2}
@@ -277,6 +494,46 @@ Data structures that can be replicated across nodes and merged without conflicts
 
 ### PN-Counter (Positive-Negative Counter)
 
+```python
+@dataclass
+class PNCounter:
+    """Positive-Negative counter CRDT. Can increment and decrement."""
+    
+    node_id: str
+    inc: GCounter = field(default_factory=lambda: GCounter(""))
+    dec: GCounter = field(default_factory=lambda: GCounter(""))
+    
+    def __post_init__(self):
+        self.inc = GCounter(node_id=self.node_id)
+        self.dec = GCounter(node_id=self.node_id)
+    
+    def increment(self, amount: int = 1):
+        self.inc.increment(amount)
+    
+    def decrement(self, amount: int = 1):
+        self.dec.increment(amount)
+    
+    def value(self) -> int:
+        return self.inc.value() - self.dec.value()
+    
+    def merge(self, other: "PNCounter"):
+        self.inc.merge(other.inc)
+        self.dec.merge(other.dec)
+
+# Usage:
+node_a = PNCounter(node_id="A")
+node_a.increment(10)
+node_a.decrement(3)
+print(f"Node A: {node_a.value()}")  # 7
+
+node_b = PNCounter(node_id="B")
+node_b.increment(5)
+node_b.decrement(1)
+
+node_a.merge(node_b)
+print(f"After merge: {node_a.value()}")  # 11 (10-3) + (5-1) = 11
+```
+
 ```
   Two G-counters: one for increments, one for decrements
 
@@ -288,6 +545,43 @@ Data structures that can be replicated across nodes and merged without conflicts
 ```
 
 ### LWW-Register (Last-Writer-Wins)
+
+```python
+import time
+from dataclasses import dataclass
+
+@dataclass
+class LWWRegister:
+    """Last-Writer-Wins register CRDT."""
+    
+    node_id: str
+    value: any = None
+    timestamp: float = 0
+    
+    def set(self, new_value: any):
+        """Set value with current timestamp."""
+        self.value = new_value
+        self.timestamp = time.time() * 1000  # milliseconds
+    
+    def merge(self, other: "LWWRegister"):
+        """Keep the value with the higher timestamp."""
+        if other.timestamp > self.timestamp:
+            self.value = other.value
+            self.timestamp = other.timestamp
+
+# Usage:
+node_a = LWWRegister(node_id="A")
+node_b = LWWRegister(node_id="B")
+
+# Concurrent writes (in distributed system, timestamps differ)
+time.sleep(0.001)
+node_a.set("hello")
+time.sleep(0.001)
+node_b.set("world")
+
+node_a.merge(node_b)
+print(f"After merge: {node_a.value}")  # "world" (higher timestamp wins)
+```
 
 ```
   Each value has a timestamp:
