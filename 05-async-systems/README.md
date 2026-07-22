@@ -198,6 +198,75 @@ Events carry the full state, not just the event type.
 
 Store every state change as an immutable event, not just the current state.
 
+```python
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List
+import json
+
+@dataclass
+class Event:
+    event_type: str
+    data: dict
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    version: int = 1
+
+class BankAccount:
+    """Event-sourced bank account. State is derived from events."""
+    
+    def __init__(self, account_id: str):
+        self.account_id = account_id
+        self.balance = 0.0
+        self.events: List[Event] = []
+    
+    def deposit(self, amount: float):
+        event = Event("Deposited", {"amount": amount})
+        self._apply(event)
+        self.events.append(event)
+    
+    def withdraw(self, amount: float):
+        if amount > self.balance:
+            raise ValueError("Insufficient funds")
+        event = Event("Withdrawn", {"amount": amount})
+        self._apply(event)
+        self.events.append(event)
+    
+    def _apply(self, event: Event):
+        if event.event_type == "Deposited":
+            self.balance += event.data["amount"]
+        elif event.event_type == "Withdrawn":
+            self.balance -= event.data["amount"]
+    
+    @classmethod
+    def from_events(cls, account_id: str, events: List[Event]) -> "BankAccount":
+        """Reconstruct account state from event history."""
+        account = cls(account_id)
+        for event in events:
+            account._apply(event)
+            account.events.append(event)
+        return account
+    
+    def snapshot(self) -> dict:
+        """Save current state as a snapshot (optimization)."""
+        return {
+            "account_id": self.account_id,
+            "balance": self.balance,
+            "event_count": len(self.events),
+            "last_event_timestamp": self.events[-1].timestamp if self.events else None
+        }
+
+# Usage:
+account = BankAccount("acc_123")
+account.deposit(1000)
+account.withdraw(300)
+account.deposit(200)
+print(account.balance)  # 900
+
+# Reconstruct from events:
+reconstructed = BankAccount.from_events("acc_123", account.events)
+print(reconstructed.balance)  # 900
+```
+
 ```
   Traditional (current state):
   ┌──────────────────────────┐
@@ -225,6 +294,82 @@ Store every state change as an immutable event, not just the current state.
 ## CQRS (Command Query Responsibility Segregation)
 
 Separate the write model from the read model.
+
+```python
+from dataclasses import dataclass
+from typing import List
+import json
+
+# --- Write Model (Normalized) ---
+@dataclass
+class Order:
+    id: str
+    user_id: str
+    items: List[dict]
+    status: str = "pending"
+    total: float = 0.0
+
+class OrderWriteDB:
+    """Write-optimized: normalized, supports transactions."""
+    
+    def __init__(self):
+        self.orders = {}
+    
+    def create_order(self, order: Order):
+        self.orders[order.id] = order
+        # Publish event for read model sync
+        self._publish_event("OrderCreated", order)
+    
+    def update_status(self, order_id: str, status: str):
+        self.orders[order_id].status = status
+        self._publish_event("OrderUpdated", self.orders[order_id])
+    
+    def _publish_event(self, event_type: str, order: Order):
+        # In production: publish to Kafka/message queue
+        print(f"EVENT: {event_type} -> {order.id}")
+
+# --- Read Model (Denormalized) ---
+class OrderReadDB:
+    """Read-optimized: pre-joined, denormalized for fast queries."""
+    
+    def __init__(self):
+        self.orders = {}  # Denormalized view
+    
+    def sync_from_events(self, event_type: str, order_data: dict):
+        """Update read model from events (eventual consistency)."""
+        if event_type == "OrderCreated":
+            self.orders[order_data["id"]] = {
+                "id": order_data["id"],
+                "user_name": order_data.get("user_name", "Unknown"),
+                "items_summary": f"{len(order_data['items'])} items",
+                "total": order_data["total"],
+                "status": order_data["status"],
+            }
+        elif event_type == "OrderUpdated":
+            self.orders[order_data["id"]]["status"] = order_data["status"]
+    
+    def get_order(self, order_id: str) -> dict:
+        """Fast read — no JOINs needed."""
+        return self.orders.get(order_id)
+    
+    def get_user_orders(self, user_id: str) -> List[dict]:
+        """Fast query — pre-joined data."""
+        return [o for o in self.orders.values() if o.get("user_id") == user_id]
+
+# Usage:
+write_db = OrderWriteDB()
+read_db = OrderReadDB()
+
+# Write path (normalized)
+order = Order(id="o1", user_id="u1", items=[{"name": "Widget"}], total=29.99)
+write_db.create_order(order)
+
+# Read path (denormalized, eventually consistent)
+read_db.sync_from_events("OrderCreated", {"id": "o1", "user_name": "Alice", 
+                                           "items": [{"name": "Widget"}], 
+                                           "total": 29.99, "status": "pending"})
+print(read_db.get_order("o1"))  # Fast read, no JOINs
+```
 
 ```
   ┌──────────────────────────────────────────────┐
@@ -257,7 +402,15 @@ Separate the write model from the read model.
 
 ### At-Most-Once
 
-Message may be lost, never duplicated.
+```python
+# At-most-once: ACK before processing (message may be lost)
+def consume_at_most_once(message):
+    # ACK first — if we crash, message is lost
+    kafka_consumer.commit()
+    
+    # Process (if we crash here, message is gone)
+    process_message(message)
+```
 
 ```
   Producer ──▶ Queue ──▶ Consumer (process, ACK immediately)
@@ -272,7 +425,23 @@ Message may be lost, never duplicated.
 
 ### At-Least-Once
 
-Message is never lost, may be duplicated.
+```python
+# At-least-once: process first, then ACK (may duplicate)
+def consume_at_least_once(message):
+    # Process first
+    process_message(message)
+    
+    # ACK after processing — if we crash before ACK, message redelivers
+    kafka_consumer.commit()
+
+# Handle duplicates with idempotency
+def process_message(message):
+    idempotency_key = message["id"]
+    if redis.exists(f"processed:{idempotency_key}"):
+        return  # Already processed, skip
+    # ... do work ...
+    redis.setex(f"processed:{idempotency_key}", 86400, "1")
+```
 
 ```
   Producer ──▶ Queue ──▶ Consumer (process, then ACK)
@@ -287,7 +456,28 @@ Message is never lost, may be duplicated.
 
 ### Exactly-Once
 
-Message processed exactly once. The holy grail.
+```python
+# Exactly-once via Kafka transactions
+from confluent_kafka import Producer, Consumer, KafkaException
+
+def consume_exactly_once(message):
+    """Process + commit atomically via Kafka transactions."""
+    # Start transaction
+    producer.begin_transaction()
+    
+    try:
+        # Process message
+        result = process_message(message)
+        
+        # Produce output to another topic (within transaction)
+        producer.produce("output-topic", value=json.dumps(result))
+        
+        # Commit transaction (atomic: process + produce + offset commit)
+        producer.commit_transaction(offsets)
+    except KafkaException:
+        producer.abort_transaction()
+        raise
+```
 
 ```
   Kafka achieves this via:
@@ -304,6 +494,55 @@ Message processed exactly once. The holy grail.
 ## Dead Letter Queues (DLQ)
 
 Messages that fail processing are sent to a DLQ for investigation.
+
+```python
+import json
+import time
+from dataclasses import dataclass, field
+from typing import Callable
+
+@dataclass
+class DLQConsumer:
+    """Consumer with retry logic and dead letter queue."""
+    
+    max_retries: int = 3
+    dlq_topic: str = "dead-letter-queue"
+    
+    def consume(self, message: dict, handler: Callable):
+        for attempt in range(self.max_retries):
+            try:
+                handler(message)
+                return  # Success
+            except Exception as e:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s")
+                time.sleep(wait_time)
+        
+        # All retries exhausted → send to DLQ
+        self._send_to_dlq(message, "Max retries exceeded")
+    
+    def _send_to_dlq(self, message: dict, reason: str):
+        dlq_message = {
+            "original_message": message,
+            "error_reason": reason,
+            "timestamp": time.time(),
+            "retries_exhausted": True
+        }
+        # In production: produce to DLQ topic
+        kafka_producer.produce(self.dlq_topic, json.dumps(dlq_message))
+        print(f"Message sent to DLQ: {message.get('id')}")
+        alert_engineering_team(dlq_message)
+
+# Usage:
+def process_payment(message):
+    # May fail due to external API errors
+    response = payment_api.charge(message["amount"])
+    if response.status != "success":
+        raise PaymentFailedError(response.error)
+
+consumer = DLQConsumer(max_retries=3)
+consumer.consume({"id": "pay_123", "amount": 99.99}, process_payment)
+```
 
 ```
   ┌────────┐     ┌──────────┐     ┌──────────┐
