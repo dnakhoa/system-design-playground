@@ -524,17 +524,39 @@ Never say "I'd use a relational database." Say:
 
 ---
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Jumping to architecture before requirements** | You might solve the wrong problem | Spend 2-3 min clarifying requirements first |
+| **Ignoring the read/write ratio** | Caches, databases, and scaling depend on it | Always estimate read vs write QPS |
+| **Saying "I'd use MySQL" without justification** | Every choice has trade-offs | Say "I'd use X because Y, but the trade-off is Z" |
+| **Forgetting about availability** | 99.9% vs 99.99% changes everything | Ask: "What availability do we need?" |
+| **Over-engineering at small scale** | Adds complexity without benefit | Design for 10x current, not 1000x |
+
+---
+
 ## Discussion Questions
 
 1. You're designing a URL shortener. Your manager says "we need 99.999% availability." What does this imply about your architecture? What trade-offs does it force?
 
+   **Model answer**: 99.999% = 5.26 minutes downtime per year. This requires: multi-region deployment, automatic failover, no single point of failure, redundant everything (databases, caches, load balancers). Trade-offs: higher cost (3x+ more infrastructure), increased complexity (data consistency across regions), slower development (every component needs redundancy).
+
 2. Why can't you use a single PostgreSQL database for a social media platform with 1B users? At what point does a single database become insufficient, and what are your options?
+
+   **Model answer**: A single PostgreSQL handles ~10K QPS reads, ~1K QPS writes. With 1B users, even 1% daily active = 10M users, each making 10 requests = 100M queries/day = ~1K QPS average, but peak could be 10K+. At this scale: add read replicas (vertical scaling), then shard by user_id (horizontal scaling), or migrate to distributed SQL (CockroachDB).
 
 3. Explain the difference between horizontal and vertical scaling to a junior engineer. When would you choose one over the other?
 
+   **Model answer**: Vertical = bigger server (more CPU/RAM). Simple, but has hardware ceiling and single point of failure. Horizontal = more servers. Requires load balancing and state management, but nearly infinite scale. Choose vertical for simple apps, databases (until sharding needed). Choose horizontal for stateless services, high availability requirements.
+
 4. You're building a news feed system. Users post content, followers see it. The requirement is "users should see new posts within 5 seconds." What consistency model do you choose, and why?
 
+   **Model answer**: Read-your-writes consistency for the author (they see their own post immediately), eventual consistency for followers (posts appear within 5 seconds). Why: Strong consistency is too expensive for fan-out. Eventual consistency with bounded staleness (<5 seconds) is the standard for social feeds.
+
 5. Walk through the CAP theorem for a payment processing system. Is it CP or AP? What happens during a network partition?
+
+   **Model answer**: Payment systems are CP (Consistent + Partition-tolerant). During a network partition, the system rejects requests rather than process payments with stale data. Why: A double charge (inconsistency) is worse than a temporary outage. Users can retry; lost money is hard to recover.
 
 ---
 

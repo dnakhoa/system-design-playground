@@ -330,6 +330,18 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
 ---
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Using sequential IDs for short URLs** | Predictable, allows enumeration | Use base62 encoding or hash-based IDs |
+| **No custom alias support** | Users want memorable links | Check uniqueness before inserting |
+| **Synchronous analytics on redirect** | Adds latency to every request | Write analytics events to Kafka asynchronously |
+| **Fixed window for rate limiting** | Boundary burst problem (2x limit in 2 seconds) | Use sliding window or token bucket |
+| **No rate limiting fallback** | Redis down = no rate limiting | Fail open (allow) or fail closed (block) based on policy |
+
+---
+
 ## Key References
 
 | Resource | Type | Focus |

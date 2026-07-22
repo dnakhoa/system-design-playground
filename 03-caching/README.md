@@ -700,6 +700,18 @@ Netflix serves 230M+ subscribers with a sophisticated multi-layer caching strate
 
 ---
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Caching everything** | Low hit ratio wastes memory, adds complexity | Cache only hot data (20% that gets 80% traffic) |
+| **No cache invalidation strategy** | Stale data, inconsistent state | Choose TTL, event-driven, or versioned keys upfront |
+| **Ignoring cache stampede** | Popular key expiry causes thundering herd | Use locking, probabilistic early expiration, or request coalescing |
+| **Caching strong-consistency data** | Banking/inventory can't tolerate staleness | Don't cache data that requires strong consistency |
+| **Forgetting about cold start** | First request always slow | Pre-warm cache for critical data |
+
+---
+
 ## Discussion Questions
 
 1. You're building a social media app. Users have a "following feed" that shows posts from people they follow. What cache pattern would you use, and what invalidation strategy?

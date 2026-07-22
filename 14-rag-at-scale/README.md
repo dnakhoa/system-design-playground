@@ -399,3 +399,5 @@ Perplexity built a production search-augmented LLM that cites its sources.
 
 **Previous**: [LLM Inference Serving Architecture](../13-llm-inference-serving/README.md)
 **Next**: [Agent System Architecture](../15-agent-architecture/README.md)
+
+> **Note**: This module was originally numbered 14. It is now Module 16 in the updated curriculum.

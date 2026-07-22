@@ -390,3 +390,5 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 
 **Previous**: [RAG System Architecture at Scale](../14-rag-at-scale/README.md)
 **Next**: [Production AI System Architecture](../16-production-ai-system/README.md)
+
+> **Note**: This module was originally numbered 15. It is now Module 17 in the updated curriculum.

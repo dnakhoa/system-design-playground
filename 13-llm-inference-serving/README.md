@@ -443,5 +443,7 @@ Split model into stages across GPUs.
 
 ---
 
-**Previous**: [Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md)
+**Previous**: [API Design](../14-api-design/README.md)
 **Next**: [RAG System Architecture at Scale](../14-rag-at-scale/README.md)
+
+> **Note**: This module was originally numbered 13. It is now Module 15 in the updated curriculum.

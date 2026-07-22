@@ -552,3 +552,5 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 **Previous**: [Agent System Architecture](../15-agent-architecture/README.md)
 **Next**: [Course Home](../README.md)
+
+> **Note**: This module was originally numbered 16. It is now Module 18 in the updated curriculum.

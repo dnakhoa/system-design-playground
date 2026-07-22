@@ -106,39 +106,46 @@ Work through all 16 modules in order. Each builds on the previous.
 
 ### Phase 1: Foundations (Modules 01-04)
 
-| Module | Topic | Key Concepts | Time |
-|--------|-------|-------------|------|
-| 01 | System Design Fundamentals | 9-step framework, CAP theorem, estimation | ~2h |
-| 02 | Databases and Storage | SQL vs NoSQL, sharding, replication, ACID | ~2h |
-| 03 | Caching Strategies | Cache patterns, Redis, CDN, cache stampede | ~2h |
-| 04 | Load Balancing | Algorithms, L4/L7, rate limiting, API gateway | ~2h |
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| 01 | System Design Fundamentals | 9-step framework, CAP theorem, estimation | ⭐ Beginner | ~2h |
+| 02 | Databases and Storage | SQL vs NoSQL, sharding, replication, ACID | ⭐ Beginner | ~2h |
+| 03 | Caching Strategies | Cache patterns, Redis, CDN, cache stampede | ⭐⭐ Intermediate | ~2h |
+| 04 | Load Balancing | Algorithms, L4/L7, rate limiting, API gateway | ⭐⭐ Intermediate | ~2h |
 
 ### Phase 2: Intermediate (Modules 05-08)
 
-| Module | Topic | Key Concepts | Time |
-|--------|-------|-------------|------|
-| 05 | Async Systems | Kafka, event-driven, CQRS, delivery guarantees | ~2h |
-| 06 | Microservices | DDD, saga pattern, service mesh, observability | ~2h |
-| 07 | Reliability Engineering | Circuit breakers, chaos engineering, SLOs | ~2h |
-| 08 | Distributed Systems | Raft, consensus, CRDTs, leader election | ~2h |
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| 05 | Async Systems | Kafka, event-driven, CQRS, delivery guarantees | ⭐⭐ Intermediate | ~2h |
+| 06 | Microservices | DDD, saga pattern, service mesh, observability | ⭐⭐ Intermediate | ~2h |
+| 07 | Reliability Engineering | Circuit breakers, chaos engineering, SLOs | ⭐⭐ Intermediate | ~2h |
+| 08 | Distributed Systems | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2h |
 
 ### Phase 3: Design Cases (Modules 09-12)
 
-| Module | Topic | Key Concepts | Time |
-|--------|-------|-------------|------|
-| 09 | URL Shortener & Rate Limiter | ID generation, token bucket, distributed counting | ~2h |
-| 10 | Chat System & News Feed | WebSocket, fan-out, presence, ranking | ~2h |
-| 11 | File Storage & Video Streaming | Chunking, sync, transcoding, adaptive bitrate | ~2h |
-| 12 | Payment System & E-commerce | Idempotency, inventory, flash sales, reconciliation | ~2h |
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| 09 | URL Shortener & Rate Limiter | ID generation, token bucket, distributed counting | ⭐⭐ Intermediate | ~2h |
+| 10 | Chat System & News Feed | WebSocket, fan-out, presence, ranking | ⭐⭐ Intermediate | ~2h |
+| 11 | File Storage & Video Streaming | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~2h |
+| 12 | Payment System & E-commerce | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 
-### Phase 4: LLM AI Systems (Modules 13-16)
+### Phase 4: Core Infrastructure (Modules 13-14)
 
-| Module | Topic | Key Concepts | Time |
-|--------|-------|-------------|------|
-| 13 | LLM Inference Serving | PagedAttention, batching, quantization, GPU clusters | ~2h |
-| 14 | RAG at Scale | Chunking, two-stage retrieval, hybrid search, evaluation | ~2h |
-| 15 | Agent Architecture | ReAct, middleware stack, multi-agent, cost control | ~2h |
-| 16 | Production AI System | Model routing, guardrails, observability, scaling | ~2h |
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| 13 | Security | Auth, encryption, OWASP, prompt injection | ⭐⭐ Intermediate | ~2h |
+| 14 | API Design | REST, gRPC, GraphQL, versioning, pagination | ⭐⭐ Intermediate | ~2h |
+
+### Phase 5: LLM AI Systems (Modules 15-18)
+
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| 15 | LLM Inference Serving | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
+| 16 | RAG at Scale | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
+| 17 | Agent Architecture | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
+| 18 | Production AI System | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
 
 ---
 
@@ -181,6 +188,39 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 2. Reference architecture decisions in design docs
 3. Share the LLM modules (13-16) with AI/ML teams
 4. Establish common vocabulary and patterns
+
+---
+
+## Glossary
+
+| Term | Definition |
+|------|-----------|
+| **CAP Theorem** | A distributed system can guarantee only 2 of 3: Consistency, Availability, Partition tolerance |
+| **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
+| **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
+| **CQRS** | Command Query Responsibility Segregation — separate write and read models |
+| **Circuit Breaker** | Pattern that stops calls to a failing service to prevent cascading failures |
+| **Consistent Hashing** | Hash ring that minimizes reshuffling when nodes are added/removed |
+| **DLQ** | Dead Letter Queue — queue for messages that fail processing |
+| **Event Sourcing** | Store every state change as an immutable event, not just current state |
+| **Fan-out** | Distributing one message to multiple consumers |
+| **Fencing Token** | Monotonically increasing token that prevents stale leaders from acting |
+| **G-Counter** | Grow-only counter CRDT — can only increment |
+| **Idempotency** | Property where doing an operation multiple times has the same effect as once |
+| **Kafka** | Distributed event streaming platform for high-throughput message queues |
+| **Lamport Timestamp** | Logical clock that tracks causality in distributed systems |
+| **Leader Election** | Process of selecting one node to coordinate actions |
+| **Load Balancer** | Distributes incoming traffic across multiple servers |
+| **PagedAttention** | KV cache optimization that reduces memory waste from 60-80% to <4% |
+| **RAG** | Retrieval-Augmented Generation — grounding LLMs in external knowledge |
+| **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
+| **SAGA** | Distributed transaction pattern using compensating actions instead of locks |
+| **SLI** | Service Level Indicator — what you measure (e.g., latency, error rate) |
+| **SLO** | Service Level Objective — what you promise internally (e.g., 99.9% availability) |
+| **Speculative Decoding** | Small draft model generates candidates, large model verifies — 2-3x speedup |
+| **Token Bucket** | Rate limiting algorithm that allows controlled bursts |
+| **Vector Clock** | Logical clock that tracks causality more precisely than Lamport timestamps |
+| **WebSocket** | Persistent bidirectional connection for real-time communication |
 
 ---
 
