@@ -372,6 +372,22 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 3. How do you handle long-running tasks?
 4. How do you control costs?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **No step or token ceiling** | A looping agent burns budget until someone notices the bill | Hard caps on steps, tokens, wall-clock, and cost — enforced in the harness |
+| **Unbounded tool output into context** | One `cat` of a large file evicts the actual task from the window | Truncate, summarize, or write to disk and pass a reference |
+| **Swallowing tool errors** | The model can't correct what it can't see, so it repeats the failing call | Feed the error text back as an observation |
+| **Retrying a failing tool call unchanged** | Identical input yields an identical failure | Change something — arguments, tool, or approach — or escalate |
+| **Irreversible actions without confirmation** | `rm -rf`, sending email, moving money: a wrong tool call is unrecoverable | Classify tools by reversibility; gate the destructive ones behind approval |
+| **Trusting retrieved content as instructions** | Indirect prompt injection: a fetched page says "ignore previous instructions" and the agent complies | Keep data and instructions structurally separate; never grant fetched text authority |
+| **Multi-agent when one agent suffices** | Every handoff loses context and multiplies cost and failure modes | Single agent with good tools first; delegate only for genuine parallelism or context isolation |
+| **Sharing one context across subagents** | The isolation that makes delegation useful disappears | Fresh context per subagent; return only the synthesized result |
+| **No checkpointing on long runs** | A crash at step 9 of 10 redoes everything, including the expensive parts | Journal completed steps; resume from the last good state |
+| **Evaluating only the final answer** | An agent can reach the right answer via a broken, unrepeatable path | Evaluate trajectories: tool choice, step count, recovery behaviour |
+| **Non-idempotent tools** | A retried "create ticket" opens three | Idempotency keys on side-effecting tools |
+
 ---
 
 ## Discussion Questions

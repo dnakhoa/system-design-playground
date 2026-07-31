@@ -702,6 +702,21 @@ Coordination services that provide distributed primitives.
 3. How do you aggregate counts across nodes?
 4. What's the trade-off between accuracy and performance?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Trusting wall-clock time for ordering** | Clocks drift and NTP steps backwards; two events can carry impossible timestamps | Logical clocks for causality; fencing tokens for mutual exclusion |
+| **Distributed locks without fencing tokens** | A GC-paused holder wakes up believing it still owns the lock and writes over the new owner | Monotonic token with every write; the resource rejects stale tokens |
+| **Reading `LC(x) < LC(y)` as "x caused y"** | Lamport clocks are one-way: causality implies ordering, not the reverse | Vector clocks when you must *detect* concurrency |
+| **Even-numbered cluster sizes** | 4 nodes tolerate 1 failure, same as 3, but cost more and split evenly | Odd sizes: 3, 5, 7 |
+| **Expecting consensus to survive minority partitions** | Raft/Paxos need a majority; the minority side must stop accepting writes | Accept CP here, or choose an AP store for that data |
+| **CRDT slots shared between replicas** | `max()` merge discards the other replica's increments | Each replica writes only its own slot |
+| **Last-write-wins as the default merge** | Concurrent updates are silently discarded, and the "winner" depends on clock skew | Detect concurrency with vector clocks; merge, or surface both versions |
+| **2PC for cross-service transactions** | Blocking protocol, coordinator is a SPOF, locks held through the stall | Saga with compensations, or TCC |
+| **Assuming a failed node is a stopped node** | Slow, partitioned, and dead are indistinguishable from outside | Design for "unreachable"; use leases and fencing rather than liveness guesses |
+| **Building consensus yourself** | It is famously easy to get subtly, silently wrong | Use etcd, ZooKeeper, or Consul |
+
 ---
 
 ## Discussion Questions

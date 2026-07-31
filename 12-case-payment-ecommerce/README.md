@@ -543,6 +543,22 @@ Design a daily reconciliation system:
 - How do you report discrepancies?
 - How do you prevent duplicate reconciliations?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Generating the idempotency key server-side** | A retry arrives with a fresh key, misses dedup, and charges twice — defeating the entire mechanism | The client mints a key that is stable across retries of one intent |
+| **Check-then-set for idempotency** | Two concurrent retries both pass the check and both charge | Atomic claim (`SET NX`) *before* calling the gateway |
+| **Storing money as a float** | `0.1 + 0.2 != 0.3`; rounding errors accumulate into real losses | Integer minor units (cents) or exact `DECIMAL` |
+| **Trusting the client's amount** | Anyone can post `{"amount": 1}` for a $1,000 order | Recompute the total server-side from authoritative prices |
+| **No reconciliation** | A charge that succeeds at the gateway but fails to record locally is invisible until the customer complains | Daily gateway-vs-ledger comparison with an explicit repair path |
+| **`DECR` without restoring on rejection** | The counter drifts far negative, and returned stock never becomes buyable again | Check-and-decrement atomically in one Lua script |
+| **Relying on TTL expiry to release stock** | Redis deletes keys silently; it does not run your code | Sweeper over a reservation `ZSET`, with reconciliation as a backstop |
+| **Deleting or mutating ledger rows** | Financial history must be auditable and reconstructible | Append-only ledger; corrections are new compensating entries |
+| **Capturing at authorization time** | You take money before you can fulfil, so every failure becomes a refund | Authorize on order, capture on fulfilment |
+| **Non-idempotent refunds** | A retried refund pays the customer twice | Key refunds by `refund_id` and dedupe on it |
+| **Treating a payment as a two-state flag** | Real payments are pending, authorized, captured, failed, disputed, refunded | An explicit state machine with legal transitions only |
+
 ---
 
 ## Discussion Questions

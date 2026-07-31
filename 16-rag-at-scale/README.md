@@ -439,6 +439,22 @@ Perplexity built a production search-augmented LLM that cites its sources.
 3. How do you evaluate answer quality?
 4. How do you handle questions that can't be answered from the knowledge base?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **No evaluation set** | Every change is a vibe check, and regressions ship unnoticed | 50-100 real question/answer pairs before tuning anything |
+| **Measuring the pipeline end-to-end only** | You can't tell whether retrieval missed the chunk or generation ignored it | Measure retrieval (recall@k, MRR) and generation (faithfulness) separately |
+| **Chunking by character count** | Splits mid-sentence and mid-table, embedding fragments that mean nothing | Token-aware splitting on structural boundaries, with overlap |
+| **One chunk size for every document type** | A legal contract and a chat log have nothing in common structurally | Tune per corpus; 512 tokens is a starting point, not an answer |
+| **Skipping the reranker** | Bi-encoder top-5 is materially worse than reranked top-5 — usually the cheapest quality win available | Retrieve top-50, rerank to top-5 with a cross-encoder |
+| **Dense retrieval only** | Embeddings miss exact identifiers, error codes, SKUs, and rare proper nouns | Hybrid dense + BM25, fused with RRF |
+| **Weighted-sum fusion of raw scores** | Cosine and BM25 are on incomparable scales, so weights need per-corpus retuning | RRF — it uses ranks, so scale is irrelevant |
+| **Stuffing the context window because it's large** | The middle of a long context is where facts go unread | Fewer, better-ranked chunks; put the strongest first |
+| **No "I don't know" path** | Forced to answer from irrelevant chunks, the model invents something plausible | Threshold on retrieval score and abstain below it |
+| **Re-embedding with a different model** | Vectors from two models aren't comparable; retrieval quality collapses silently | Version the embedding model with the index; re-embed everything on change |
+| **Answers without citations** | Users can't verify, and you can't debug a bad answer | Return chunk IDs with every claim |
+
 ---
 
 ## Discussion Questions

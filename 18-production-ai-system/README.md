@@ -524,6 +524,23 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 | Anthropic Research | Blog | Safety, alignment |
 | Google ML System Design | Paper | ML infrastructure |
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Routing everything to the largest model** | Usually a 5-10x overspend; most traffic is simple | Route by complexity; measure the escalation rate to tune it |
+| **Cascading without a cost ceiling** | Small-then-large on every escalation costs *more* than going large directly | Track the crossover point; skip the cascade when the classifier is confident |
+| **Semantic cache thresholds set too loose** | "How do I cancel?" returns the answer to "How do I upgrade?" | Tune the threshold on real query pairs; log near-misses |
+| **Caching personalized or authorized responses** | One tenant's data served to another — a data breach, not a cache bug | Namespace cache keys by tenant and auth scope |
+| **Input guardrails only** | The model can still emit PII, harmful content, or leak the system prompt | Guard both directions; output filtering is not optional |
+| **Regex-only prompt injection detection** | Trivially bypassed by paraphrase, encoding, or translation | Layer classifiers with instruction/data separation and least-privilege tools |
+| **Trusting retrieved documents** | Indirect injection arrives through your own RAG corpus | Treat retrieved text as untrusted data, never as instructions |
+| **No per-request cost attribution** | You see the monthly bill but not which feature or tenant caused it | Tag every call with tenant, feature, and model; alert on anomalies |
+| **Logging prompts and completions verbatim** | User PII lands in your observability stack, often outside your compliance boundary | Redact before logging; keep hashes and metrics, sample raw text narrowly |
+| **Prompts edited in production** | An untracked change degrades quality with no diff to inspect and no way back | Version prompts like code: reviewed, evaluated, rollback-able |
+| **Averaged quality metrics only** | A 4.2/5 mean hides the 5% of catastrophic answers that drive churn | Watch the tail: worst-case scores, refusal rate, hallucination rate |
+| **Deploying a new model version without re-evaluating** | Provider updates shift behaviour; prompts tuned for the old version silently regress | Pin versions; run the eval suite before promoting |
+
 ---
 
 ## Discussion Questions

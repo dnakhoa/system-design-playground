@@ -426,6 +426,21 @@ Two users edit the same document offline:
 
 Design a conflict resolution strategy. What happens when both come online? How do you preserve both changes?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Confusing viewer count with origin requests** | 800K viewers of one video fetch the *same* segments; the CDN collapses them into one origin pull per edge | Size origin load by distinct objects, not concurrent users |
+| **Storing files as single blobs** | A failed upload restarts from zero, and a one-byte edit re-uploads gigabytes | Fixed-size chunks (~4MB) with per-chunk hashes |
+| **Hashing whole files for deduplication** | Any change alters the whole-file hash, so nothing dedupes | Content-address each *chunk*; identical chunks dedupe across files and users |
+| **Metadata in the same store as chunk data** | Access patterns are opposite: metadata is small/transactional, chunks are large/immutable | Metadata in a database, chunks in object storage, referenced by hash |
+| **Last-write-wins for offline file edits** | One device's work vanishes with no trace | Conflict copies (Dropbox) or CRDT/OT merge (Docs) — never silent discard |
+| **Transcoding whole files serially** | A 4K feature blocks the queue for hours and restarts from scratch on failure | Split into segments, transcode in parallel, reassemble; retry per segment |
+| **One bitrate per video** | Mobile users buffer; fast connections get needlessly poor quality | Adaptive bitrate ladder plus HLS/DASH manifests |
+| **Segments too long or too short** | Long segments make quality switches sluggish; short ones multiply request overhead | 2-6 seconds is the practical range |
+| **Serving video from the origin** | Bandwidth cost and latency both become untenable | CDN, with origin shield behind it and popular titles pre-positioned |
+| **Ignoring egress cost in the design** | At video scale, bandwidth dominates the bill — often above compute and storage | Model egress explicitly; it drives CDN and peering decisions |
+
 ---
 
 ## Discussion Questions

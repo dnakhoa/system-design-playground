@@ -811,6 +811,20 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 3. What happens when Redis is unavailable?
 4. How do you handle clock skew across servers?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **`EXPIRE` on every rate-limit request** | The window never closes, so an actively-retrying client is locked out permanently | `EXPIRE ... NX`, or set the TTL only when `INCR` returns 1 |
+| **`INCR` and `EXPIRE` as separate round trips** | A crash between them leaves a key with no TTL — a permanent ban | Pipeline them, or use a Lua script for real atomicity |
+| **Round-robin to servers with long-lived connections** | Request *count* is balanced while actual load is not; WebSocket servers drift badly out of balance | Least-connections for stateful traffic; round-robin only for uniform short requests |
+| **No health checks, or checking only the port** | A TCP listener can accept while the app is deadlocked or its DB is unreachable | Application-level `/health` that exercises real dependencies |
+| **Health check that fails on a dependency outage** | Every instance reports unhealthy at once and the LB has nowhere to route — a total outage from a partial one | Separate liveness from readiness; degrade rather than removing every node |
+| **DNS as the failover mechanism** | Clients and resolvers ignore TTLs; propagation takes minutes to hours | Anycast or an LB with health checks; treat DNS as coarse geo-routing only |
+| **No rate-limiter fallback** | Redis down means either no limiting at all or a total outage | Decide fail-open vs fail-closed *per endpoint* and make it explicit |
+| **Rate limiting without response headers** | Clients can't self-regulate, so they hammer you and retry blindly | Always return `X-RateLimit-*` and `Retry-After` |
+| **Sticky sessions as the scaling plan** | Losing one server logs out every user on it, and load never rebalances | Externalize session state; keep servers stateless |
+
 ---
 
 ## Discussion Questions

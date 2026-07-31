@@ -437,6 +437,19 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 3. **Session store**: User login sessions. Sub-millisecond reads, TTL support. Which database? Why?
 4. **Time-series metrics**: Server metrics (CPU, memory) at 1-second intervals. Write-heavy, range queries. Which database? Why?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **"NoSQL doesn't do transactions"** | MongoDB has had multi-document ACID since 4.0; DynamoDB has `TransactWriteItems` | Decide on query patterns and consistency needs, not the SQL/NoSQL label |
+| **Calling Spanner/CockroachDB multi-leader** | They run a Raft group *per range*, each with one leader — that's how they avoid write conflicts | Reserve "multi-leader" for systems that genuinely need conflict resolution |
+| **Sharding before you need to** | Cross-shard JOINs and transactions disappear; resharding is a migration project | Exhaust read replicas and vertical scaling first — most workloads never need shards |
+| **Choosing a shard key by convenience** | `created_at` sends every new write to one shard; low-cardinality keys create permanent hotspots | Shard on something high-cardinality and evenly accessed, usually a tenant or user ID |
+| **Adding an index per query** | Every index taxes all writes and competes for buffer-pool memory | Design composite indexes for query *patterns*; verify with `EXPLAIN` before adding |
+| **Composite index in the wrong order** | `(user_id, date)` can't serve a `date`-only filter — an index is usable left-to-right only | Put equality columns first, range columns last |
+| **Reading from a replica right after writing** | Replication lag means the write may not be visible yet | Route read-your-writes to the primary, or pin the session until the replica catches up |
+| **Confusing the two "consistency"s** | ACID's C means constraints hold; CAP's C means replicas agree | Say "integrity constraints" or "linearizable" and skip the ambiguous word |
+
 ---
 
 ## Discussion Questions

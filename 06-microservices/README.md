@@ -660,6 +660,21 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 3. Which services communicate synchronously vs asynchronously?
 4. How do you handle the order saga across services?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Microservices before the domain is understood** | You cement the wrong boundaries, and moving them later costs far more than in a monolith | Start modular-monolith; extract once boundaries stop moving |
+| **A shared database between services** | The schema becomes an unversioned public API — nobody can migrate independently | One datastore per service; integrate over APIs or events |
+| **Splitting by technical layer** | An "API service" plus a "DB service" means every feature touches both — distributed, but not decoupled | Split by business capability so a change lands in one service |
+| **Synchronous call chains for everything** | Availability multiplies: five 99.9% hops give 99.5%, and latency accumulates | Async events where the caller doesn't need an answer now |
+| **Distributed transactions via 2PC** | The coordinator is a SPOF and participants hold locks while blocked | Saga with compensating actions, or TCC for reservations |
+| **Sagas without idempotent compensations** | Compensation runs at least once; a double refund is its own incident | Make every compensation idempotent and safe out of order |
+| **Assuming compensation always succeeds** | The refund can fail too, leaving the saga half-undone | Persist saga state, retry compensations, escalate to human review |
+| **Versioning by breaking `/v1`** | Clients you don't control break silently | Additive changes in place; a new version only for genuine breaks, with a sunset window |
+| **No distributed tracing** | With 20 services, "it's slow" is unfalsifiable | Propagate a trace ID from the edge through every hop, from day one |
+| **Shared libraries as the reuse strategy** | A bump requires redeploying every service — that's a monolith with extra steps | Duplicate small things; share via APIs, not compile-time coupling |
+
 ---
 
 ## Discussion Questions

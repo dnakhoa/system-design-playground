@@ -361,17 +361,6 @@ next 100 — so age reliably overtakes raw volume.
 
 ---
 
-## Key References
-
-| Resource | Type | Focus |
-|----------|------|-------|
-| System Design Interview (Ch. 4-5) | Book | Chat system, news feed |
-| WhatsApp Engineering Blog | Blog | Message delivery at scale |
-| Twitter Engineering Blog | Blog | Fan-out, timeline ranking |
-| "Building Microservices" (Ch. 5) | Book | Real-time communication |
-
----
-
 ## Practice Exercise
 
 **25-minute design**: Design a chat system for 10M users:
@@ -386,6 +375,61 @@ next 100 — so age reliably overtakes raw volume.
 2. How do you store and retrieve message history?
 3. How do you implement presence (online/offline)?
 4. How do you handle group chat fan-out?
+
+---
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Treating WebSocket servers as stateless** | The connection *is* the state — you can't route to Bob without knowing which server holds him | Connection registry (`user_id → server_id`) in Redis; route through it |
+| **Client-generated message IDs for ordering** | Device clocks are wrong, and users cheat | Server-assigned sequence per conversation (Snowflake or a per-chat counter) |
+| **Global ordering across all messages** | Needs total-order consensus at enormous cost, and nobody can perceive it | Order *within* a conversation only — that's all users notice |
+| **`ZREMRANGEBYRANK key 0 -1` to trim a feed** | That range is the entire sorted set — it deletes the feed | `ZREMRANGEBYRANK key 0 -1001` to keep 1000, or `ZREMRANGEBYSCORE` by timestamp |
+| **Fan-out on write for celebrities** | 100M followers means 100M writes for one post, and the queue never drains | Hybrid: push for normal accounts, pull for high-follower accounts at read time |
+| **Fan-out on read for everyone** | Following 500 accounts means 500 queries per feed load | Pre-compute for the common case; pull only the celebrity tail |
+| **Fanning out to inactive users** | Most of a large follower list hasn't opened the app in months | Push only to recently-active followers; the rest rebuild on next login |
+| **Additive recency in a ranking score** | A term bounded at 1.0 cannot move scores in the hundreds — recency silently does nothing | Multiply or divide: `engagement / (age + 2)^gravity` |
+| **Unbounded per-user feed lists** | Memory grows without limit for users who follow prolific accounts | Cap at ~1000 entries; page older content from the source of truth |
+| **Presence via a write on every heartbeat** | 50M users at one heartbeat per 30s is ~1.7M writes/sec of nearly worthless data | A TTL key refreshed on heartbeat; absence *is* offline |
+| **Broadcasting presence to every contact** | Presence changes fan out quadratically in dense graphs | Push only to contacts with an open chat window; others poll on demand |
+| **A read receipt per message** | Opening a chat with 50 unread messages emits 50 writes | One "read up to sequence N" watermark per conversation |
+
+---
+
+## Discussion Questions
+
+1. Alice sends three messages in quick succession. Bob receives #1 and #3 but #2 is delayed. What should Bob's client show, and where does that logic belong?
+
+   **Model answer**: Buffer #3 and display only #1 until #2 arrives — showing #3 first makes a conversation unreadable, and "fixing" the order afterwards makes messages jump around on screen. That requires a monotonic per-conversation sequence number assigned server-side, so the client can detect the gap. Server-assigned matters because device clocks are unreliable and clients can lie. Add a bounded timeout: if #2 hasn't arrived in a few seconds, show #3 with a gap indicator and reconcile via history fetch, because waiting forever on a message that was genuinely lost is worse than displaying out of order.
+
+2. A WebSocket server holding 100K connections crashes. Walk through what happens from the users' perspective, and what has to be in place for it to be survivable.
+
+   **Model answer**: All 100K connections drop simultaneously and every client reconnects at once — a thundering herd against the remaining servers. Required: (1) Clients reconnect with **jittered** exponential backoff, or they synchronize into a second outage. (2) The registry entries must expire via TTL, not explicit cleanup, since a crashed server deletes nothing. (3) Messages routed to the dead server during the gap must be durably queued, not held in memory, so they deliver on reconnect. (4) On reconnect the client sends its last-seen sequence and the server replays the gap. The system is survivable only if messages were persisted *before* being acknowledged — if the ack came first, those messages are simply gone.
+
+3. Justin Bieber posts. He has 100M followers. Compare fan-out on write, fan-out on read, and the hybrid — with numbers.
+
+   **Model answer**: **Write** is 100M feed insertions for one post; at ~50K writes/sec that is over half an hour of queue drain, and the feed is stale for most followers the entire time. **Read** makes his posts free to publish but forces every follower's feed load to query him — trivial for him, but if everyone were pulled, a user following 500 accounts issues 500 queries per load. **Hybrid** is what production systems do: push for accounts below a threshold (~10-100K followers), pull for those above. Feed generation reads the pre-computed list and merges in the handful of celebrities the user follows. The cost is a merge on every read, which is cheap because a user follows only a few such accounts. The threshold is an operational tuning knob, not a constant.
+
+4. Your group chat supports 100 members. Product asks for 100,000-member channels. What breaks?
+
+   **Model answer**: The delivery model. At 100 members, fan-out per message is trivial. At 100K, one message is 100K deliveries — and an active channel with 10 messages/second becomes 1M deliveries/second from a single room. Presence gets worse: showing who's online is a 100K-entry query per member per refresh. Read receipts become impossible to store per-message-per-user (10 messages × 100K members = 1M rows/second). What actually changes is the abstraction: large channels stop being "chat" and become **broadcast**. Members subscribe to a shared topic instead of each having a personal inbox; history is read from a shared log on scroll; presence becomes an approximate count; read receipts are dropped entirely or reduced to an unread badge. This is why WhatsApp caps group size and Slack/Discord treat channels differently from DMs — the same design does not stretch.
+
+5. Your feed ranking uses engagement signals. A post gets 10,000 likes in ten minutes from accounts created that week. What does this mean for the system beyond ranking?
+
+   **Model answer**: Engagement is an adversarial input, so treating it as ground truth makes the ranker an amplifier for whoever games it hardest. Practically: weight signals by source reputation (account age, history, follower authenticity), rate-limit engagement per account, and detect coordinated bursts — 10K likes in ten minutes from week-old accounts is a detectable pattern. Architecturally this means the ranking pipeline needs a **trust/abuse stage between engagement collection and score computation**, which most designs omit entirely. The system-design consequence is that ranking cannot be a pure function of counters; it needs a separate, slower-moving abuse signal, which changes the data flow.
+
+---
+
+## Key References
+
+| Resource | Type | Focus |
+|----------|------|-------|
+| System Design Interview (Ch. 4-5) | Book | Chat system, news feed |
+| WhatsApp Engineering Blog | Blog | Message delivery at scale |
+| Twitter Engineering Blog | Blog | Fan-out, timeline ranking |
+| Discord Engineering Blog | Blog | Large-channel broadcast, presence at scale |
+| "Building Microservices" (Ch. 5) | Book | Real-time communication |
 
 ---
 

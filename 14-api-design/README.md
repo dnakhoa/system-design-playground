@@ -35,8 +35,9 @@ By the end of this module, you will be able to:
 6. [Rate Limiting & Throttling](#6-rate-limiting--throttling)
 7. [Case Study: Stripe's API Design](#7-case-study-stripes-api-design)
 8. [Practice Exercise](#8-practice-exercise)
-9. [Discussion Questions](#9-discussion-questions)
-10. [Key References](#10-key-references)
+9. [Common Mistakes](#9-common-mistakes)
+10. [Discussion Questions](#10-discussion-questions)
+11. [Key References](#11-key-references)
 
 ---
 
@@ -791,9 +792,26 @@ Endpoints to design:
 - What status codes should POST /loans return for success, already-borrowed, and not-found?
 - How do you handle overdue fine calculation — eagerly or on-read?
 
+## 9. Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Verbs in resource paths** | `/getUser`, `/createOrder` discard the meaning HTTP methods already carry | Nouns for resources; methods for operations |
+| **200 OK with an error in the body** | Clients, proxies, and monitoring all read the status code — a 200 error is invisible to every one of them | Correct status code plus a machine-readable body |
+| **Unpaginated list endpoints** | The first large tenant takes down the endpoint, and removing it later is a breaking change | Paginate from day one, with a default *and* maximum page size |
+| **Offset pagination over a live dataset** | Inserts and deletes shift rows between pages, so items are duplicated and skipped | Cursor pagination keyed on a stable sort |
+| **Sorting without a unique tiebreaker** | Rows with equal sort keys have no defined order, so pages overlap | Always append a unique column: `sort=-created_at,id` |
+| **Sorting on arbitrary columns** | `?sort=-description` on 10M rows is a full scan any caller can trigger | Allowlist sortable (indexed) fields; 400 on anything else |
+| **Breaking changes without a version** | Clients you don't control fail silently in production | Additive changes in place; new version for real breaks, with `Deprecation`/`Sunset` headers |
+| **Inconsistent error shapes** | Every client writes bespoke parsing per endpoint | One envelope everywhere — RFC 9457 Problem Details is a good default |
+| **Leaking internals in error messages** | Stack traces and SQL fragments are reconnaissance for an attacker | Generic message plus a `request_id`; keep detail in your logs |
+| **No rate limit headers** | Clients can't back off intelligently, so they retry blindly into the limit | `X-RateLimit-*` on success, `Retry-After` on 429 |
+| **PATCH that replaces the resource** | Clients lose fields they never mentioned | PATCH merges; PUT replaces. Honour the distinction |
+| **`allow_origins=["*"]` with credentials** | Any site can act as the logged-in user; browsers reject the combination for good reason | Explicit origin allowlist |
+
 ---
 
-## 9. Discussion Questions
+## 10. Discussion Questions
 
 ### Q1: Your team is building a mobile app and a web dashboard that consume the same backend. Which API style would you choose and why?
 
@@ -827,7 +845,7 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 
 ---
 
-## 10. Key References
+## 11. Key References
 
 - **REST**: [RFC 7231 — HTTP/1.1 Semantics](https://tools.ietf.org/html/rfc7231), Roy Fielding's [dissertation](https://www.ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm)
 - **gRPC**: [grpc.io documentation](https://grpc.io/docs/), [Protocol Buffers Language Guide](https://developers.google.com/protocol-buffers/docs/proto3)

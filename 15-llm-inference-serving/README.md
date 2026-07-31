@@ -482,6 +482,21 @@ the compilation and operational cost.
 3. What batching strategy would you implement?
 4. How do you handle KV cache memory?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Sizing GPUs from model weights alone** | The KV cache is the variable cost: 13B weights are 26GB, but 32K context adds ~27GB *per sequence* | Budget weights + (KV per token × context × concurrency) |
+| **Planning capacity from average context length** | Concurrency is bounded by the *long* requests, and the scheduler preempts under memory pressure | Size for the p95 context you actually serve |
+| **Assuming you can self-host GPT-4 or Claude** | They are API-only; no weights exist to deploy | Open-weight models on your own nodes; hosted models as a separate upstream |
+| **Static batching in production** | Short requests wait for the longest in the batch; utilization sits at 40-60% | Continuous batching — universal in modern servers |
+| **Quantizing before measuring** | You trade quality for memory you may not need, and the loss is task-dependent | Establish an FP16 baseline on *your* evals, then compare |
+| **Treating all quantization as equivalent** | 4-bit weight-only, FP8, and 2-bit GGUF have very different quality/speed profiles | Match the method to the constraint; benchmark on your workload |
+| **Expecting speculative decoding to always help** | The gain scales with draft acceptance rate and competes with batching for GPU time | Measure acceptance; expect little benefit at high concurrency |
+| **Tensor parallelism across nodes** | Every layer needs an all-reduce; without NVLink/InfiniBand, interconnect dominates | TP within a node, pipeline parallelism across nodes |
+| **One latency SLO for the whole request** | TTFT (prefill) and inter-token latency have different causes and different fixes | Track TTFT and TPOT separately |
+| **Ignoring prefix cache hit rate** | A shared system prompt recomputed per request is pure waste | Measure it; if prefixes overlap heavily, prefix caching is the biggest single win |
+
 ---
 
 ## Discussion Questions

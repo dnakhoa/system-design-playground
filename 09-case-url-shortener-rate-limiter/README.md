@@ -393,6 +393,30 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
 ---
 
+## Discussion Questions
+
+1. Your URL shortener is live and a competitor is scraping every link by walking short codes sequentially. The codes came from a base62 counter. How do you stop it without breaking existing links?
+
+   **Model answer**: Existing links must keep resolving, so you cannot re-issue codes. Two moves: (1) For *new* codes, keep the counter but pass it through a secret bijection — multiply by a constant coprime with 62⁷ and take the modulus. Still collision-free, but consecutive counters land far apart, so enumeration stops working. (2) Independently, rate-limit and bot-detect on the redirect path — an attacker who has already harvested the low range can keep replaying it. Note what this does *not* fix: the already-leaked codes stay guessable. If confidentiality actually matters, short codes were the wrong primitive — you want an unguessable random token, accepting a longer code and a collision check.
+
+2. Redis, which holds both your hot URL cache and your rate limit counters, goes down. What happens to each, and what should happen?
+
+   **Model answer**: They should fail in opposite directions. The **cache** should fail open: fall back to the database, accept the latency hit and the load spike, keep serving redirects. Guard the origin with request coalescing so 3,800 QPS of misses becomes one query per key. The **rate limiter** is a policy decision, and the honest answer is per-endpoint: fail open on cheap read paths (better to serve some abuse than to go dark), fail closed on expensive or destructive ones (link creation, auth). A single global choice is the mistake — "fail open everywhere" invites an attack timed to a Redis restart, "fail closed everywhere" turns a cache outage into a total outage.
+
+3. You need 99.99% availability for redirects but only 99.9% for link creation. How does that asymmetry change the architecture?
+
+   **Model answer**: It splits the system in two. Redirects are read-only, idempotent, and cacheable — replicate them to multiple regions, serve from edge caches, and they survive a primary database outage entirely (a stale mapping is still correct, since mappings are immutable). Creation needs uniqueness, which needs coordination, so it stays regional and accepts lower availability. Concretely: reads served from any region with an eventually-consistent replica; writes routed to a primary region with pre-allocated ID batches so a brief coordination outage doesn't block creation. The asymmetry is what lets you hit four nines cheaply — you would never get there if every redirect needed the write path.
+
+4. A single link goes viral: 500K requests/second to one short code. Everything else is normal. What breaks and what do you do?
+
+   **Model answer**: The hot-key problem. Consistent hashing sends one key to exactly one cache node, so that node saturates while the rest idle — sharding does not help, because the load is one key. Fixes, in order of preference: (1) In-process L1 cache on every API server — an immutable mapping with a short TTL means each server hits Redis once per TTL, and 500K QPS collapses to (server count / TTL). (2) Replicate the hot key across N cache nodes with a suffix and read from a random replica. (3) If it is HTTP-cacheable, let the CDN absorb it — a 301 with a long `Cache-Control` never reaches you at all. L1 caching is the right first answer because URL mappings are immutable, which makes cache invalidation a non-problem.
+
+5. Your token bucket allows a burst of 10 with a 100/minute refill. A client sends 10 requests instantly, then 1 request every 600ms forever. Are they within their limit? Is that what you wanted?
+
+   **Model answer**: Yes, they are compliant — and yes, that is the intended behaviour, which is the point of the question. Refill is 100/60 ≈ 1.67 tokens/second, so one request per 600ms consumes exactly the refill rate and sustains indefinitely. The initial burst of 10 is the bucket capacity, granted once. Sustained throughput is 100/minute as specified. If you *don't* want the burst — say each request triggers expensive work — token bucket is the wrong algorithm; use a leaky bucket, which shapes output to a constant rate and queues rather than admitting spikes. The general lesson: "100 requests per minute" is underspecified until you say what burst behaviour you accept.
+
+---
+
 ## Key References
 
 | Resource | Type | Focus |

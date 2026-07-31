@@ -745,6 +745,21 @@ Google's SRE practices are the gold standard for reliability engineering.
 3. What's your disaster recovery strategy?
 4. How do you prevent cascading failures?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Retries without jitter** | Every client retries on the same schedule, so the herd hits again in lockstep | Full jitter: `sleep = random(0, min(base × 2^n, cap))` |
+| **Retries at every layer** | 3 retries at 4 layers is 81 requests to a service already failing | Retry at one layer — usually the outermost that can act on failure |
+| **Retrying without a circuit breaker** | Retries add load exactly when the dependency needs less | Breaker opens after N failures and sheds load until it recovers |
+| **Timeouts that increase downstream** | The caller gives up while everything below keeps burning capacity on a response nobody reads | Timeouts strictly decrease downstream; propagate a deadline |
+| **No timeout at all** | One hung dependency exhausts the connection pool and takes the service with it | Every network call gets an explicit timeout — no exceptions |
+| **SLOs at 100%** | It leaves no error budget, so all change becomes unshippable | Pick a target users actually notice; spend the difference on velocity |
+| **SLIs measured server-side only** | You miss DNS, TLS, and network failures — the ones users see | Measure client-side or at the edge |
+| **Untested backups** | A backup you've never restored is a hypothesis, not a recovery plan | Restore drills on a schedule; measure against your RTO |
+| **Chaos experiments without a hypothesis** | Breaking things at random produces incidents, not learning | State the steady-state expectation, inject one fault, bound the blast radius |
+| **Health checks that fail on dependency outage** | All instances go unhealthy at once, converting partial failure into total | Separate liveness from readiness; degrade instead of disappearing |
+
 ---
 
 ## Discussion Questions

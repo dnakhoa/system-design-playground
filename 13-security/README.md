@@ -29,8 +29,9 @@ By the end of this module, you will be able to:
 5. [Secrets Management](#5-secrets-management)
 6. [Case Study: Stripe Payment Security](#6-case-study-stripe-payment-security)
 7. [Practice Exercise](#7-practice-exercise)
-8. [Discussion Questions](#8-discussion-questions)
-9. [Key References](#9-key-references)
+8. [Common Mistakes](#8-common-mistakes)
+9. [Discussion Questions](#9-discussion-questions)
+10. [Key References](#10-key-references)
 
 ---
 
@@ -787,7 +788,20 @@ class SecureFileService:
 
 ---
 
-## 8. Discussion Questions
+## 8. Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Hardcoding secrets in code** | Secrets leak in version control | Use environment variables or secret managers |
+| **No token expiry** | Stolen tokens work forever | Set short expiry (15-60 min) + refresh tokens |
+| **Ignoring OWASP Top 10** | Common attacks are well-known | Review OWASP checklist for every API |
+| **No rate limiting on auth endpoints** | Brute force attacks succeed | Rate limit login, password reset, API key creation |
+| **Encrypting only in transit** | Data at rest is vulnerable | Encrypt sensitive data at rest too |
+| **No secret rotation** | Compromised secrets stay valid forever | Rotate secrets periodically (90 days) |
+
+---
+
+## 9. Discussion Questions
 
 ### Question 1: JWT vs Sessions
 
@@ -835,7 +849,7 @@ class SecureFileService:
 
 ---
 
-## 9. Key References
+## 10. Key References
 
 ### Official Documentation
 - [OAuth 2.0 RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749) - OAuth 2.0 authorization framework
@@ -859,19 +873,6 @@ class SecureFileService:
 - [Stripe Security Documentation](https://stripe.com/docs/security) - Payment security architecture
 - [GitHub's Token Scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps) - Fine-grained API access control
 - [AWS IAM Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html) - Identity and access management
-
----
-
-## Common Mistakes
-
-| Mistake | Why It's Wrong | What to Do Instead |
-|---------|---------------|-------------------|
-| **Hardcoding secrets in code** | Secrets leak in version control | Use environment variables or secret managers |
-| **No token expiry** | Stolen tokens work forever | Set short expiry (15-60 min) + refresh tokens |
-| **Ignoring OWASP Top 10** | Common attacks are well-known | Review OWASP checklist for every API |
-| **No rate limiting on auth endpoints** | Brute force attacks succeed | Rate limit login, password reset, API key creation |
-| **Encrypting only in transit** | Data at rest is vulnerable | Encrypt sensitive data at rest too |
-| **No secret rotation** | Compromised secrets stay valid forever | Rotate secrets periodically (90 days) |
 
 ---
 

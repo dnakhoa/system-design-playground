@@ -646,6 +646,20 @@ When a user places an order:
 3. How do you handle duplicate events?
 4. How do you track the order's progress through the pipeline?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Believing "exactly-once delivery" exists** | Over a network it's impossible; Kafka gives exactly-once *processing* within its own transaction boundary | At-least-once delivery plus idempotent consumers |
+| **At-least-once without idempotency** | Redelivery is normal, not exceptional — duplicate charges and double-sent emails follow | Deduplicate on a stable business key before doing work |
+| **Partitioning by a random key when order matters** | Kafka orders within a partition only; a ride's events land on different partitions and process out of order | Partition by the entity whose order matters (`ride_id`, `account_id`) |
+| **Partitioning by a hot key** | One partition takes 10x the traffic; a single consumer becomes the bottleneck | Choose a high-cardinality key, or add a salt and re-aggregate downstream |
+| **No dead letter queue** | A permanently-bad message retries forever and blocks its partition | DLQ after bounded retries, with an alert and a replay path |
+| **Retrying non-retryable errors** | A malformed payload will fail identically 1,000 times | Split transient (network, 5xx) from permanent (validation) and DLQ the latter at once |
+| **Async for work the user is waiting on** | "Queued" isn't "done" — a checkout that returns before payment clears misleads the user | Keep the user-blocking path synchronous; make only side effects async |
+| **Event sourcing with no snapshots** | Replay time grows without bound; a 10-year account takes minutes to load | Snapshot periodically and replay only events since the snapshot |
+| **Events carrying only IDs when consumers need data** | Every consumer calls back to the producer, recreating the coupling the queue removed | Event-carried state transfer for the fields consumers actually read |
+
 ---
 
 ## Discussion Questions
