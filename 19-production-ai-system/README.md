@@ -1,4 +1,4 @@
-# Module 18: Production AI System Architecture
+# Module 19: Production AI System Architecture
 
 > **Putting it all together — the full AI-native system.** This module is the capstone: it shows how inference serving, RAG, agents, guardrails, and observability compose into a production AI system.
 
@@ -10,7 +10,7 @@
 - Design observability and monitoring for AI systems
 - Scale from prototype to 100M users
 
-**This module synthesizes**: Module 15 (inference serving) + Module 16 (RAG) + Module 17 (agents) + Module 07 (reliability) + Module 03 (caching).
+**This module synthesizes**: Module 16 (inference serving) + Module 17 (RAG) + Module 18 (agents) + Module 15 (observability) + Module 07 (reliability) + Module 03 (caching).
 
 ---
 
@@ -296,6 +296,20 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 
 ## Observability and Monitoring
 
+> **[Module 15: Observability](../15-observability/README.md)** covers the general
+> foundations — metric types and cardinality, tracing and context propagation,
+> SLO burn-rate alerting, and cost control. This section covers what is *specific*
+> to AI systems: token accounting, cost per query, quality and hallucination
+> monitoring, and drift detection.
+>
+> Three properties make LLM observability genuinely different:
+>
+> | Property | Consequence |
+> |----------|-------------|
+> | **Cost varies per request** | Tokens, not requests, are the billable unit — so cost is a first-class metric, not an infrastructure detail |
+> | **Correctness is not binary** | There is no status code for "confidently wrong", so quality needs sampled LLM-as-judge scoring and user feedback |
+> | **The model is a moving dependency** | A provider-side update changes behaviour with no deploy on your side — pin versions and re-evaluate before promoting |
+
 ### The Observability Stack
 
 ```
@@ -567,6 +581,6 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 ---
 
-**Previous**: [Agent System Architecture](../17-agent-architecture/README.md)
+**Previous**: [Agent System Architecture](../18-agent-architecture/README.md)
 **Next**: [Course Home](../README.md)
 

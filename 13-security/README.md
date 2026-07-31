@@ -880,7 +880,7 @@ class SecureFileService:
 
 - **Module 04: Load Balancing** — Security considerations for distributed load balancers (SSL termination, health check security)
 - **Module 07: Reliability** — Security as a component of system reliability (DDoS mitigation, failover strategies)
-- **[Module 18: Production AI](../18-production-ai-system/README.md)** — Securing ML pipelines, model access control, and data privacy in production AI systems
+- **[Module 18: Production AI](../19-production-ai-system/README.md)** — Securing ML pipelines, model access control, and data privacy in production AI systems
 
 ---
 
@@ -892,4 +892,4 @@ class SecureFileService:
 
 ---
 
-*Module 13 of 18 in the System Design Playground*
+*Module 13 of 19 in the System Design Playground*

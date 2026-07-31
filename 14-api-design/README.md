@@ -8,7 +8,7 @@
 |--------|-------|------|
 | Module 13 | Security | [../13-security/](../13-security/) |
 | **Module 14** | **API Design** | **(current)** |
-| Module 15 | LLM Inference Serving | [../15-llm-inference-serving/](../15-llm-inference-serving/) |
+| Module 15 | Observability | [../15-observability/](../15-observability/) |
 
 ---
 
@@ -891,8 +891,8 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 
 **Previous:** [Module 13: Security](../13-security/README.md)
 
-**Next:** [Module 15: LLM Inference Serving Architecture](../15-llm-inference-serving/README.md)
+**Next:** [Module 15: Observability](../15-observability/README.md)
 
 ---
 
-*Module 14 of 18 in the System Design Playground*
+*Module 14 of 19 in the System Design Playground*

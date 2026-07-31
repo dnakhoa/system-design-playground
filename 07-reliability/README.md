@@ -541,6 +541,10 @@ def call_service_b(request, deadline: Deadline):
 
 ## SLOs, SLAs, and Error Budgets
 
+> These definitions are the foundation for alerting. **[Module 15,
+> Section 6](../15-observability/README.md#6-slo-based-alerting)** turns an error
+> budget into a concrete paging policy using multi-window burn-rate alerts.
+
 ### Definitions
 
 | Term | Definition | Example |

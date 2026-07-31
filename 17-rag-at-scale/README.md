@@ -1,4 +1,4 @@
-# Module 16: RAG System Architecture at Scale
+# Module 17: RAG System Architecture at Scale
 
 > **Designing production retrieval-augmented generation.** RAG is the most common pattern for grounding LLMs in external knowledge. At scale, the challenges shift from "does it work?" to "is it fast, accurate, and cost-effective?"
 
@@ -471,6 +471,6 @@ Perplexity built a production search-augmented LLM that cites its sources.
 
 ---
 
-**Previous**: [LLM Inference Serving Architecture](../15-llm-inference-serving/README.md)
-**Next**: [Agent System Architecture](../17-agent-architecture/README.md)
+**Previous**: [LLM Inference Serving Architecture](../16-llm-inference-serving/README.md)
+**Next**: [Agent System Architecture](../18-agent-architecture/README.md)
 

@@ -533,6 +533,11 @@ def get_users_negotiate(accept: str = Header(default="application/json")):
 
 ## Observability in Microservices
 
+> This section is the overview. **[Module 15: Observability](../15-observability/README.md)**
+> covers it in depth: metric cardinality, why percentiles cannot be averaged,
+> context propagation across queues and thread pools, sampling strategies, and
+> SLO burn-rate alerting.
+
 ### The Three Pillars
 
 ```

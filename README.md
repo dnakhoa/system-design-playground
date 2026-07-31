@@ -1,10 +1,10 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-18-blue.svg)]()
+[![Modules](https://img.shields.io/badge/modules-19-blue.svg)]()
 [![Theory](https://img.shields.io/badge/type-theory%20%2B%20design-orange.svg)]()
 
-> **The most comprehensive open-source system design course** — 18 modules covering distributed systems fundamentals, classic design cases, core infrastructure, and LLM AI system architecture. Theory-first with diagrams, trade-off tables, real-world case studies, and hands-on exercises.
+> **The most comprehensive open-source system design course** — 19 modules covering distributed systems fundamentals, classic design cases, core infrastructure, and LLM AI system architecture. Theory-first with diagrams, trade-off tables, real-world case studies, and hands-on exercises.
 
 ## What You'll Learn
 
@@ -15,23 +15,24 @@ This course takes you from system design fundamentals to designing production LL
 | **Foundations** | Scalability, databases, caching, load balancing | 01-04 |
 | **Intermediate** | Async systems, microservices, reliability, distributed systems | 05-08 |
 | **Design Cases** | URL shortener, chat, payments, file storage, video streaming | 09-12 |
-| **Core Infrastructure** | Security, API design | 13-14 |
-| **LLM AI Systems** | Inference serving, RAG at scale, agents, production AI | 15-18 |
+| **Core Infrastructure** | Security, API design, observability | 13-15 |
+| **LLM AI Systems** | Inference serving, RAG at scale, agents, production AI | 16-19 |
 
 ## Why This Course?
 
 | Feature | Traditional SD Courses | **This Course** |
 |---------|----------------------|-----------------|
-| LLM system design | ❌ | ✅ Modules 15-18 |
-| RAG architecture at scale | ❌ | ✅ Module 16 |
-| Agent system architecture | ❌ | ✅ Module 17 |
-| Production AI observability | ❌ | ✅ Module 18 |
+| LLM system design | ❌ | ✅ Modules 16-19 |
+| RAG architecture at scale | ❌ | ✅ Module 17 |
+| Agent system architecture | ❌ | ✅ Module 18 |
+| Production AI observability | ❌ | ✅ Module 19 |
 | Classic fundamentals | ✅ | ✅ Modules 01-08 |
 | Security and API design | Partial | ✅ Modules 13-14 |
+| Observability in depth | Partial | ✅ Module 15 |
 | Real-world case studies | Partial | ✅ Every module |
 | Hands-on exercises | Partial | ✅ Every module |
 | ASCII diagrams | Rare | ✅ Every module |
-| **Total coverage** | 10-12 modules | **18 modules** |
+| **Total coverage** | 10-12 modules | **19 modules** |
 
 ## Who This Course Is For
 
@@ -73,21 +74,22 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 Focus on LLM-specific architecture:
 
 ```
-Module 15 (Inference Serving) → Module 16 (RAG at Scale)
-    → Module 17 (Agent Architecture) → Module 18 (Production AI)
+Module 16 (Inference Serving) → Module 17 (RAG at Scale)
+    → Module 18 (Agent Architecture) → Module 19 (Production AI)
 ```
 
 | Priority | Module | Why |
 |----------|--------|-----|
-| **Must** | 15 | How to serve LLMs at scale (PagedAttention, batching) |
-| **Must** | 16 | RAG is the most common LLM pattern |
-| **Should** | 17 | Agents are the future of LLM applications |
-| **Should** | 18 | Putting it all together in production |
+| **Must** | 16 | How to serve LLMs at scale (PagedAttention, batching) |
+| **Must** | 17 | RAG is the most common LLM pattern |
+| **Should** | 18 | Agents are the future of LLM applications |
+| **Should** | 19 | Putting it all together in production |
+| **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path C: Full Curriculum (~36 hours)
+### Path C: Full Curriculum (~38 hours)
 
-Work through all 18 modules in order. Each builds on the previous.
+Work through all 19 modules in order. Each builds on the previous.
 
 ### Path D: Fill Your Gaps
 
@@ -99,10 +101,12 @@ Work through all 18 modules in order. Each builds on the previous.
 | Need to design a chat system | Module 10 (Chat/News Feed) |
 | Auth, encryption, or OWASP gaps | Module 13 (Security) |
 | APIs keep breaking clients | Module 14 (API Design) |
-| Need to serve LLMs at scale | Module 15 (Inference Serving) |
-| Building a RAG system | Module 16 (RAG at Scale) |
-| Building autonomous agents | Module 17 (Agent Architecture) |
-| Don't know how to monitor AI systems | Module 18 (Production AI) |
+| Outages take hours to diagnose | Module 15 (Observability) |
+| Alerts are noisy and everyone ignores them | Module 15 (Observability) |
+| Need to serve LLMs at scale | Module 16 (Inference Serving) |
+| Building a RAG system | Module 17 (RAG at Scale) |
+| Building autonomous agents | Module 18 (Agent Architecture) |
+| Don't know how to monitor AI systems | Module 19 (Production AI) |
 
 ---
 
@@ -135,21 +139,22 @@ Work through all 18 modules in order. Each builds on the previous.
 | [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~2h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 
-### Phase 4: Core Infrastructure (Modules 13-14)
+### Phase 4: Core Infrastructure (Modules 13-15)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [13](13-security/README.md) | [Security](13-security/README.md) | Auth, encryption, OWASP, prompt injection | ⭐⭐ Intermediate | ~2h |
 | [14](14-api-design/README.md) | [API Design](14-api-design/README.md) | REST, gRPC, GraphQL, versioning, pagination | ⭐⭐ Intermediate | ~2h |
+| [15](15-observability/README.md) | [Observability](15-observability/README.md) | Metrics, tracing, cardinality, burn-rate alerting | ⭐⭐ Intermediate | ~2h |
 
-### Phase 5: LLM AI Systems (Modules 15-18)
+### Phase 5: LLM AI Systems (Modules 16-19)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [15](15-llm-inference-serving/README.md) | [LLM Inference Serving](15-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
-| [16](16-rag-at-scale/README.md) | [RAG at Scale](16-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
-| [17](17-agent-architecture/README.md) | [Agent Architecture](17-agent-architecture/README.md) | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
-| [18](18-production-ai-system/README.md) | [Production AI System](18-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
+| [15](16-llm-inference-serving/README.md) | [LLM Inference Serving](16-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
+| [16](17-rag-at-scale/README.md) | [RAG at Scale](17-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
+| [17](18-agent-architecture/README.md) | [Agent Architecture](18-agent-architecture/README.md) | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
+| [18](19-production-ai-system/README.md) | [Production AI System](19-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
 
 ---
 
@@ -159,10 +164,10 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 | System Design (This Course) | LLM Engineering |
 |---------------------------|-----------------|
-| Module 15: LLM Inference Serving | Module 05-06: Deployment & Optimization |
-| Module 16: RAG at Scale | Module 02: RAG Systems |
-| Module 17: Agent Architecture | Module 07: Agentic Workflows |
-| Module 18: Production AI | Module 08-10: LLM Ops, EvalOps, Guardrails |
+| Module 16: LLM Inference Serving | Module 05-06: Deployment & Optimization |
+| Module 17: RAG at Scale | Module 02: RAG Systems |
+| Module 18: Agent Architecture | Module 07: Agentic Workflows |
+| Module 19: Production AI | Module 08-10: LLM Ops, EvalOps, Guardrails |
 
 **System Design** teaches you *how to think about architecture*.  
 **LLM Engineering** teaches you *how to build the implementations*.
@@ -190,7 +195,7 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 ### For Teams
 1. Use as training material for new team members
 2. Reference architecture decisions in design docs
-3. Share the LLM modules (15-18) with AI/ML teams
+3. Share the LLM modules (16-19) with AI/ML teams
 4. Establish common vocabulary and patterns
 
 ---
@@ -229,7 +234,7 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |
 
-### Security and API Design (Modules 13-14)
+### Security, API Design, and Observability (Modules 13-15)
 
 | Term | Definition |
 |------|-----------|
@@ -247,8 +252,19 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | **HATEOAS** | Hypermedia links in responses — Level 3 of the Richardson Maturity Model |
 | **N+1 Problem** | One query per related record instead of one batched query; fixed with DataLoader |
 | **SSRF** | Server-Side Request Forgery — tricking a server into making attacker-chosen requests |
+| **Burn Rate** | How fast you're consuming error budget; 1× exactly exhausts it over the SLO window |
+| **Cardinality** | Distinct time series for a metric — the *product* of its label value counts, and what you pay for |
+| **Exemplar** | A trace ID attached to a metric observation, linking "p99 spiked" to an actual slow request |
+| **Four Golden Signals** | Latency, traffic, errors, saturation — the baseline for any user-facing service |
+| **Head/Tail Sampling** | Deciding to keep a trace at ingress (cheap, blind to outcome) vs after completion (keeps all errors, needs stateful collectors) |
+| **Histogram vs Summary** | Bucket counts aggregate across instances; client-side quantiles do not |
+| **OpenTelemetry** | Vendor-neutral standard for metrics, logs, and traces (API, SDK, OTLP wire format) |
+| **RED / USE** | Rate-Errors-Duration for services; Utilization-Saturation-Errors for resources |
+| **Span** | One unit of work in a trace, carrying trace ID, span ID, parent ID, and duration |
+| **Structured Logging** | Stable event name plus queryable fields, instead of an interpolated sentence |
+| **Trace Context** | W3C `traceparent` header that carries trace ID and sampling decision across hops |
 
-### LLM AI Systems (Modules 15-18)
+### LLM AI Systems (Modules 16-19)
 
 | Term | Definition |
 |------|-----------|
@@ -281,18 +297,22 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 |------|--------|-------|
 | Designing Data-Intensive Applications | Martin Kleppmann | Distributed systems depth |
 | System Design Interview (Vol 1 & 2) | Alex Xu | Interview prep, breadth |
-| Site Reliability Engineering | Google | Reliability practices |
+| Site Reliability Engineering | Google | Reliability practices, golden signals |
+| The Site Reliability Workbook | Google | Practical SLO and burn-rate alerting |
+| Observability Engineering | Majors, Fong-Jones, Miranda | High-cardinality debugging |
 | Building Microservices | Sam Newman | Service architecture |
 | Designing Machine Learning Systems | Chip Huyen | ML in production |
 
 ### Engineering Blogs
 - Meta Engineering, Netflix Tech Blog, Uber Engineering
 - Google AI Blog, OpenAI Blog, Anthropic Research
-- vLLM Blog, LangChain Blog
+- vLLM Blog, LangChain Blog, Honeycomb Blog
 
-### Key Papers
-| Paper | Year | Topic |
-|-------|------|-------|
+### Key Papers and Standards
+| Reference | Year | Topic |
+|-----------|------|-------|
+| Dapper (Google) | 2010 | Distributed tracing foundations |
+| W3C Trace Context | 2021 | Interoperable trace propagation |
 | PagedAttention (vLLM) | 2023 | KV cache optimization |
 | Speculative Decoding | 2022 | Inference acceleration |
 | ReAct | 2022 | Agent planning |
@@ -302,7 +322,7 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 This educational resource is provided for learning purposes. Feel free to use, modify, and share.
 
-**Keywords:** system design, system design course, distributed systems, LLM system design, AI architecture, system design interview, microservices, caching, load balancing, RAG architecture, agent systems, vLLM, inference serving
+**Keywords:** system design, system design course, distributed systems, LLM system design, AI architecture, system design interview, microservices, caching, load balancing, observability, distributed tracing, OpenTelemetry, SLO alerting, API design, security, RAG architecture, agent systems, vLLM, inference serving
 
 ---
 
