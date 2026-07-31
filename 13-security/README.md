@@ -111,23 +111,38 @@ class JWTManager:
         roles: list[str],
         expires_in_minutes: int = 15
     ) -> str:
+        # UTC, always. `datetime.now()` without a timezone is interpreted as
+        # UTC by PyJWT regardless of the server's actual offset, so a host in
+        # UTC+7 would issue tokens that expired 7 hours ago.
+        now = datetime.datetime.now(datetime.timezone.utc)
+
         payload = {
             "sub": user_id,                           # Subject (who)
             "roles": roles,                           # Claims (what they can do)
-            "iat": datetime.datetime.now(),           # Issued at
-            "exp": datetime.datetime.now() + 
-                   datetime.timedelta(minutes=expires_in_minutes)
+            "iat": now,                               # Issued at
+            "exp": now + datetime.timedelta(minutes=expires_in_minutes),
+            "iss": "auth.example.com",                # Issuer
+            "aud": "api.example.com",                 # Intended audience
         }
         return jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
-    
+
     def verify_token(self, token: str) -> Optional[dict]:
         try:
-            return jwt.decode(token, self.secret_key, 
-                            algorithms=[self.algorithm])
+            return jwt.decode(
+                token,
+                self.secret_key,
+                # Pin the algorithm list. Accepting whatever the token's
+                # header claims is the classic JWT vulnerability: an attacker
+                # sets alg=none, or swaps RS256 for HS256 and signs with the
+                # public key as the HMAC secret.
+                algorithms=[self.algorithm],
+                audience="api.example.com",
+                issuer="auth.example.com",
+            )
         except jwt.ExpiredSignatureError:
             return None  # Token expired
         except jwt.InvalidTokenError:
-            return None  # Invalid token
+            return None  # Bad signature, wrong aud/iss, malformed, etc.
 
 # Usage
 manager = JWTManager("your-secret-key-change-in-production")
@@ -345,30 +360,52 @@ def get_user_orm(user_id: str):
 ### Input Validation
 
 ```python
-from pydantic import BaseModel, validator, constr
-import re
+from typing import Annotated
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class CreateUserRequest(BaseModel):
-    username: constr(min_length=3, max_length=32, pattern=r'^[a-zA-Z0-9_]+$')
-    email: str
-    age: int
-    
-    @validator('email')
-    def validate_email(cls, v):
-        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(pattern, v):
-            raise ValueError('Invalid email format')
-        return v.lower()
-    
-    @validator('age')
-    def validate_age(cls, v):
-        if v < 0 or v > 150:
-            raise ValueError('Invalid age')
-        return v
+    """Pydantic v2. Note the API differences from v1:
+       @validator  → @field_validator (+ @classmethod)
+       regex=      → pattern=
+    Mixing the two generations in one model is a common source of
+    validators that silently never run.
+    """
 
-# Pydantic automatically rejects invalid input
-# No manual validation needed in your business logic
+    username: Annotated[str, Field(
+        min_length=3,
+        max_length=32,
+        pattern=r'^[a-zA-Z0-9_]+$',
+    )]
+    # Prefer the library's validated type over a hand-rolled regex —
+    # email grammar (RFC 5322) is far more permissive than it looks, and
+    # homegrown patterns reject valid addresses.
+    email: EmailStr
+    age: Annotated[int, Field(ge=0, le=150)]
+
+    @field_validator('email')
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        # Store a canonical form so lookups and uniqueness checks agree.
+        return v.strip().lower()
+
+# Pydantic rejects invalid input at the boundary, so business logic
+# downstream can assume these invariants already hold.
 ```
+
+**Validate at the edge, but never *only* at the edge.** Input validation is a
+data-quality control, not a security boundary on its own:
+
+| Layer | What it catches |
+|-------|-----------------|
+| Schema validation (above) | Malformed, out-of-range, wrong-type input |
+| Parameterized queries | SQL injection — regardless of what got through |
+| Output encoding | XSS — regardless of what got stored |
+| Authorization check | Whether *this* caller may act on *this* record |
+
+A username that passes `^[a-zA-Z0-9_]+$` is still dangerous if you interpolate
+it into SQL. Allowlists reduce attack surface; they do not replace the defence
+at the point of use.
 
 ---
 
@@ -615,25 +652,56 @@ def create_payment_stripe_style(amount: int, idempotency_key: str = None):
 
 **3. Webhook Signature Verification**
 ```python
-import hmac
 import hashlib
+import hmac
+import time
 
-def verify_webhook_signature(payload: bytes, signature: str, 
-                            secret: str, tolerance: int = 300) -> bool:
-    """Verify Stripe-style webhook signatures."""
-    expected = hmac.new(
-        secret.encode('utf-8'),
-        payload,
-        hashlib.sha256
-    ).hexdigest()
-    
-    return hmac.compare_digest(expected, signature)
+def verify_webhook_signature(payload: bytes, header: str,
+                             secret: str, tolerance: int = 300) -> bool:
+    """Verify a Stripe-style webhook signature.
 
-# Reject webhooks that are too old (replay attack prevention)
-def is_timestamp_valid(timestamp: int, tolerance: int = 300) -> bool:
-    import time
-    return abs(time.time() - timestamp) <= tolerance
+    The header looks like:  t=1690000000,v1=5257a8...,v1=<older key>
+
+    Three things must all hold, and skipping any one of them defeats the
+    mechanism:
+      1. The signature covers the timestamp AND the body ("t.payload"),
+         not the body alone — otherwise a captured request replays forever.
+      2. The timestamp is inside the tolerance window.
+      3. The comparison is constant-time.
+    """
+    parts = dict(
+        kv.split("=", 1) for kv in header.split(",") if "=" in kv
+    )
+    timestamp = parts.get("t")
+    if timestamp is None:
+        return False
+
+    # (2) Reject stale deliveries — this is the replay defence, and it only
+    # works because the timestamp is inside the signed material below.
+    if abs(time.time() - int(timestamp)) > tolerance:
+        return False
+
+    # (1) Sign the timestamp and body together, exactly as the sender did.
+    signed_payload = f"{timestamp}.".encode() + payload
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+
+    # (3) Accept if ANY provided v1 matches — this is what lets you rotate
+    # the signing secret without dropping in-flight webhooks.
+    provided = [v for k, v in parts.items() if k == "v1"]
+    return any(hmac.compare_digest(expected, sig) for sig in provided)
 ```
+
+> **Why `hmac.compare_digest` and not `==`?** String equality short-circuits on
+> the first differing byte, so response time leaks how many leading bytes were
+> correct. An attacker can recover a signature byte by byte from timing alone.
+>
+> **Why sign the timestamp?** If the HMAC covers only the body, a valid request
+> captured off the wire stays valid indefinitely — a `tolerance` check on an
+> *unsigned* timestamp is worthless, because the attacker just edits it.
+>
+> Note that `parts` above keeps only the last `v1` when several are present.
+> Real implementations parse the header into a list of `(scheme, signature)`
+> pairs so every candidate key is checked; the dict form is shown for brevity.
 
 ### PCI DSS Compliance
 

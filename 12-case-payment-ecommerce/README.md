@@ -213,9 +213,10 @@ Flash sales create massive traffic spikes (100x normal).
 │  Purchase flow:                                         │
 │  1. Redis DECR inventory:{product_id}                   │
 │  2. If result >= 0: Reserve item (TTL: 10 minutes)     │
-│  3. Process payment                                     │
-│  4. If payment succeeds: Confirm reservation            │
-│  5. If payment fails: INCR inventory back               │
+│  3. If result <  0: INCR back immediately, then reject  │
+│  4. Process payment                                     │
+│  5. If payment succeeds: Confirm reservation            │
+│  6. If payment fails: INCR inventory back               │
 │                                                          │
 │  Key optimizations:                                     │
 │  - All reads from Redis (no DB until payment)           │
@@ -224,6 +225,28 @@ Flash sales create massive traffic spikes (100x normal).
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**Step 3 is not optional.** A bare `DECR` that rejects without restoring drives
+the counter arbitrarily negative once stock runs out — and with 1M users hitting
+a 10,000-unit sale, it lands somewhere around -990,000. Then the first refund
+`INCR` has to climb back through a million phantom decrements before the counter
+is positive again, so genuinely returned stock never becomes buyable.
+
+Do the check and the decrement atomically instead:
+
+```lua
+-- reserve.lua — KEYS[1] = inventory key, ARGV[1] = qty
+-- Never lets the counter go below zero, so no repair path is needed.
+local stock = tonumber(redis.call('GET', KEYS[1]) or '0')
+if stock >= tonumber(ARGV[1]) then
+  return redis.call('DECRBY', KEYS[1], ARGV[1])
+end
+return -1        -- out of stock; counter untouched
+```
+
+Redis runs each script atomically, so the read and the write cannot interleave
+with another buyer. `DECR`-then-compensate has a window where the counter lies;
+this does not.
 
 ### Cart Design
 
@@ -415,7 +438,8 @@ in-process cleverness removes the need for it.
   │     → Decrement DB inventory                         │
   │                                                       │
   │  3. User abandons checkout (after 10 minutes)        │
-  │     → TTL expires → Redis INCR inventory             │
+  │     → reservation key expires                        │
+  │     → sweeper returns the unit to inventory          │
   │     → Item becomes available again                   │
   │                                                       │
   │  Benefits:                                           │
@@ -424,6 +448,23 @@ in-process cleverness removes the need for it.
   │  - Redis handles contention (atomic operations)      │
   └─────────────────────────────────────────────────────┘
 ```
+
+> **Redis does not run your code when a key expires.** A TTL deletes the key
+> silently — it will not `INCR` anything. "TTL expires → INCR inventory" needs
+> an actual mechanism:
+>
+> | Mechanism | Trade-off |
+> |-----------|-----------|
+> | **Keyspace notifications** (`Kx`, event `expired`) | Near-real-time, but delivery is fire-and-forget — a disconnected subscriber loses the event and that unit leaks permanently |
+> | **Sweeper job** over a reservation `ZSET` scored by expiry time | Reliable and replayable; reclaims within one poll interval (a few seconds) |
+> | **Reconcile against the DB** | Backstop for whatever the first two miss |
+>
+> Make the sweeper the primary path. On a flash sale, a lost expiry event means
+> permanently unsellable stock — worse than a few seconds of reclaim delay.
+>
+> Note also that Redis expires keys **lazily** (on access) as well as via a
+> background sampler, so even the notification can arrive well after the nominal
+> TTL. Never treat a TTL as a scheduler.
 
 ### Flash Sale Detailed Flow
 

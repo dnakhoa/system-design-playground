@@ -250,14 +250,20 @@ Reduce model size by using lower precision weights.
 Use a small "draft" model to generate candidate tokens, then verify with the large "target" model in parallel.
 
 ```
-  Traditional:                    Speculative:
-  Step 1: LLM generates "The"    Step 1: Small model generates "The cat sat"
-  Step 2: LLM generates "cat"    Step 2: Large model VERIFIES all 3 tokens
-  Step 3: LLM generates "sat"    Step 3: If all correct → 3 tokens in 1 forward pass!
-  Step 3 tokens in 3 forward passes
+  Traditional (3 forward passes of the LARGE model):
+    pass 1 → "The"
+    pass 2 → "cat"
+    pass 3 → "sat"
 
-  Speedup: 2-3× with ZERO quality loss
-  (Verification is exact — same output as running large model alone)
+  Speculative (1 forward pass of the large model):
+    draft  → small model proposes "The cat sat"   (3 cheap passes)
+    verify → large model scores all 3 positions in ONE pass
+             all accepted → 3 tokens for the price of 1
+
+  Speedup: 2-3× with ZERO quality loss.
+  (Verification uses rejection sampling, so the output distribution is
+   provably identical to running the large model alone — this is not an
+   approximation.)
 ```
 
 ### Architecture
@@ -280,10 +286,44 @@ Use a small "draft" model to generate candidate tokens, then verify with the lar
   │  ▼                                                │
   │  [The✓, cat✓, sat✓, on✗]                        │
   │                                                   │
-  │  Result: 3 verified tokens in 1 forward pass     │
-  │  Effective speedup: 3×                           │
+  │  Result: 3 accepted + 1 correction = 4 tokens    │
+  │  from ONE target forward pass.                   │
+  │                                                   │
+  │  The rejected position isn't wasted — the target │
+  │  already computed its own distribution there, so │
+  │  it emits the right token for free. Everything   │
+  │  after the first rejection is discarded.         │
   └─────────────────────────────────────────────────┘
 ```
+
+### What Determines the Actual Speedup
+
+The headline number rests on one variable: **how often the draft model agrees
+with the target.**
+
+```
+  Expected tokens per target pass ≈ (1 - α^(K+1)) / (1 - α)
+
+  α = per-token acceptance rate, K = draft length
+
+  α = 0.9, K = 4  →  ~4.1 tokens/pass   (excellent)
+  α = 0.7, K = 4  →  ~2.9 tokens/pass   (typical)
+  α = 0.4, K = 4  →  ~1.6 tokens/pass   (marginal)
+  α = 0.2, K = 4  →  ~1.2 tokens/pass   (draft cost exceeds the gain)
+```
+
+| Factor | Effect on α |
+|--------|-------------|
+| Draft and target from the same model family | Higher — shared tokenizer and training distribution |
+| Predictable text (code, boilerplate, fixed formats) | Higher — easy next tokens |
+| High sampling temperature | Lower — the target's own sampling diverges from the draft |
+| Longer draft length K | Diminishing — later positions rarely survive |
+
+**Practical consequence:** speculative decoding is a **latency** optimization for
+low-to-moderate concurrency. Under heavy load, continuous batching already keeps
+the GPU saturated, so draft compute competes with real work and the net gain
+shrinks — sometimes to nothing. Measure the two together rather than assuming
+they compose.
 
 ---
 
@@ -350,9 +390,15 @@ Split model into stages across GPUs.
 │  ▼                      ▼                      ▼       │
 │ ┌────────────┐    ┌────────────┐    ┌────────────┐   │
 │ │ vLLM Node  │    │ vLLM Node  │    │ vLLM Node  │   │
-│ │ 4× A100    │    │ 4× A100    │    │ 4× A100    │   │
-│ │ GPT-4 class│    │ GPT-4 class│    │ Claude class│   │
+│ │ 4× A100    │    │ 4× A100    │    │ 2× A100    │   │
+│ │ 70B, TP=4  │    │ 70B, TP=4  │    │ 8B, TP=1   │   │
+│ │ (quality)  │    │ (quality)  │    │ (cheap/fast)│  │
 │ └────────────┘    └────────────┘    └────────────┘   │
+│                                                          │
+│  Only OPEN-WEIGHT models run on your own nodes. Hosted   │
+│  models (GPT-4, Claude, Gemini) are reached over their    │
+│  providers' APIs — you cannot self-host them, and the     │
+│  router below treats them as a separate upstream.        │
 │                                                          │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  Model Router                                     │   │
@@ -391,12 +437,21 @@ Split model into stages across GPUs.
 
 ## Framework Comparison
 
-| Framework | Stars | Key Innovation | Best For |
-|-----------|-------|---------------|----------|
-| **vLLM** | 86.8k | PagedAttention, continuous batching | General serving |
-| **SGLang** | 30.6k | RadixAttention, prefix caching | Shared prefix workloads |
-| **TensorRT-LLM** | 14.2k | NVIDIA-optimized, 5 parallelism strategies | NVIDIA hardware |
-| **TGI** | — | — | **Archived March 2026** (recommends vLLM/SGLang) |
+| Framework | Key Innovation | Best For | Trade-off |
+|-----------|---------------|----------|-----------|
+| **vLLM** | PagedAttention, continuous batching | General-purpose serving; the default choice | Broadest model support, largest community |
+| **SGLang** | RadixAttention (prefix-tree KV reuse) | Workloads with a large shared system prompt, or structured/multi-turn generation | Biggest wins need prefix overlap; narrower model coverage |
+| **TensorRT-LLM** | Ahead-of-time compiled kernels, full 3D parallelism | Squeezing maximum throughput from NVIDIA hardware | Per-model compilation step; NVIDIA-only; heaviest ops burden |
+| **llama.cpp / GGUF** | Aggressive quantization, CPU and Apple Silicon | Edge, laptops, single-user local inference | Not built for high-concurrency serving |
+
+**How to choose:** start with vLLM. Move to SGLang if your requests share a long
+prefix and you can measure the cache hit rate. Reach for TensorRT-LLM only when
+you have a fixed model, NVIDIA hardware, and throughput matters enough to pay
+the compilation and operational cost.
+
+> Popularity metrics are deliberately omitted — star counts date a document
+> within months and say nothing about fit. Check the projects' own benchmarks
+> against *your* model and traffic shape before committing.
 
 ---
 

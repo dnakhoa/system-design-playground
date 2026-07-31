@@ -116,14 +116,34 @@
 ```
   How many vectors?
   │
-  ├── <1M: pgvector (Postgres extension, simple)
+  ├── <10M ....... pgvector — if you already run Postgres, stop here.
+  │                One system to operate, and you get real JOINs and
+  │                transactions between vectors and your relational data.
   │
-  ├── 1M-50M: Qdrant or Weaviate
+  ├── 10M-100M ... Qdrant or Weaviate — purpose-built, horizontally
+  │                sharded, native hybrid search.
   │
-  ├── 50M-1B: Milvus or Pinecone
+  ├── 100M-1B .... Milvus (self-hosted, GPU-accelerated) or
+  │                Pinecone (managed, no ops).
   │
-  └── >1B: Custom solution (distributed vector DB)
+  └── >1B ........ Expect a custom tier: shard by tenant or time,
+                   quantize aggressively (PQ/binary), and accept
+                   approximate recall.
 ```
+
+> **Vector count is the weakest of the real decision inputs.** Before optimizing
+> for scale, check these:
+>
+> | Question | Why it dominates |
+> |----------|------------------|
+> | Do you need metadata filters *with* vector search? | Pre- vs post-filtering differs sharply between engines and can wreck recall |
+> | How often does the corpus change? | Frequent updates punish IVF indexes; HNSW handles them better but costs more memory |
+> | Do you need hybrid (dense + sparse) in one query? | Some engines do it natively; otherwise you fuse in application code |
+> | Multi-tenant isolation? | Per-tenant collections vs a filter column is an architecture decision, not a tuning knob |
+>
+> Most teams outgrow their *filtering* requirements long before their vector
+> count. A well-tuned pgvector instance handling 10M vectors with rich SQL
+> predicates usually beats a dedicated store you cannot query relationally.
 
 ---
 
@@ -209,16 +229,41 @@ Combine dense (vector) and sparse (keyword) search.
 
 ```
   Reciprocal Rank Fusion (RRF):
-  score = Σ 1/(k + rank_i) for each ranking
+
+    score(d) = Σ  1 / (k + rank_i(d))
+              i∈rankings
+
+  where rank_i(d) is d's 1-based position in ranking i,
+  and k is a smoothing constant — k = 60 is the standard
+  default from the original RRF paper (Cormack et al., 2009).
+
+  With k = 60:
 
   Chunk A: dense rank=2, sparse rank=5
-  RRF score = 1/(60+2) + 1/(60+5) = 0.0161 + 0.0154 = 0.0315
+    1/(60+2) + 1/(60+5) = 0.01613 + 0.01538 = 0.03151
 
   Chunk B: dense rank=5, sparse rank=1
-  RRF score = 1/(60+5) + 1/(60+1) = 0.0154 + 0.0164 = 0.0318
+    1/(60+5) + 1/(60+1) = 0.01538 + 0.01639 = 0.03177
 
-  Chunk B wins (better sparse match compensates for worse dense match)
+  Chunk B wins — its rank-1 sparse hit outweighs A's rank-2 dense hit.
 ```
+
+**Why RRF is the default fusion method:** it consumes only *ranks*, never
+scores. Cosine similarity (0-1, tightly clustered) and BM25 (unbounded, corpus-
+dependent) live on incomparable scales, so any weighted sum of raw scores needs
+per-corpus normalisation and re-tuning. Ranks sidestep the problem entirely.
+
+**What `k` controls:** it damps how much the top positions dominate.
+
+```
+  k = 0    → 1/1 vs 1/2 = 1.000 vs 0.500   rank 1 counts 2× rank 2
+  k = 60   → 1/61 vs 1/62 = 0.0164 vs 0.0161   nearly equal
+```
+
+Small `k` trusts each retriever's top hit and lets one confident ranker win.
+Large `k` flattens the curve so agreement *across* retrievers matters more than
+any single #1. Start at 60; lower it only if you have evidence that one
+retriever's top result is reliably correct.
 
 ---
 
@@ -226,24 +271,37 @@ Combine dense (vector) and sparse (keyword) search.
 
 LLMs struggle to use information in the middle of long contexts.
 
-```
-  Context position vs. LLM recall:
+Retrieval accuracy against the position of the relevant fact in the context
+window traces a **U-shape**:
 
+```
   Recall
-  100% │█                                          █
-       │██                                        ██
-       │███                                      ███
-       │████                                    ████
-       │█████                                  █████
-       │██████                                ██████
-       │███████                              ███████
-       │████████                            ████████
-   0%  └──────────────────────────────────────────
-       Beginning    Middle of context    End
+   100% ┤ ███                                   ███
+        │ ███ ███                           ███ ███
+    75% ┤ ███ ███ ███                   ███ ███ ███
+        │ ███ ███ ███ ███           ███ ███ ███ ███
+    50% ┤ ███ ███ ███ ███ ███   ███ ███ ███ ███ ███
+        │ ███ ███ ███ ███ ███ █ ███ ███ ███ ███ ███
+    25% ┤ ███ ███ ███ ███ ███ █ ███ ███ ███ ███ ███
+        │ ███ ███ ███ ███ ███ █ ███ ███ ███ ███ ███
+     0% ┴──┬───┬───┬───┬───┬──┬──┬───┬───┬───┬───┬──
+           1   2   3   4   5  6  7   8   9  10  11
+          ◄── start ──►   ◄─ middle ─►  ◄── end ──►
+                      position of the relevant fact
 
-  LLMs remember information at the BEGINNING and END of context
-  but forget information in the MIDDLE.
+  Taller bar = the model found and used the fact.
+  The dip in the middle is the failure mode: a fact placed there
+  can be effectively invisible even though it IS in the context.
 ```
+
+**The counter-intuitive part:** on some tasks, a model given the fact in the
+middle of a long context does *worse* than the same model given no context at
+all. Adding retrieved material is not automatically an improvement — placement
+matters as much as relevance.
+
+This is why **more context is not more accuracy**, and why "just use the
+1M-token window and skip retrieval" fails in practice. A longer window widens
+the middle where facts go to die.
 
 ### Mitigation Strategies
 

@@ -57,22 +57,51 @@ GET /api/v1/urls/:short_code/stats
 
 ### Data Model
 
+Pick one dialect and stay in it — the two below are not interchangeable.
+
 ```sql
+-- MySQL / MariaDB
 CREATE TABLE urls (
-    id          BIGINT PRIMARY KEY AUTO_INCREMENT,
-    short_code  VARCHAR(10) UNIQUE NOT NULL,
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    short_code  VARCHAR(10) NOT NULL,
     long_url    TEXT NOT NULL,
     user_id     BIGINT,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at  TIMESTAMP NULL,
-    click_count BIGINT DEFAULT 0,
-    is_active   BOOLEAN DEFAULT TRUE
+    click_count BIGINT NOT NULL DEFAULT 0,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE KEY uq_short_code (short_code)   -- UNIQUE already creates the index
 );
 
-CREATE INDEX idx_short_code ON urls(short_code);
-CREATE INDEX idx_user_id ON urls(user_id);
-CREATE INDEX idx_expires ON urls(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX idx_user_id ON urls (user_id);
+CREATE INDEX idx_expires ON urls (expires_at);   -- MySQL has no partial indexes
 ```
+
+```sql
+-- PostgreSQL
+CREATE TABLE urls (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    short_code  VARCHAR(10) NOT NULL UNIQUE,
+    long_url    TEXT NOT NULL,
+    user_id     BIGINT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ,
+    click_count BIGINT NOT NULL DEFAULT 0,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_user_id ON urls (user_id);
+-- Partial index: only rows that can actually expire. Postgres-only.
+CREATE INDEX idx_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
+```
+
+**Three things worth noticing:**
+
+| Detail | Why |
+|--------|-----|
+| No separate index on `short_code` | `UNIQUE` already builds one. Adding `CREATE INDEX` on the same column duplicates the B-tree and slows every write. |
+| `AUTO_INCREMENT` vs `GENERATED ... AS IDENTITY` | Dialect-specific. Mixing them (or adding a `WHERE` clause to a MySQL index) yields DDL that runs nowhere. |
+| `TIMESTAMP` vs `TIMESTAMPTZ` | Store instants with a timezone. `TIMESTAMP` without one silently reinterprets on a server-timezone change. |
 
 ### Architecture
 
@@ -108,12 +137,34 @@ CREATE INDEX idx_expires ON urls(expires_at) WHERE expires_at IS NOT NULL;
 #### Strategy 1: Base62 Counter
 
 ```
-  Counter: 1, 2, 3, ...
-  Base62 encode: 1→"b", 2→"c", ..., 62→"10", 63→"11"
+  Alphabet (fix ONE and document it):
+    "0123456789abcdef...xyzABCDEF...XYZ"   ← index 0 = '0'
+     ^0        ^10                ^36
 
-  Pros: Short codes, no collisions, predictable
-  Cons: Sequential (guessable), single point of failure
+  Counter → base62:
+     1 → "1"
+    10 → "a"
+    61 → "Z"
+    62 → "10"     (1×62 + 0)
+    63 → "11"
+   3844 → "100"   (62²)
+
+  Capacity: 62^7 ≈ 3.5 trillion codes — 2,900 years at 100M/month.
+
+  Pros: Shortest possible codes, zero collisions by construction
+  Cons: Sequential ⇒ enumerable (scrape every link); the shared counter
+        is a coordination point and a single point of failure
 ```
+
+> **Watch the alphabet.** `1 → "b"` and `62 → "10"` cannot both be true. The
+> first assumes the alphabet starts at `a` (so `a`=0, `b`=1); the second assumes
+> it starts at `0`. Mixing them produces codes that don't round-trip. Pick an
+> ordering, write it down, and never change it — existing links depend on it.
+
+**Making sequential IDs non-enumerable:** multiply the counter by a large
+number coprime with 62^7 and take it mod 62^7. This is a bijection, so you keep
+zero collisions, but consecutive counters land far apart in the output space.
+Keep the multiplier secret and adjacent links stop being guessable.
 
 #### Strategy 2: MD5 Hash
 

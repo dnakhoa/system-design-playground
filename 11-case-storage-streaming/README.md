@@ -436,7 +436,13 @@ Design a conflict resolution strategy. What happens when both come online? How d
 
 2. Your video streaming service has 1M concurrent viewers. 80% watch the same popular video. How do you optimize CDN usage?
 
-   **Model answer**: Pre-position the popular video at edge locations before the expected spike. Use origin shield to protect the origin server. The 80% watching the same video means CDN hit ratio will be very high (>99%). Only 200K unique streams need to reach the origin.
+   **Model answer**: Pre-position the popular video at edge locations before the expected spike, and put an origin shield in front of the origin so edge misses collapse into a mid-tier cache rather than hitting storage directly.
+
+   The key insight is that **origin load scales with distinct segments, not with viewers**. 800K people watching the same video request the same segment files, so each segment is fetched from origin at most once per edge location — then served from cache for everyone else. A 2-hour video at 6-second segments across 5 quality levels is only ~6,000 objects. Even with 100 edge locations pulling independently, that is ~600K one-time fetches spread over two hours, and pre-positioning drops it to near zero.
+
+   The remaining 20% (200K viewers) are spread across a long tail of less popular videos. Those *do* miss more often, because unpopular content gets evicted between requests — the tail is where your origin traffic actually comes from, not the hit. Steady-state hit ratio ends up >99% overall, and it is worth being precise about why: the popular video is ~100% cached, and the tail is what pulls the average down.
+
+   **Watch the reasoning trap:** ">99% hit ratio" and "200K streams reach the origin" cannot both be true — 200K of 1M is a 20% miss rate. Viewer count is not request count once a CDN is in the path.
 
 3. Compare Dropbox and Google Drive's sync approaches. What are the trade-offs?
 

@@ -17,20 +17,25 @@
 The choice isn't "SQL is old, NoSQL is new." It's about **what your data looks like and how you query it**.
 
 ```
-                    Do you need ACID transactions?
-                           /         \\
-                         Yes          No
-                         /              \\
-                ┌──────────┐      Is your data structured
-                │   SQL    │      and relational?
-                │PostgreSQL│       /         \\
-                │  MySQL   │     Yes          No
-                │ CockroachDB│   /              \\
-                └──────────┘  ┌──────────┐  ┌──────────┐
-                              │ Document │  │Key-Value │
-                              │ MongoDB  │  │ DynamoDB │
-                              │Firestore │  │  Redis   │
-                              └──────────┘  └──────────┘
+              Do you need multi-row ACID transactions?
+                       │
+            ┌──── Yes ─┴─ No ─────────────┐
+            │                             │
+     ┌──────▼───────┐        Is your data relational,
+     │     SQL      │        with queries that JOIN?
+     │  PostgreSQL  │                     │
+     │    MySQL     │          ┌─── Yes ──┴── No ───┐
+     │ CockroachDB  │          │                    │
+     └──────────────┘   ┌──────▼──────┐      ┌──────▼──────┐
+                        │  Document   │      │  Key-Value  │
+                        │   MongoDB   │      │  DynamoDB   │
+                        │  Firestore  │      │    Redis    │
+                        └─────────────┘      └─────────────┘
+
+  Caveat: this tree is a starting point, not a verdict. MongoDB has had
+  multi-document transactions since 4.0 and DynamoDB has TransactWriteItems,
+  so "needs ACID" no longer rules out every NoSQL store. Decide on your
+  actual query patterns and consistency needs, not the SQL/NoSQL label.
 ```
 
 ### Comparison Table
@@ -39,7 +44,7 @@ The choice isn't "SQL is old, NoSQL is new." It's about **what your data looks l
 |--------|------------------------|-------------------|----------------------------|------------------------|
 | **Schema** | Rigid, predefined | Flexible, JSON | Minimal (key→value) | Column families |
 | **ACID** | Full support | Limited (transactions since 4.0) | None (eventual) | Light-weight transactions |
-| **Scaling** | Vertical (read replicas) | Horizontal (sharding) | Horizontal (built-in) | Horizontal (ring topology) |
+| **Scaling** | Vertical, plus read replicas; sharding is manual | Horizontal (sharding) | Horizontal (built-in) | Horizontal (ring topology) |
 | **Query power** | JOINs, aggregations, subqueries | Embedding, limited joins | Get/Set only | Range scans on partition keys |
 | **Best for** | Financial, inventory, relationships | Content management, catalogs | Session data, caching, leaderboards | Time-series, IoT, event logs |
 | **Real systems** | Instagram (MySQL), Stripe | Uber (Schemaless), eBay | Twitter (Redis), Facebook (Memcached) | Netflix (Cassandra), Apple |
@@ -237,7 +242,15 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
   ✗ Complex replication logic
 ```
 
-**Used by**: CockroachDB, Spanner, MySQL multi-master
+**Used by**: MySQL Group Replication (multi-primary mode), CouchDB, BDR for
+PostgreSQL, and offline-first mobile sync (each device is effectively a leader).
+
+> **CockroachDB and Spanner are *not* multi-leader.** They shard data into
+> ranges and run a **Raft/Paxos group per range**, each with a single elected
+> leader. The cluster accepts writes in every region, but any given *row* has
+> exactly one leader at a time — which is precisely how they avoid the
+> write-conflict resolution that real multi-leader systems must handle. They
+> are best understood as **many single-leader groups**, not multi-leader.
 
 ### Leaderless (Dynamo-Style)
 
@@ -272,11 +285,16 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
 ### ACID (Traditional SQL)
 
 ```
-Atomicity    — All or nothing (transaction要么全成功，要么全回滚)
+Atomicity    — All or nothing (a transaction either fully commits
+               or fully rolls back — never halfway)
 Consistency  — Data always valid (constraints always enforced)
 Isolation    — Concurrent transactions don't interfere
 Durability   — Committed data survives crashes
 ```
+
+> **Note on the "C" in ACID:** it means *integrity constraints hold*, which is
+> not the same "consistency" as in CAP (where it means *all replicas agree*).
+> Two different words spelled the same way — a frequent source of confusion.
 
 **When ACID matters**: Banking, payments, inventory, booking systems
 

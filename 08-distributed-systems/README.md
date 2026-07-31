@@ -266,12 +266,15 @@ print(f"C: receives msg, ts={ts_c1}")  # C: receives msg, ts=3
 
 # Process C sends to B
 ts_msg2 = c.send()
+print(f"C: sends msg, ts={ts_msg2}")   # C: sends msg, ts=4
 
 # Process B receives
 ts_b1 = b.receive(ts_msg2)
-print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=4
+print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=5
 
-# Ordering: a1(1) < sends(2) < c_receives(3) < b_receives(4)
+# Causal chain: a1(1) → a_sends(2) → c_receives(3) → c_sends(4) → b_receives(5)
+# Each receive takes max(local, received) + 1, so the counter strictly
+# increases along the chain: 1 → 2 → 3 → 4 → 5.
 ```
 
 ```
@@ -279,16 +282,26 @@ print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=4
   Rule 2: When sending a message, include current counter
   Rule 3: When receiving a message, set counter = max(local, received) + 1
 
-  Process A:    Process B:    Process C:
-  │              │              │
-  │ a1 (1)      │              │
-  │ ─────────────│──msg────────▶│
-  │              │              │ c1 (2)
-  │              │ b1 (2)      │
-  │              │◀──msg────────│
-  │ a2 (3)      │              │
+  Process A          Process B          Process C
+  ────────────────────────────────────────────────────
+  a1 (1)
+  a_send (2) ─────────────────────────▶ c_recv (3)
+                                        c_send (4)
+                     b_recv (5) ◀───────
+  a2 (3)
 
-  Lamport ordering: a1 < b1 < c1 < a2 (but NOT total order — parallel events)
+  What Lamport clocks DO give you:
+    If x → y (x causally precedes y), then LC(x) < LC(y).
+    So a1(1) < a_send(2) < c_recv(3) < c_send(4) < b_recv(5).
+
+  What they DO NOT give you:
+    LC(x) < LC(y) does NOT imply x → y.
+    Here a2 and c_recv both have timestamp 3, and a2 is CONCURRENT with
+    everything on C — the equal timestamps tell you nothing about ordering.
+
+  This one-way implication is the whole limitation of Lamport clocks:
+  you can rule causality IN, never OUT. To detect concurrency you need
+  vector clocks (next section).
 ```
 
 ### Vector Clocks
@@ -535,14 +548,24 @@ print(f"After merge: {node_a.value()}")  # 11 (10-3) + (5-1) = 11
 ```
 
 ```
-  Two G-counters: one for increments, one for decrements
+  Two G-counters: one for increments, one for decrements.
+  Each node only ever writes its OWN slot — that is what makes max() safe.
 
-  Node A: {inc: {A: 5}, dec: {A: 2}} = net 3
-  Node B: {inc: {A: 3}, dec: {A: 1}} = net 2
+  Node A: {inc: {A: 5}, dec: {A: 2}}  → net 3
+  Node B: {inc: {B: 3}, dec: {B: 1}}  → net 2
 
-  Merge: max of each component in each counter
-  Total: (5+3) - (2+1) = 8 - 3 = 5
+  Merge: take max of each component, per counter
+    inc: {A: max(5,–)=5, B: max(–,3)=3}  → sum 8
+    dec: {A: max(2,–)=2, B: max(–,1)=1}  → sum 3
+    net = 8 - 3 = 5   ✓ (equals 3 + 2, as it must)
 ```
+
+> **Why the node keys must differ.** If both nodes wrote slot `A`, the merge
+> would take `max(5, 3) = 5`, not `5 + 3 = 8`, and Node B's three increments
+> would vanish. Summing works only because each replica owns exactly one slot;
+> `max` then means "the furthest this replica has ever counted." A worked
+> example that shows `(5+3)` while both slots are keyed `A` is quietly
+> contradicting its own merge rule.
 
 ### LWW-Register (Last-Writer-Wins)
 

@@ -19,7 +19,7 @@ By the end of this module, you will be able to:
 1. Design RESTful APIs using resource naming conventions, HTTP semantics, and status codes
 2. Choose between REST, gRPC, and GraphQL based on system requirements
 3. Implement API versioning and deprecation strategies that balance stability with evolution
-4. Structure consistent error responses following RFC 7807
+4. Structure consistent error responses following RFC 9457 (Problem Details)
 5. Apply rate limiting and throttling to protect backend services
 6. Analyze real-world API designs (Stripe) for patterns worth adopting
 
@@ -211,12 +211,27 @@ GET /orders?cursor=eyJpZCI6MTAwfQ==&limit=50
 GET /users?status=active&role=admin
 GET /orders?created_after=2025-01-01&total_gte=100
 
-# Sorting
+# Sorting — prefix convention: "-" descending, bare ascending
 GET /users?sort=-created_at,name
-GET /orders?sort=total desc,created_at asc
+GET /orders?sort=-total,created_at
 ```
 
-Use a consistent convention: `-field` for descending, `field` for ascending. Document supported filters explicitly.
+Use one convention: `-field` for descending, `field` for ascending. Document the
+supported filters and sortable fields explicitly.
+
+> **Avoid the `sort=total desc` form.** Spaces are not legal in a URL and must be
+> percent-encoded (`sort=total%20desc`), so the readable version only appears to
+> work — and it needs a second parser for the direction keyword. The `-field`
+> prefix has neither problem.
+
+**Two rules that prevent real outages:**
+
+- **Only allow sorting on indexed columns.** `?sort=-description` on a
+  10M-row table is a full scan an anonymous caller can trigger at will.
+  Keep an allowlist and return `400` for anything else.
+- **Always append a unique tiebreaker** (`sort=-created_at,id`). Two rows with
+  identical timestamps have no defined order, so a paginated scan can show one
+  row twice and skip another.
 
 ---
 
@@ -483,9 +498,11 @@ Link: <https://docs.myapp.com/v2-migration>; rel="deprecation"
 
 ## 5. Error Handling
 
-### RFC 7807 Problem Details
+### RFC 9457 Problem Details
 
-RFC 7807 defines a standard JSON error format:
+RFC 9457 defines a standard JSON error format. It obsoleted RFC 7807 in 2023 —
+the field names are unchanged, so existing 7807 payloads remain valid; cite 9457
+as the current reference.
 
 ```json
 {
@@ -815,7 +832,7 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 - **REST**: [RFC 7231 — HTTP/1.1 Semantics](https://tools.ietf.org/html/rfc7231), Roy Fielding's [dissertation](https://www.ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm)
 - **gRPC**: [grpc.io documentation](https://grpc.io/docs/), [Protocol Buffers Language Guide](https://developers.google.com/protocol-buffers/docs/proto3)
 - **GraphQL**: [graphql.org specification](https://graphql.org/learn/), [Apollo GraphQL docs](https://www.apollographql.com/docs/)
-- **RFC 7807**: [Problem Details for HTTP APIs](https://tools.ietf.org/html/rfc7807)
+- **RFC 9457**: [Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457) (obsoletes RFC 7807)
 - **Stripe API**: [stripe.com/docs/api](https://stripe.com/docs/api)
 - **Richardson Maturity Model**: Leonard Richardson's [presentation at QCon](https://martinfowler.com/articles/richardsonMaturityModel.html)
 

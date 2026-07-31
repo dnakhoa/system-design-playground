@@ -102,16 +102,43 @@ Example: 2 nines components in parallel = 1 - (1-0.99)^2 = 99.99% (MORE availabl
 
 ### Durability
 
-Data survives hardware failures. Measured by **Mean Time Between Data Loss (MTBDL)**:
+Data survives hardware failures. The metric is **Mean Time To Data Loss
+(MTTDL)** — how long until you lose a piece of data you cannot recover.
+
+With N-way replication you only lose data if **all N copies fail before any of
+them is rebuilt**. So the two levers are the failure rate and the *repair* time,
+and replication helps super-linearly — not linearly.
 
 ```
-MTBDL = MTBF × number_of_replicas
+Step 1: How often does SOME drive in the fleet fail?
 
-Where MTBF = Mean Time Between Failures
+  MTTF_fleet = MTTF_drive / drive_count
+             = 1,000,000 h / 1,000 drives
+             = 1,000 h  (≈ one failure every 6 weeks)
 
-Example: 1000 drives, each with 1M hour MTBF, 3 replicas
-MTBDL = 1,000,000 × 3 / 1000 = 3,000 hours between data loss events
+Step 2: For 3-way replication, data is lost only if two MORE copies die
+        inside the repair window (MTTR). Roughly:
+
+  MTTDL ≈ MTTF_drive³ / (drive_count × (N-1)! × MTTR² × ... )
+
+  With MTTF = 1e6 h, 1,000 drives, MTTR = 10 h:
+  MTTDL ≈ (1e6)³ / (1000 × 2 × 10²)  ≈ 5e12 h  (astronomically safe)
 ```
+
+**Two takeaways that matter more than the formula:**
+
+| Lever | Effect |
+|-------|--------|
+| **More replicas** | Each extra copy multiplies MTTDL by roughly `MTTF/MTTR` — a huge factor |
+| **Faster repair** | Halving MTTR raises 3-way MTTDL ~4× (it enters squared) |
+
+**The trap:** the naive formula `MTTDL = MTTF × replicas` is wrong in both
+magnitude and shape. It suggests replication helps *linearly* and ignores
+repair time entirely — yet repair time is the variable operators actually
+control. It also assumes failures are independent, which they are not: a bad
+batch, a shared power rail, or a rack switch takes out correlated copies.
+This is why S3-class systems quote 11 nines *and* spread replicas across
+availability zones.
 
 ---
 
@@ -151,30 +178,51 @@ Read QPS (assume 100:1 read-to-write ratio):
 **Step 2: Storage Estimation**
 
 ```
-URL length:  ~7 bytes (base62 encoded)
-Metadata:    ~100 bytes (user, timestamp, click count)
-Total/URL:   ~107 bytes
+short_code:  7 bytes   (base62)
+long_url:    ~500 bytes (the actual URL — the bulk of every row)
+metadata:    ~100 bytes (user_id, timestamps, click count)
+Total/URL:   ~607 bytes
 
-Per month:   100M × 107 bytes ≈ 10.7 GB
-Per year:    ~128 GB
+Per month:   100M × 607 bytes ≈ 60.7 GB
+Per year:    ≈ 728 GB
+5 years:     ≈ 3.6 TB  → still one well-provisioned server
 ```
+
+> **The most common estimation mistake** is budgeting for the short code and
+> forgetting the long URL. The short code is 7 bytes; the URL you are storing
+> it *for* is ~500. Get that backwards and you'll under-size storage by ~6×.
 
 **Step 3: Bandwidth Estimation**
 
 ```
-Read bandwidth: 3,800 QPS × 107 bytes ≈ 407 KB/s ≈ 3.2 Mbps
+Read bandwidth:  3,800 QPS × 607 bytes ≈ 2.3 MB/s ≈ 18 Mbps
+Write bandwidth:    38 QPS × 607 bytes ≈  23 KB/s
 
-Well within a single server's capacity.
+Well within a single server's capacity — this system is not
+bandwidth-constrained, it is latency- and lookup-constrained.
 ```
 
 **Step 4: Cache Estimation (for hot URLs)**
 
+Cache sizing is about the **working set of distinct keys**, not the request
+count. A URL fetched a million times still occupies one cache entry.
+
 ```
-20% of URLs get 80% of traffic (Pareto principle)
-Hot URLs per day: 20% × 3,800 QPS × 86,400 sec ≈ 66M reads
-Cache 20% of daily traffic in memory:
-  66M × 107 bytes ≈ 7 GB (fits in a single Redis instance)
+Pareto: 20% of URLs receive ~80% of traffic.
+
+Distinct URLs in the hot set (assume ~1 month of links stay hot):
+  20% × 100M = 20M distinct URLs
+
+Memory needed:
+  20M × 607 bytes ≈ 12 GB  → one Redis node, or two for headroom
+
+Expected hit ratio ≈ 80%, which cuts DB reads from 3,800 to ~760 QPS.
 ```
+
+> **Why not "20% of daily reads"?** Multiplying 66M *reads* by the row size
+> counts the same hot URL thousands of times and inflates the estimate. Size
+> caches by **distinct keys × entry size**, then use the request distribution
+> to predict the *hit ratio* — two different questions.
 
 ---
 
@@ -188,20 +236,23 @@ This framework works for **any** system design problem, from URL shorteners to L
 │ Clarify  │   │ Estimate │   │ Define   │   │ Design   │
 │ Require- │──▶│ Capacity │──▶│ API      │──▶│ Data     │
 │ ments    │   │ (QPS,    │   │ (REST    │   │ Model    │
-│ (5 min)  │   │  Storage)│   │  endpoints)│  │ (tables, │
-│          │   │ (3 min)  │   │ (3 min)  │   │  schema) │
-└──────────┘   └──────────┘   └──────────┘   └──────────┘
-                                                        │
- Step 9          Step 8          Step 7          Step 6 │ Step 5
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌───────▼────┐
+│          │   │  Storage)│   │ endpoints)│  │ (tables, │
+│ 2-3 min  │   │ 3-5 min  │   │ 2-3 min  │   │  schema) │
+│          │   │          │   │          │   │ 3-5 min  │
+└──────────┘   └──────────┘   └──────────┘   └────┬─────┘
+                                                   │
+ Step 9          Step 8          Step 7          Step 6│ Step 5
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────▼───┐
 │ Handle   │   │ Address  │   │ Discuss  │   │ Sketch     │
-│ Follow-  │◀──│ Bottlen- │◀──│ Trade-   │◀──│ High-Level │
-│ ups      │   │ ecks     │   │ offs     │   │ Design     │
-│ (3 min)  │   │ (3 min)  │   │ (2 min)  │   │ (5 min)    │
+│ Follow-  │◀──│ Bottle-  │◀──│ Trade-   │◀──│ High-Level │
+│ ups      │   │ necks    │   │ offs     │   │ Design     │
+│ 2-3 min  │   │ 3 min    │   │ 2 min    │   │ 5 min      │
 └──────────┘   └──────────┘   └──────────┘   └────────────┘
-                                              Deep dive 2-3
-                                              components
-                                              (10-15 min)
+                                    ▲
+                          Step 6: deep dive on 2-3
+                          components (10-15 min)
+
+  Budget check: 3+5+3+5+5+15+2+3+3 ≈ 44 min — one 45-minute interview.
 ```
 
 ### Step 1: Clarify Requirements (2-3 min)
@@ -307,18 +358,23 @@ Be ready for:
 In a distributed system, you can only guarantee **two** of three properties:
 
 ```
-         Consistency (C)
-              △
-             / \
-            /   \
-           / CP  \
-          /       \
-         /    PA   \
-        /     ▲     \
-       /      │      \
-      /       │       \
-     ▼────────┴────────▼
-Availability (A)    Partition Tolerance (P)
+                    Consistency (C)
+                         ▲
+                        / \
+                       /   \
+          pick C + P  /     \  pick C + A
+            = CP     /       \    = CA
+       (ZooKeeper)  /         \  (single-node
+                   /           \   Postgres)
+                  /             \
+                 ▼───────────────▼
+   Availability (A)               Partition tolerance (P)
+                  \             /
+                   pick A + P
+                     = AP
+                  (Cassandra, DNS)
+
+  Each EDGE is a viable system; the CENTER (all three) is unreachable.
 ```
 
 | System Type | Guarantee | Real Example |
@@ -341,28 +397,38 @@ Availability (A)    Partition Tolerance (P)
 Not all "consistent" systems are the same. The spectrum from strongest to weakest:
 
 ```
-Strong ◄──────────────────────────────────────────► Weaker
-Consistency                                        Consistency
+Strongest ◄──────────────────────────────────────────────► Weakest
 
-  │         │              │            │              │
-  ▼         ▼              ▼            ▼              ▼
-Linear-  Strict        Causal      Read-your-    Eventual
-izable   Serializ-     Consistency  Writes       Consistency
-         able
-  │         │              │            │              │
-All ops   Equivalent    Partial      User sees     All replicas
-appear    to single-    ordering     their own     converge
-atomic    threaded      preserved    writes        eventually
-          execution
+     ▼            ▼            ▼            ▼            ▼
+  Strict      Lineariz-      Causal     Read-your-    Eventual
+Serializable   able        Consistency    Writes    Consistency
+
+     │            │            │            │            │
+  Multi-object  Single-object  Cause-      You see    Replicas
+  txns, in      ops appear    effect      your own    converge
+  real-time     atomic and    order       writes      eventually
+  order         globally      preserved
+                ordered
+
+  Strict serializability = serializability + real-time order.
+  It is linearizability generalised from single objects to transactions,
+  so it is STRICTLY STRONGER than linearizability — not weaker.
 ```
 
-| Model | Guarantee | Use Case |
-|-------|-----------|----------|
-| **Linearizable** | All ops appear atomic, globally ordered | Financial transactions, leader election |
-| **Strict Serializable** | Linearizable + transaction isolation | Banking, inventory management |
-| **Causal** | Preserves cause-effect ordering | Collaborative editing, social feeds |
-| **Read-your-writes** | User sees their own writes immediately | User profile updates |
-| **Eventual** | All replicas converge eventually | DNS, social media likes, caching |
+| Model | Guarantee | Scope | Use Case |
+|-------|-----------|-------|----------|
+| **Strict Serializable** | Serializable **and** respects real-time order | Multi-object transactions | Banking, inventory, Spanner/CockroachDB |
+| **Linearizable** | Every op appears atomic at a single point in time | One object at a time | Leader election, distributed locks, etcd |
+| **Serializable** | Some serial order exists — but it need not match wall clock | Multi-object transactions | Classic SQL `SERIALIZABLE` isolation |
+| **Causal** | Preserves cause-effect ordering; concurrent ops may differ per replica | Related operations | Collaborative editing, social feeds |
+| **Read-your-writes** | A session observes its own prior writes | One session | Profile updates, "post then view" |
+| **Eventual** | Replicas converge if writes stop | Whole system | DNS, like counts, CDN caches |
+
+> **The distinction people get wrong:** serializability is about *some* valid
+> serial order; linearizability is about the *real-time* order of single-object
+> operations. Neither implies the other. Strict serializability is what you get
+> when you demand both — which is why it is the most expensive and why systems
+> like Spanner need synchronised clocks (TrueTime) to offer it.
 
 ---
 
@@ -381,9 +447,10 @@ Let's walk through the 9-step framework for this classic problem.
 ### Step 2: Estimate Capacity
 
 ```
-Write QPS:  100M / 2.6M seconds ≈ 38 writes/sec
-Read QPS:   38 × 100 = 3,800 reads/sec
-Storage:    100M × 100 bytes = 10 GB/month = 128 GB/year
+Write QPS:  100M / 2.6M seconds ≈ 38 writes/sec   (peak ≈ 114)
+Read QPS:   38 × 100 = 3,800 reads/sec            (peak ≈ 11,400)
+Storage:    100M × 607 bytes ≈ 60.7 GB/month ≈ 728 GB/year
+Cache:      20M distinct hot URLs × 607 bytes ≈ 12 GB
 ```
 
 ### Step 3: Define API
@@ -454,10 +521,15 @@ urls table:
 
 | Decision | Choice | Trade-off |
 |----------|--------|-----------|
-| 301 vs 302 redirect | 302 | 302 gives analytics but adds a hop |
+| 301 vs 302 redirect | 302 | 301 is cached by browsers, so repeat clicks never reach you — cheap, but you lose analytics and can't revoke a link. 302 keeps every click observable at the cost of serving all of them. |
 | Cache expiration | 24h TTL | Stale data possible but fast |
 | Database choice | MySQL + Redis | Strong consistency + fast reads |
 | Sharding | Hash on short_code | Even distribution, range queries impossible |
+
+> **Why "302 adds a hop" is wrong:** both 301 and 302 are exactly one round trip
+> on a cold client. The difference is *caching*. A browser that cached a 301 skips
+> your server entirely on subsequent clicks — which is why 301 is faster for users
+> and why it makes click analytics and link revocation impossible.
 
 ### Step 8: Scalability Bottlenecks
 

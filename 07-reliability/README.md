@@ -281,14 +281,34 @@ def retry_with_jitter(
 # → No thundering herd
 ```
 
-```
-  Wait time = min(base × 2^attempt + random(0, 100ms), max_wait)
+The code above implements **full jitter** — the AWS-recommended default:
 
-  Attempt 1: Wait 100-200ms  (random)
-  Attempt 2: Wait 200-300ms
-  Attempt 3: Wait 400-500ms
-  Attempt 4: Wait 800-900ms
 ```
+  cap   = min(base × 2^attempt, max_delay)
+  sleep = random(0, cap)          ← the whole range, not a small nudge
+
+  base = 100ms:
+  Attempt 1: cap 100ms  → sleep 0-100ms
+  Attempt 2: cap 200ms  → sleep 0-200ms
+  Attempt 3: cap 400ms  → sleep 0-400ms
+  Attempt 4: cap 800ms  → sleep 0-800ms
+```
+
+### Jitter Variants
+
+Which one you pick changes how well retries de-correlate:
+
+| Variant | Formula | Notes |
+|---------|---------|-------|
+| **None** | `cap` | Every client retries in lockstep — the thundering herd you were trying to avoid |
+| **Full** | `random(0, cap)` | Best spread; AWS default. Some retries fire almost immediately |
+| **Equal** | `cap/2 + random(0, cap/2)` | Guarantees a minimum wait, still spreads well |
+| **Decorrelated** | `min(max, random(base, prev × 3))` | Lowest total completion time in AWS's simulations |
+
+> **Watch for this mismatch:** a diagram that shows "wait 100-200ms, then
+> 200-300ms" is describing *equal* jitter, but `random.uniform(0, delay)` in
+> code is *full* jitter — the ranges start at 0. If your docs and code disagree
+> here, the docs are usually the ones that are wrong.
 
 ### Retry Decision Matrix
 
@@ -350,25 +370,39 @@ def service_a_handler(request):
     except requests.Timeout:
         return {"error": "Service B timeout"}
 
-# Key principle: timeouts decrease downstream
+# Key principle: timeouts decrease downstream, so the innermost hop
+# always fails first and the error propagates up without anyone waiting
+# out their full budget.
 # Client(30s) → Gateway(25s) → ServiceA(20s) → ServiceB(15s) → DB(10s)
 ```
 
 ```
-  Client ──30s timeout──▶ API Gateway ──25s timeout──▶ Service A
-                                                       │
-                                                  ──20s timeout──▶ Service B
-                                                                      │
-                                                                 ──15s timeout──▶ Database
+  Client ──30s──▶ Gateway ──25s──▶ Service A ──20s──▶ Service B ──10s──▶ DB
+                                                       (matches TIMEOUT_CONFIG above)
 
-  If DB takes 14s: Service B waits 14s + some processing
-  Total: Client sees 14s + 2s + 1s + processing ≈ 18s (under 30s) ✓
+  Happy path — DB answers in 8s:
+    Service B returns at ~8s, A at ~9s, Gateway at ~10s.
+    Client sees ≈10s, well inside its 30s budget. ✓
 
-  If DB takes 16s: Service B times out at 15s
-  Service A times out at 20s (after waiting for Service B)
-  Client times out at 30s (after waiting for Service A)
+  Sad path — DB hangs:
+    Service B gives up at 10s (its DB timeout) and returns an error.
+    Service A sees that error at ~10s — it does NOT wait out its own 20s.
+    Client gets a response at ~11s instead of 30s.
 
-  Total: 30s timeout, but 3 services wasted resources
+  The point: because each timeout is SHORTER than its caller's, the innermost
+  hop fails first and the error propagates up immediately. Nobody waits for
+  the full 30s, and no service sits holding a connection it can't use.
+```
+
+**What goes wrong if you invert the order** — say the DB timeout is 30s while
+the client's is 10s:
+
+```
+  Client gives up at 10s and disconnects.
+  Gateway, Service A, Service B, and the DB all keep working for 20 more
+  seconds on a response nobody will read — burning connections, threads,
+  and DB time. Under load this is how a slow dependency turns into an
+  outage: every abandoned request still costs you full capacity.
 ```
 
 ### Timeout Best Practices
@@ -571,12 +605,25 @@ incidents = [10, 15]  # Two incidents: 10 min + 15 min
 remaining = budget.remaining_minutes(incidents)
 status = budget.status(incidents)
 
-print(f"Remaining: {remaining:.1f} minutes")
+print(f"Remaining: {remaining:.1f} minutes ({budget.remaining_pct(incidents):.0f}%)")
 print(f"Status: {status}")
 # Output:
 # Monthly budget: 43.2 minutes
-# Remaining: 18.2 minutes
-# Status: RELIABILITY_FOCUS
+# Remaining: 18.2 minutes (42%)
+# Status: EXTRA_REVIEW
+```
+
+Check the arithmetic yourself — this is the kind of thing to get right before
+you wire it to a deploy gate:
+
+```
+budget  = (1 - 0.999) × 30 days × 24 h × 60 min = 43.2 min
+spent   = 10 + 15                               = 25.0 min
+left    = 43.2 - 25.0                           = 18.2 min
+percent = 18.2 / 43.2                           = 42%
+
+42% is in the 20-50% band → EXTRA_REVIEW (not RELIABILITY_FOCUS,
+which starts below 20%).
 ```
 
 ### Error Budget Policy

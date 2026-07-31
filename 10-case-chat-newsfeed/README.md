@@ -154,7 +154,7 @@ The connection layer is the most critical component. Each user maintains a persi
 ### Read Receipts
 
 ```
-  Two states: Sent ✓, Delivered ✓✓, Read ✓✓ (blue)
+  Three states: Sent ✓, Delivered ✓✓, Read ✓✓ (blue)
 
   Alice sends message to Bob:
   1. Message sent: status = "sent"
@@ -276,28 +276,76 @@ When a user posts, their content must appear in all followers' feeds.
 
   ZREVRANGE feed:alice 0 19  # Latest 20 posts
 
-  Cleanup: Remove posts older than 7 days
-  ZREMRANGEBYRANK feed:alice 0 -1  (with time-based filtering)
+  Cleanup — two correct options:
+
+  (a) By age: drop everything scored before the cutoff timestamp
+      ZREMRANGEBYSCORE feed:alice -inf 1689395200
+
+  (b) By size: keep only the newest 1000 entries
+      ZREMRANGEBYRANK feed:alice 0 -1001
+      (ranks are low→high score, so 0..-1001 is everything
+       EXCEPT the top 1000)
 ```
+
+> **Do not write `ZREMRANGEBYRANK feed:alice 0 -1`.** That range covers the
+> entire sorted set — it is equivalent to `DEL` and wipes the whole feed.
+> `-1` is the *last* element, not "leave one behind."
+
+Option (b) is usually the better default: it bounds memory per user regardless
+of how active the people they follow are. Age-based trimming leaves a heavy
+user's feed unbounded and a quiet user's feed empty.
 
 ### Ranking Algorithm
 
 ```
-  Simple engagement-based ranking:
+  Engagement, weighted by interaction cost:
 
-  score = (likes × 1.0) + (comments × 2.0) + (shares × 3.0) + recency_bonus
+  engagement = (likes × 1.0) + (comments × 2.0) + (shares × 3.0)
 
-  recency_bonus = max(0, 1.0 - (hours_since_post / 24))
-
-  Example:
-  Post A: 100 likes, 20 comments, 10 shares, posted 2 hours ago
-  score = 100×1 + 20×2 + 10×3 + (1 - 2/24) = 100 + 40 + 30 + 0.92 = 170.92
-
-  Post B: 500 likes, 5 comments, 0 shares, posted 20 hours ago
-  score = 500×1 + 5×2 + 0×3 + (1 - 20/24) = 500 + 10 + 0 + 0.17 = 510.17
-
-  Post B ranks higher (more engagement despite being older)
+  Post A: 100 likes, 20 comments, 10 shares → 100 + 40 + 30 = 170
+  Post B: 500 likes,  5 comments,  0 shares → 500 + 10 +  0 = 510
 ```
+
+Now apply time decay. **Recency must be a multiplier or a divisor, never an
+additive bonus** — a term worth at most 1.0 cannot influence scores in the
+hundreds:
+
+```
+  ┌─ The broken version ────────────────────────────────────┐
+  │  score = engagement + (1 - hours/24)                     │
+  │                                                          │
+  │  Post A (2h):  170 + 0.92 = 170.92                      │
+  │  Post B (20h): 510 + 0.17 = 510.17                      │
+  │                                                          │
+  │  B wins by 339. The recency term contributed 0.75 of     │
+  │  that. Deleting it entirely changes nothing — so it is   │
+  │  not actually ranking by recency at all.                 │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ Gravity decay (Hacker News style) ─────────────────────┐
+  │  score = engagement / (hours + 2)^1.8                    │
+  │                                                          │
+  │  Post A (2h):  170 / 4^1.8   = 170 / 12.1 = 14.0        │
+  │  Post B (20h): 510 / 22^1.8  = 510 / 274  =  1.9        │
+  │                                                          │
+  │  Post A wins. A fresh post with solid engagement beats   │
+  │  an older post with 3× the engagement — which is the     │
+  │  behaviour a feed actually wants.                        │
+  └──────────────────────────────────────────────────────────┘
+```
+
+**Tuning the exponent** controls how aggressively the feed churns:
+
+| Gravity | Half-life | Feels like |
+|---------|-----------|------------|
+| 1.2 | ~14 h | Slow — good content lingers for a day |
+| 1.8 | ~5 h | Balanced (HN's default) |
+| 2.5 | ~2 h | Fast churn — breaking news, live events |
+
+An alternative used widely in practice is Reddit's **logarithmic** approach:
+`score = log10(engagement) + timestamp/45000`. Because engagement is
+compressed logarithmically, the first 10 upvotes move a post as much as the
+next 100 — so age reliably overtakes raw volume.
 
 ---
 

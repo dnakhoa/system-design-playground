@@ -270,17 +270,18 @@ print(reconstructed.balance)  # 900
 ```
   Traditional (current state):
   ┌──────────────────────────┐
-  │  Account Balance: $500    │  ← Only the latest state
-  └──────────────────────────┘
+  │  Account Balance: $900    │  ← Only the latest state.
+  └──────────────────────────┘     How did it get here? No idea.
 
   Event Sourcing (event log):
   ┌──────────────────────────┐
   │  1. AccountCreated: $0   │
-  │  2. Deposited: +$1000    │
-  │  3. Withdrawn: -$300     │
-  │  4. Deposited: -$200     │
-  │  5. Balance = $500       │  ← Derived from events
-  └──────────────────────────┘
+  │  2. Deposited:   +$1000  │  →  running balance $1000
+  │  3. Withdrawn:    -$300  │  →  running balance  $700
+  │  4. Deposited:    +$200  │  →  running balance  $900
+  ├──────────────────────────┤
+  │  Balance = $900          │  ← Derived by replaying events
+  └──────────────────────────┘     (matches the code above)
 
   ✓ Complete audit trail
   ✓ Can reconstruct state at any point in time
