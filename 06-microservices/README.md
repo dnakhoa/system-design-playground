@@ -296,7 +296,7 @@ from dataclasses import dataclass, field
 from typing import List, Callable
 from enum import Enum
 
-class SagaStep(Enum):
+class StepStatus(Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -307,7 +307,7 @@ class SagaStep:
     name: str
     action: Callable
     compensation: Callable
-    status: SagaStep = SagaStep.PENDING
+    status: StepStatus = StepStatus.PENDING
 
 class OrderSagaOrchestrator:
     """Centralized orchestrator for the order saga."""
@@ -325,18 +325,18 @@ class OrderSagaOrchestrator:
             try:
                 print(f"Executing: {step.name}")
                 step.action(order_data)
-                step.status = SagaStep.COMPLETED
+                step.status = StepStatus.COMPLETED
                 completed_steps.append(step)
             except Exception as e:
                 print(f"Failed: {step.name} — {e}")
-                step.status = SagaStep.FAILED
+                step.status = StepStatus.FAILED
                 
                 # Compensate in reverse order
                 for completed in reversed(completed_steps):
                     try:
                         print(f"Compensating: {completed.name}")
                         completed.compensation(order_data)
-                        completed.status = SagaStep.COMPENSATED
+                        completed.status = StepStatus.COMPENSATED
                     except Exception as comp_error:
                         print(f"Compensation failed: {completed.name} — {comp_error}")
                 

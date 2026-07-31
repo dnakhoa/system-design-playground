@@ -811,15 +811,15 @@ class SecureFileService:
 
 - **Module 04: Load Balancing** — Security considerations for distributed load balancers (SSL termination, health check security)
 - **Module 07: Reliability** — Security as a component of system reliability (DDoS mitigation, failover strategies)
-- **Module 18: Production AI** — Securing ML pipelines, model access control, and data privacy in production AI systems
+- **[Module 18: Production AI](../18-production-ai-system/README.md)** — Securing ML pipelines, model access control, and data privacy in production AI systems
 
 ---
 
 ## Navigation
 
-**Previous:** [Module 12: Case Studies](../12-case-payment-ecommerce/README.md)
+**Previous:** [Module 12: Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md)
 
-**Next:** [Module 14: RAG at Scale](../14-rag-at-scale/README.md)
+**Next:** [Module 14: API Design](../14-api-design/README.md)
 
 ---
 

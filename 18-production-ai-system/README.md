@@ -1,4 +1,4 @@
-# Module 16: Production AI System Architecture
+# Module 18: Production AI System Architecture
 
 > **Putting it all together — the full AI-native system.** This module is the capstone: it shows how inference serving, RAG, agents, guardrails, and observability compose into a production AI system.
 
@@ -10,7 +10,7 @@
 - Design observability and monitoring for AI systems
 - Scale from prototype to 100M users
 
-**This module synthesizes**: Module 13 (inference serving) + Module 14 (RAG) + Module 15 (agents) + Module 07 (reliability) + Module 03 (caching).
+**This module synthesizes**: Module 15 (inference serving) + Module 16 (RAG) + Module 17 (agents) + Module 07 (reliability) + Module 03 (caching).
 
 ---
 
@@ -58,7 +58,7 @@
 │                         │                               │
 │                         ▼                               │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  RAG Pipeline (Module 14)                         │   │
+│  │  RAG Pipeline (Module 16)                         │   │
 │  │  - Query → Retrieve → Rerank → Augment           │   │
 │  └─────────────────────────────────────────────────┘   │
 │                         │                               │
@@ -550,7 +550,6 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 ---
 
-**Previous**: [Agent System Architecture](../15-agent-architecture/README.md)
+**Previous**: [Agent System Architecture](../17-agent-architecture/README.md)
 **Next**: [Course Home](../README.md)
 
-> **Note**: This module was originally numbered 16. It is now Module 18 in the updated curriculum.

@@ -560,4 +560,5 @@ Never say "I'd use a relational database." Say:
 
 ---
 
-**Next Module**: [Databases and Storage](../02-databases-storage/README.md) — choosing the right data layer for your system.
+**Previous**: [Course Home](../README.md)
+**Next**: [Databases and Storage](../02-databases-storage/README.md) — choosing the right data layer for your system.

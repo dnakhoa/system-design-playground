@@ -448,7 +448,7 @@ class GCounter:
     
     def increment(self, amount: int = 1):
         """Increment this node's counter."""
-        self counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
+        self.counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
     
     def value(self) -> int:
         """Get total count across all nodes."""

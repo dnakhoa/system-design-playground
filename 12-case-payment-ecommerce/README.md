@@ -298,43 +298,72 @@ Flash sales create massive traffic spikes (100x normal).
 ### Idempotency Implementation
 
 ```python
+import json
+
 import redis
-import uuid
 
 class PaymentService:
     def __init__(self):
         self.redis = redis.Redis()
         self.db = Database()
-    
-    def process_payment(self, order_id, amount, idempotency_key=None):
-        # Generate idempotency key if not provided
+
+    def process_payment(self, order_id, amount, idempotency_key):
+        """The idempotency key is REQUIRED and must come from the client.
+
+        Generating one server-side would defeat the whole mechanism: a retry
+        would arrive with a fresh key, miss the dedup check, and charge the
+        customer twice — exactly the failure idempotency exists to prevent.
+        The key must be stable across retries of the same logical intent, so
+        only the caller can mint it.
+        """
         if not idempotency_key:
-            idempotency_key = f"{order_id}:{uuid.uuid4()}"
-        
-        # Check if already processed
-        cached = self.redis.get(f"idempotency:{idempotency_key}")
-        if cached:
-            return json.loads(cached)  # Return cached result
-        
-        # Process payment
+            raise ValueError("idempotency_key is required for payment writes")
+
+        dedup_key = f"idempotency:{idempotency_key}"
+
+        # Claim the key BEFORE charging. SET NX is atomic, so exactly one
+        # concurrent request wins the claim; the rest see the in-flight
+        # marker. Checking-then-setting would let two parallel retries both
+        # pass the check and both charge.
+        claimed = self.redis.set(dedup_key, json.dumps({"status": "in_flight"}),
+                                 nx=True, ex=86400)
+
+        if not claimed:
+            existing = json.loads(self.redis.get(dedup_key))
+            if existing["status"] == "in_flight":
+                # A concurrent attempt is mid-charge. Tell the client to retry
+                # rather than risking a second charge.
+                raise ConcurrentRequestError("payment already in flight", retry_after=2)
+            return existing["result"]  # Replay the recorded response
+
         try:
-            result = self.payment_gateway.charge(order_id, amount)
-            
-            # Store result with TTL (24 hours)
-            self.redis.setex(
-                f"idempotency:{idempotency_key}",
-                86400,  # 24 hours
-                json.dumps(result)
+            result = self.payment_gateway.charge(
+                order_id, amount,
+                # Pass the key downstream too — the gateway dedups as well.
+                idempotency_key=idempotency_key,
             )
-            
-            # Store in DB for durability
-            self.db.save_payment(order_id, result)
-            
+
+            # Persist durably FIRST, then record the response for replay.
+            # Redis is a cache; the ledger is the source of truth.
+            self.db.save_payment(order_id, idempotency_key, result)
+            self.redis.setex(dedup_key, 86400,
+                             json.dumps({"status": "done", "result": result}))
             return result
-        except Exception as e:
-            # Don't cache failures (allow retry)
+
+        except Exception:
+            # Release the claim so a legitimate retry can proceed. Leaving the
+            # marker in place would block the customer for the full 24h TTL.
+            self.redis.delete(dedup_key)
             raise
 ```
+
+**The subtle failure mode:** if the gateway charge *succeeds* but the process
+dies before `save_payment`, the `except` branch never runs and the claim
+survives with `status: "in_flight"` until its TTL lapses — the customer is
+charged with no local record. This is exactly the gap that daily
+**reconciliation** (above) exists to close: compare the gateway's settled
+transactions against your ledger and repair the difference. No amount of
+in-process cleverness removes the need for it.
 
 ### Fraud Detection
 
@@ -512,4 +541,4 @@ Design a daily reconciliation system:
 ---
 
 **Previous**: [Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
-**Next**: [LLM Inference Serving Architecture](../13-llm-inference-serving/README.md)
+**Next**: [Security](../13-security/README.md)

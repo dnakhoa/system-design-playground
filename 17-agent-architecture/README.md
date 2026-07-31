@@ -1,4 +1,4 @@
-# Module 15: Agent System Architecture
+# Module 17: Agent System Architecture
 
 > **Designing autonomous LLM agent systems.** An agent is not just an LLM with tools — it's a system with planning, execution, memory, and guardrails. The harness (not the model) is the design surface.
 
@@ -388,7 +388,6 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 
 ---
 
-**Previous**: [RAG System Architecture at Scale](../14-rag-at-scale/README.md)
-**Next**: [Production AI System Architecture](../16-production-ai-system/README.md)
+**Previous**: [RAG System Architecture at Scale](../16-rag-at-scale/README.md)
+**Next**: [Production AI System Architecture](../18-production-ai-system/README.md)
 
-> **Note**: This module was originally numbered 15. It is now Module 17 in the updated curriculum.

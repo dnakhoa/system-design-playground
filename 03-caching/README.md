@@ -367,14 +367,20 @@ def get_user(user_id: int) -> dict:
 def update_user(user_id: int, name: str):
     db.execute("UPDATE users SET name = %s WHERE id = %s", name, user_id)
     
-    # Bump version (old key expires naturally)
-    r.incr(f"user:{user_id}:version")
+    # Bump version. INCR returns the NEW version, so the key we want to
+    # evict is new_version - 1. Reading the counter again here would give
+    # us the new version and delete the key we are about to populate.
+    new_version = r.incr(f"user:{user_id}:version")
     
-    # Optional: explicitly delete old version
-    old_version = r.get(f"user:{user_id}:version")
-    if old_version:
-        r.delete(f"user:{user_id}:v{old_version}")
+    # Optional: reclaim the superseded key immediately instead of
+    # waiting for its TTL to lapse.
+    if new_version > 1:
+        r.delete(f"user:{user_id}:v{new_version - 1}")
 ```
+
+> **Why not read the version back?** `INCR` is the only race-free way to learn
+> the version you just created. A separate `GET` can observe another writer's
+> increment, and subtracting from *that* value evicts a live key.
 
 | Pros | Cons |
 |------|------|
@@ -469,35 +475,76 @@ def get_with_early_expiration(key: str, ttl: int = 3600) -> str:
 ```python
 import threading
 
-# Global lock map for request coalescing
-_inflight = {}
+# Global map of in-flight fetches, one Future per key.
+_inflight: dict[str, "Future"] = {}
 _lock = threading.Lock()
+
+class Future:
+    """Minimal result-carrying handle. concurrent.futures.Future works too."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._value = None
+        self._error = None
+
+    def set_result(self, value):
+        self._value = value
+        self._event.set()
+
+    def set_error(self, error):
+        self._error = error
+        self._event.set()
+
+    def result(self, timeout: float = 5.0):
+        if not self._event.wait(timeout):
+            raise TimeoutError("leader did not publish a result in time")
+        if self._error:
+            raise self._error
+        return self._value
 
 def get_with_coalescing(key: str, ttl: int = 3600) -> str:
     """Deduplicate concurrent requests for the same key."""
     value = r.get(key)
     if value:
         return value
-    
+
     with _lock:
-        if key in _inflight:
-            # Another request is already fetching: wait for it
-            return _inflight[key].wait()
-        
-        # We're the first: create an event for others to wait on
-        event = threading.Event()
-        _inflight[key] = event
-    
+        existing = _inflight.get(key)
+        if existing is not None:
+            leader = False
+            future = existing
+        else:
+            # We're the first: publish a Future for others to wait on.
+            leader = True
+            future = Future()
+            _inflight[key] = future
+
+    if not leader:
+        # Followers block on the Future and receive the leader's VALUE.
+        return future.result()
+
     try:
-        # Fetch from DB (only ONE request does this)
+        # Fetch from DB (only ONE request does this).
         data = db.query(key)
         r.setex(key, ttl, data)
-        event.set()  # Wake up all waiting requests
+        future.set_result(data)
         return data
+    except Exception as exc:
+        # Never leave followers blocked forever on a failed fetch.
+        future.set_error(exc)
+        raise
     finally:
+        # Remove the entry only AFTER the result is published, so a late
+        # follower either sees the Future or re-reads the now-warm cache.
         with _lock:
-            del _inflight[key]
+            _inflight.pop(key, None)
 ```
+
+> **The bug this avoids:** `threading.Event.wait()` returns a **bool**, not the
+> fetched value. A coalescing implementation that does `return event.wait()`
+> hands every follower `True` instead of the data. The waiter needs a handle
+> that carries a result — and the leader must publish an error on the failure
+> path, or followers block until their timeout.
 
 ---
 

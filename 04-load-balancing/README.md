@@ -450,6 +450,8 @@ limiter = SlidingWindow(limit=100, window_seconds=60)
 ### Distributed Rate Limiting
 
 ```python
+import time
+
 import redis
 
 class DistributedRateLimiter:
@@ -461,29 +463,35 @@ class DistributedRateLimiter:
         self.window = window
     
     def allow(self, client_id: str) -> bool:
-        key = f"rate:{client_id}"
-        
-        # Atomic: increment and set expiry in one transaction
+        # Bucket the key by window so each window gets a fresh counter and
+        # its own independent expiry.
+        window_id = int(time.time()) // self.window
+        key = f"rate:{client_id}:{window_id}"
+
         pipe = self.r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, self.window)
-        results = pipe.execute()
-        
-        count = results[0]
+        # NX = only set a TTL if the key has none. Without NX, every request
+        # pushes the expiry forward, the window never closes, and a client
+        # that keeps retrying stays blocked indefinitely.
+        pipe.expire(key, self.window, nx=True)
+        count = pipe.execute()[0]
+
         return count <= self.limit
-    
+
     def allow_with_tier(self, client_id: str, tier: str) -> bool:
         """Multi-tier rate limiting (free/pro/enterprise)."""
         limits = {"free": 100, "pro": 1000, "enterprise": 10000}
         limit = limits.get(tier, 100)
-        
-        key = f"rate:{client_id}:{tier}"
+
+        window_id = int(time.time()) // self.window
+        key = f"rate:{client_id}:{tier}:{window_id}"
+
         pipe = self.r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, 60)
-        results = pipe.execute()
-        
-        return results[0] <= limit
+        pipe.expire(key, self.window, nx=True)
+        count = pipe.execute()[0]
+
+        return count <= limit
 
 # Usage
 r = redis.Redis(host='redis-cluster', port=6379)
@@ -495,6 +503,18 @@ if limiter.allow("user:123"):
 else:
     return 429, "Rate limit exceeded"
 ```
+
+**Two traps in distributed counters:**
+
+| Trap | Symptom | Fix |
+|------|---------|-----|
+| `EXPIRE` on every request | Window never closes; an actively-retrying client is locked out permanently | `EXPIRE ... NX`, or set the TTL only when `INCR` returns 1 |
+| `INCR` then `EXPIRE` as separate round trips | A crash between the two leaves a key with no TTL — a permanent ban | Pipeline them, or use a Lua script for true atomicity |
+
+This is a **fixed window**, so it inherits the boundary-burst problem: a client
+can send `limit` requests at the end of one window and `limit` more at the start
+of the next. For a sliding window, store timestamps in a sorted set
+(`ZADD` + `ZREMRANGEBYSCORE` + `ZCARD`) inside one Lua script.
 
 ```
   ┌──────────┐     ┌──────────┐     ┌──────────┐

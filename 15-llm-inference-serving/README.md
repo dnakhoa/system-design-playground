@@ -1,4 +1,4 @@
-# Module 13: LLM Inference Serving Architecture
+# Module 15: LLM Inference Serving Architecture
 
 > **How to serve LLMs at scale.** LLM inference is fundamentally different from traditional web serving — it's memory-bound, not compute-bound. The KV cache is the bottleneck, and every optimization revolves around managing it efficiently.
 
@@ -444,6 +444,5 @@ Split model into stages across GPUs.
 ---
 
 **Previous**: [API Design](../14-api-design/README.md)
-**Next**: [RAG System Architecture at Scale](../14-rag-at-scale/README.md)
+**Next**: [RAG System Architecture at Scale](../16-rag-at-scale/README.md)
 
-> **Note**: This module was originally numbered 13. It is now Module 15 in the updated curriculum.
