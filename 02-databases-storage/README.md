@@ -202,10 +202,10 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
 ### Leader-Follower (Primary-Replica)
 
 ```
-  ┌──────────┐
+  ┌───────────┐
   │  Leader   │ ◄─── All writes
   │ (Primary) │
-  └─────┬────┘
+  └─────┬─────┘
         │ replication log
    ┌────┼────┐
    │    │    │
@@ -338,27 +338,27 @@ NewSQL systems promise SQL interfaces with horizontal scalability.
 Instagram serves 2B+ users with a complex data architecture:
 
 ```
-┌───────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────┐
 │                    Instagram Stack                      │
-├───────────────────────────────────────────────────────┤
-│  Application Layer                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │ Django   │  │ Celery   │  │ Custom Services  │    │
-│  │ (Python) │  │ (async)  │  │ (Go, C++)        │    │
-│  └──────────┘  └──────────┘  └──────────────────┘    │
-├───────────────────────────────────────────────────────┤
-│  Data Layer                                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │  MySQL   │  │  Redis   │  │  Cassandra       │    │
-│  │ (users,  │  │ (cache,  │  │ (time-series,    │    │
-│  │  posts,  │  │  sessions│  │  feeds, events)  │    │
-│  │  follows)│  │  counts) │  │                  │    │
-│  └──────────┘  └──────────┘  └──────────────────┘    │
-│  ┌──────────┐  ┌──────────┐                           │
-│  │memcached │  │ Elastic- │                           │
-│  │(objects) │  │ search   │                           │
-│  └──────────┘  └──────────┘                           │
-└───────────────────────────────────────────────────────┘
+├─────────────────────────────────────────────────────────┤
+│  Application Layer                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐       │
+│  │ Django   │  │ Celery   │  │ Custom Services  │       │
+│  │ (Python) │  │ (async)  │  │ (Go, C++)        │       │
+│  └──────────┘  └──────────┘  └──────────────────┘       │
+├─────────────────────────────────────────────────────────┤
+│  Data Layer                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐       │
+│  │  MySQL   │  │  Redis   │  │  Cassandra       │       │
+│  │ (users,  │  │ (cache,  │  │ (time-series,    │       │
+│  │  posts,  │  │  sessions│  │  feeds, events)  │       │
+│  │  follows)│  │  counts) │  │                  │       │
+│  └──────────┘  └──────────┘  └──────────────────┘       │
+│  ┌──────────┐  ┌──────────┐                             │
+│  │memcached │  │ Elastic- │                             │
+│  │(objects) │  │ search   │                             │
+│  └──────────┘  └──────────┘                             │
+└─────────────────────────────────────────────────────────┘
 ```
 
 **Why this mix?**
@@ -381,16 +381,16 @@ Instagram serves 2B+ users with a complex data architecture:
 
 ```
 NORMALIZED (3NF)                    DENORMALIZED
-┌─────────┐  ┌─────────┐          ┌──────────────────────┐
+┌─────────┐  ┌─────────┐          ┌───────────────────────┐
 │ users   │  │ posts   │          │ user_posts (wide)     │
-│─────────│  │─────────│          │──────────────────────│
-│ id      │  │ id      │          │ user_id              │
-│ name    │  │ user_id │──FK──▶   │ user_name            │
-│ email   │  │ content │          │ user_avatar_url      │
-└─────────┘  │ created │          │ post_id              │
-             └─────────┘          │ post_content         │
-  ✓ No duplication                │ post_created         │
-  ✓ JOINs needed                  └──────────────────────┘
+│─────────│  │─────────│          │────────────────────── │
+│ id      │  │ id      │          │ user_id               │
+│ name    │  │ user_id │──FK──▶   │ user_name             │
+│ email   │  │ content │          │ user_avatar_url       │
+└─────────┘  │ created │          │ post_id               │
+             └─────────┘          │ post_content          │
+  ✓ No duplication                │ post_created          │
+  ✓ JOINs needed                  └───────────────────────┘
                                   ✓ No JOINs needed
                                   ✓ Fast reads
                                   ✗ Data duplication

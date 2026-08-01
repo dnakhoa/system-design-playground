@@ -22,11 +22,11 @@ System design is the process of defining the architecture, components, modules, 
 
 ```
    Requirements                  Architecture                Trade-offs
-  ┌─────────────┐              ┌─────────────┐            ┌─────────────┐
-  │ Functional   │   ──────►   │ Services    │   ──────►  │ Cost vs     │
+  ┌───────────────┐              ┌─────────────┐            ┌─────────────┐
+  │ Functional    │  ──────►   │ Services    │   ──────►  │ Cost vs     │
   │ Non-functional│            │ Data stores │            │ Performance │
-  │ Constraints  │            │ Interfaces  │            │ Simplicity  │
-  └─────────────┘              └─────────────┘            │ vs Flexibility│
+  │ Constraints   │           │ Interfaces  │            │ Simplicity  │
+  └───────────────┘              └─────────────┘            │ vs Flexibility│
                                                           └─────────────┘
 ```
 
@@ -232,14 +232,14 @@ This framework works for **any** system design problem, from URL shorteners to L
 
 ```
  Step 1          Step 2          Step 3          Step 4
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-│ Clarify  │   │ Estimate │   │ Define   │   │ Design   │
-│ Require- │──▶│ Capacity │──▶│ API      │──▶│ Data     │
-│ ments    │   │ (QPS,    │   │ (REST    │   │ Model    │
+┌──────────┐   ┌──────────┐   ┌───────────┐   ┌──────────┐
+│ Clarify  │   │ Estimate │   │ Define    │   │ Design   │
+│ Require- │──▶│ Capacity │──▶│ API       │──▶│ Data     │
+│ ments    │   │ (QPS,    │   │ (REST     │   │ Model    │
 │          │   │  Storage)│   │ endpoints)│  │ (tables, │
-│ 2-3 min  │   │ 3-5 min  │   │ 2-3 min  │   │  schema) │
-│          │   │          │   │          │   │ 3-5 min  │
-└──────────┘   └──────────┘   └──────────┘   └────┬─────┘
+│ 2-3 min  │   │ 3-5 min  │   │ 2-3 min   │   │  schema) │
+│          │   │          │   │           │   │ 3-5 min  │
+└──────────┘   └──────────┘   └───────────┘   └────┬─────┘
                                                    │
  Step 9          Step 8          Step 7          Step 6│ Step 5
 ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────▼───┐
@@ -492,10 +492,10 @@ urls table:
                            │
               ┌────────────┼────────────┐
               │            │            │
-        ┌─────▼─────┐ ┌───▼────┐ ┌────▼─────┐
-        │   Redis   │ │ MySQL  │ │ Kafka    │
+        ┌─────▼─────┐ ┌───▼────┐ ┌────▼──────┐
+        │   Redis   │ │ MySQL  │ │ Kafka     │
         │  (cache)  │ │  (DB)  │ │(analytics)│
-        └───────────┘ └────────┘ └──────────┘
+        └───────────┘ └────────┘ └───────────┘
 ```
 
 ### Step 6: Deep Dive — ID Generation

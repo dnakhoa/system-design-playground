@@ -971,24 +971,24 @@ answers a question anyone is asking.
   ├─────────────────────────────────────────────────────────────┤
   │                                                             │
   │  TOP ROW — "is it healthy?"  (the four golden signals)      │
-  │  ┌───────────┬───────────┬───────────┬───────────┐         │
-  │  │ Requests  │ Error     │ Latency   │ Saturation│         │
-  │  │ /sec      │ rate %    │ p50/95/99 │ (pool %)  │         │
-  │  └───────────┴───────────┴───────────┴───────────┘         │
+  │  ┌───────────┬───────────┬───────────┬───────────┐          │
+  │  │ Requests  │ Error     │ Latency   │ Saturation│          │
+  │  │ /sec      │ rate %    │ p50/95/99 │ (pool %)  │          │
+  │  └───────────┴───────────┴───────────┴───────────┘          │
   │                                                             │
   │  SECOND ROW — "how much budget is left?"                    │
-  │  ┌─────────────────────────┬─────────────────────────┐     │
-  │  │ SLO: 99.9%  ███████░░░  │ Burn rate (1h / 6h)     │     │
-  │  │ 68% budget remaining    │ 0.4x / 0.9x             │     │
-  │  └─────────────────────────┴─────────────────────────┘     │
+  │  ┌─────────────────────────┬─────────────────────────┐      │
+  │  │ SLO: 99.9%  ███████░░░  │ Burn rate (1h / 6h)     │      │
+  │  │ 68% budget remaining    │ 0.4x / 0.9x             │      │
+  │  └─────────────────────────┴─────────────────────────┘      │
   │                                                             │
   │  THIRD ROW — "where is it going wrong?"                     │
-  │  ┌─────────────────────────┬─────────────────────────┐     │
-  │  │ Errors by endpoint      │ Latency by dependency   │     │
-  │  │ (which route is broken) │ (which hop is slow)     │     │
-  │  └─────────────────────────┴─────────────────────────┘     │
+  │  ┌─────────────────────────┬─────────────────────────┐      │
+  │  │ Errors by endpoint      │ Latency by dependency   │      │
+  │  │ (which route is broken) │ (which hop is slow)     │      │
+  │  └─────────────────────────┴─────────────────────────┘      │
   │                                                             │
-  │  Deploy markers on every time axis ──┤ 14:03 v4.2.1        │
+  │  Deploy markers on every time axis ──┤ 14:03 v4.2.1         │
   └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1446,27 +1446,27 @@ topic for order events.
 ## Summary
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │                  Observability Principles                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. Monitoring answers known questions; observability       │
-│     answers new ones without a deploy                       │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Monitoring answers known questions; observability        │
+│     answers new ones without a deploy                        │
 │  2. Metrics detect, traces localize, logs explain —          │
-│     in that order                                           │
+│     in that order                                            │
 │  3. Aggregate distributions, never percentiles               │
 │  4. Cardinality is the product of label values, and it       │
-│     is what you pay for                                     │
+│     is what you pay for                                      │
 │  5. Unbounded dimensions belong in traces and logs           │
 │  6. One trace_id in everything, or correlation is guesswork  │
-│  7. Page on symptoms and burn rates, not causes and         │
-│     fixed thresholds                                        │
+│  7. Page on symptoms and burn rates, not causes and          │
+│     fixed thresholds                                         │
 │  8. Observability must never sit on the critical path        │
 │  9. Every page needs a runbook; mitigate before diagnose     │
 │ 10. Cut noise before coverage — under-instrumenting costs    │
-│     one outage, discovered at the worst moment              │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+│     one outage, discovered at the worst moment               │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -51,13 +51,13 @@ Most systems operate in the "useful life" phase with a relatively constant failu
 Prevent cascading failures by stopping calls to a failing service.
 
 ```
-  ┌─────────────────────────────────────────┐
+  ┌───────────────────────────────────────────┐
   │           Circuit Breaker States          │
   │                                           │
-  │  ┌──────────┐    failure    ┌──────────┐ │
-  │  │  CLOSED  │──────────────▶│   OPEN   │ │
-  │  │ (normal) │               │(rejected)│ │
-  │  └────▲─────┘               └────┬─────┘ │
+  │  ┌──────────┐    failure    ┌──────────┐  │
+  │  │  CLOSED  │──────────────▶│   OPEN   │  │
+  │  │ (normal) │               │(rejected)│  │
+  │  └────▲─────┘               └────┬─────┘  │
   │       │                          │        │
   │       │    success               │        │
   │       │◀─────────────────────────│        │
@@ -67,7 +67,7 @@ Prevent cascading failures by stopping calls to a failing service.
   │       └─────────────────────│HALF-OPEN │  │
   │         success             │(testing) │  │
   │                             └──────────┘  │
-  └─────────────────────────────────────────┘
+  └───────────────────────────────────────────┘
 
   CLOSED: Requests flow normally. Counter tracks failures.
   OPEN: All requests fail fast (no call to downstream).
@@ -490,24 +490,24 @@ def call_service_b(request, deadline: Deadline):
 ### RPO and RTO
 
 ```
-  ┌──────────────────────────────────────────────┐
-  │                                               │
-  │  RPO (Recovery Point Objective)               │
-  │  = How much data can you afford to lose?      │
-  │                                               │
-  │  RTO (Recovery Time Objective)                │
-  │  = How quickly must you recover?              │
-  │                                               │
-  │  ─────────────────────────────────────────── │
-  │  Timeline:                                    │
-  │                                               │
-  │  Last Backup    Disaster    Recovery         │
-  │      │            │            │              │
-  │      ▼            ▼            ▼              │
-  │  ────●────────────●────────────●────▶         │
-  │      │←── RPO ──→│←── RTO ──→│              │
+  ┌────────────────────────────────────────────────┐
+  │                                                │
+  │  RPO (Recovery Point Objective)                │
+  │  = How much data can you afford to lose?       │
+  │                                                │
+  │  RTO (Recovery Time Objective)                 │
+  │  = How quickly must you recover?               │
+  │                                                │
+  │  ───────────────────────────────────────────   │
+  │  Timeline:                                     │
+  │                                                │
+  │  Last Backup    Disaster    Recovery           │
+  │      │            │            │               │
+  │      ▼            ▼            ▼               │
+  │  ────●────────────●────────────●────▶          │
+  │      │←── RPO ──→│←── RTO ──→│                 │
   │      │  (data loss)│  (downtime)│              │
-  └──────────────────────────────────────────────┘
+  └────────────────────────────────────────────────┘
 ```
 
 | RPO | RTO | Strategy | Cost |
@@ -664,34 +664,34 @@ Deliberately inject failures to find weaknesses before they cause outages.
 ### Chaos Engineering Practice
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │           Chaos Engineering Process               │
   │                                                   │
-  │  ┌──────────┐                                    │
+  │  ┌──────────┐                                     │
   │  │Define    │ "The system should handle           │
   │  │hypothesis│  server failure without user impact"│
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
-  │  │Plan      │ "Kill one server in US-East        │
+  │  ┌────▼─────┐                                     │
+  │  │Plan      │ "Kill one server in US-East         │
   │  │experiment│  during business hours"             │
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Run       │ Execute the failure injection       │
-  │  │experiment│                                    │
-  │  └────┬─────┘                                    │
+  │  │experiment│                                     │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Analyze   │ Compare metrics before/during/      │
   │  │results   │ after. Did SLO hold?                │
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Fix       │ Address any weaknesses found        │
-  │  │weaknesses│                                    │
-  │  └──────────┘                                    │
-  └─────────────────────────────────────────────────┘
+  │  │weaknesses│                                     │
+  │  └──────────┘                                     │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Chaos Tools

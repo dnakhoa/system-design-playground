@@ -17,32 +17,32 @@
 The modern mental model: the harness is what makes agents reliable and production-ready.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                    Agent Architecture                     │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  HARNESS (the design surface)                     │   │
-│  │                                                   │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │   │
-│  │  │  Prompt   │  │  Tools   │  │  Middleware  │  │   │
-│  │  │  (system  │  │  (APIs,  │  │  (guardrails,│  │   │
-│  │  │   prompt, │  │   code,  │  │   memory,    │  │   │
-│  │  │   context)│  │   search)│  │   routing)   │  │   │
-│  │  └──────────┘  └──────────┘  └──────────────┘  │   │
-│  │                                                   │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  MODEL (the LLM)                                 │   │
-│  │  - Reasoning                                      │   │
-│  │  - Planning                                       │   │
-│  │  - Tool selection                                 │   │
-│  │  - Response generation                            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  HARNESS (the design surface)                     │    │
+│  │                                                   │    │
+│  │  ┌───────────┐  ┌──────────┐  ┌──────────────┐    │    │
+│  │  │  Prompt   │  │  Tools   │  │  Middleware  │    │    │
+│  │  │  (system  │  │  (APIs,  │  │  (guardrails,│    │    │
+│  │  │   prompt, │  │   code,  │  │   memory,    │    │    │
+│  │  │   context)│  │   search)│  │   routing)   │    │    │
+│  │  └───────────┘  └──────────┘  └──────────────┘    │    │
+│  │                                                   │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  MODEL (the LLM)                                  │    │
+│  │  - Reasoning                                      │    │
+│  │  - Planning                                       │    │
+│  │  - Tool selection                                 │    │
+│  │  - Response generation                            │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 
   Key insight: You don't change the model. You change the harness.
   Better prompts, better tools, better middleware = better agent.
@@ -55,30 +55,30 @@ The modern mental model: the harness is what makes agents reliable and productio
 ReAct (Reasoning + Acting) interleaves thinking with action.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                    ReAct Loop                             │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  User: "What's the weather in Tokyo and New York?"      │
-│                                                          │
-│  Thought: I need to check weather for two cities.       │
-│  I'll call the weather API for each.                    │
-│                                                          │
-│  Action: get_weather(city="Tokyo")                      │
-│  Observation: 28°C, sunny                               │
-│                                                          │
-│  Thought: Got Tokyo. Now I need New York.               │
-│                                                          │
-│  Action: get_weather(city="New York")                   │
-│  Observation: 22°C, cloudy                              │
-│                                                          │
-│  Thought: I have both results. Let me formulate the     │
-│  final answer.                                          │
-│                                                          │
-│  Answer: Tokyo is 28°C and sunny. New York is 22°C     │
-│  and cloudy.                                            │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  User: "What's the weather in Tokyo and New York?"        │
+│                                                           │
+│  Thought: I need to check weather for two cities.         │
+│  I'll call the weather API for each.                      │
+│                                                           │
+│  Action: get_weather(city="Tokyo")                        │
+│  Observation: 28°C, sunny                                 │
+│                                                           │
+│  Thought: Got Tokyo. Now I need New York.                 │
+│                                                           │
+│  Action: get_weather(city="New York")                     │
+│  Observation: 22°C, cloudy                                │
+│                                                           │
+│  Thought: I have both results. Let me formulate the       │
+│  final answer.                                            │
+│                                                           │
+│  Answer: Tokyo is 28°C and sunny. New York is 22°C        │
+│  and cloudy.                                              │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### ReAct vs Other Patterns
@@ -97,41 +97,41 @@ ReAct (Reasoning + Acting) interleaves thinking with action.
 Production agents need six layers of middleware.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────┐
 │              Agent Middleware Stack                        │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  1. EXECUTION ENVIRONMENT                               │
-│     - Sandboxed code execution                          │
-│     - Tool access control                               │
-│     - Resource limits (CPU, memory, time)               │
-│                                                          │
-│  2. CONTEXT MANAGEMENT                                  │
-│     - Context window budgeting                          │
-│     - Observation masking (compress tool outputs)       │
-│     - Summarization of long conversations               │
-│                                                          │
-│  3. PLANNING & DELEGATION                               │
-│     - Task decomposition                                │
-│     - Subagent spawning                                 │
-│     - Parallel execution                                │
-│                                                          │
-│  4. FAULT TOLERANCE                                     │
-│     - Retry with backoff                                │
-│     - Error recovery (feed errors back to LLM)         │
-│     - Checkpointing (resume from last good state)       │
-│                                                          │
-│  5. GUARDRAILS                                          │
-│     - Input validation (prompt injection detection)     │
-│     - Output filtering (PII, harmful content)           │
-│     - Tool call validation                              │
-│                                                          │
-│  6. HUMAN-IN-THE-LOOP                                   │
-│     - Approval for irreversible actions                 │
-│     - Steering (user can redirect agent)                │
-│     - Escalation (agent asks for help)                  │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  1. EXECUTION ENVIRONMENT                                  │
+│     - Sandboxed code execution                             │
+│     - Tool access control                                  │
+│     - Resource limits (CPU, memory, time)                  │
+│                                                            │
+│  2. CONTEXT MANAGEMENT                                     │
+│     - Context window budgeting                             │
+│     - Observation masking (compress tool outputs)          │
+│     - Summarization of long conversations                  │
+│                                                            │
+│  3. PLANNING & DELEGATION                                  │
+│     - Task decomposition                                   │
+│     - Subagent spawning                                    │
+│     - Parallel execution                                   │
+│                                                            │
+│  4. FAULT TOLERANCE                                        │
+│     - Retry with backoff                                   │
+│     - Error recovery (feed errors back to LLM)             │
+│     - Checkpointing (resume from last good state)          │
+│                                                            │
+│  5. GUARDRAILS                                             │
+│     - Input validation (prompt injection detection)        │
+│     - Output filtering (PII, harmful content)              │
+│     - Tool call validation                                 │
+│                                                            │
+│  6. HUMAN-IN-THE-LOOP                                      │
+│     - Approval for irreversible actions                    │
+│     - Steering (user can redirect agent)                   │
+│     - Escalation (agent asks for help)                     │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -143,66 +143,66 @@ Production agents need six layers of middleware.
 The dominant pattern: main agent spawns ephemeral child agents.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Subagent Delegation Pattern                  │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Main Agent                                             │
-│  │                                                       │
-│  ├──▶ Spawn Subagent A (research task)                 │
-│  │    │                                                  │
-│  │    │  Isolated context window                       │
-│  │    │  Own tool access                               │
-│  │    │  Fresh system prompt                           │
-│  │    │                                                  │
-│  │    └──▶ Return: "Research findings..."              │
-│  │                                                       │
-│  ├──▶ Spawn Subagent B (code writing task)             │
-│  │    │                                                  │
-│  │    └──▶ Return: "Code implementation..."            │
-│  │                                                       │
-│  └──▶ Synthesize results → Final answer                │
-│                                                          │
-│  Benefits:                                              │
-│  - Fresh context (no pollution from parent)             │
-│  - Autonomous execution (no micromanagement)            │
-│  - Parallel subagents (independent tasks)               │
-│  - Stateless messaging (fire-and-forget)                │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Main Agent                                               │
+│  │                                                        │
+│  ├──▶ Spawn Subagent A (research task)                    │
+│  │    │                                                   │
+│  │    │  Isolated context window                          │
+│  │    │  Own tool access                                  │
+│  │    │  Fresh system prompt                              │
+│  │    │                                                   │
+│  │    └──▶ Return: "Research findings..."                 │
+│  │                                                        │
+│  ├──▶ Spawn Subagent B (code writing task)                │
+│  │    │                                                   │
+│  │    └──▶ Return: "Code implementation..."               │
+│  │                                                        │
+│  └──▶ Synthesize results → Final answer                   │
+│                                                           │
+│  Benefits:                                                │
+│  - Fresh context (no pollution from parent)               │
+│  - Autonomous execution (no micromanagement)              │
+│  - Parallel subagents (independent tasks)                 │
+│  - Stateless messaging (fire-and-forget)                  │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Orchestration Patterns
 
 ```
   Supervisor Pattern:
-  ┌──────────────────────────────────────────────┐
-  │  Supervisor Agent                            │
+  ┌───────────────────────────────────────────────┐
+  │  Supervisor Agent                             │
   │  │                                            │
-  │  ├── Worker A (research)                     │
-  │  ├── Worker B (analysis)                     │
-  │  └── Worker C (writing)                      │
+  │  ├── Worker A (research)                      │
+  │  ├── Worker B (analysis)                      │
+  │  └── Worker C (writing)                       │
   │                                               │
   │  Supervisor assigns tasks, collects results   │
-  └──────────────────────────────────────────────┘
+  └───────────────────────────────────────────────┘
 
   Swarm Pattern:
-  ┌──────────────────────────────────────────────┐
-  │  Agent A ◄──────▶ Agent B                    │
-  │     │                  │                     │
-  │     └──────▶ Agent C ◄┘                     │
+  ┌───────────────────────────────────────────────┐
+  │  Agent A ◄──────▶ Agent B                     │
+  │     │                  │                      │
+  │     └──────▶ Agent C ◄┘                       │
   │                                               │
-  │  Agents communicate directly, no central     │
-  │  coordinator. Emergent behavior.             │
-  └──────────────────────────────────────────────┘
+  │  Agents communicate directly, no central      │
+  │  coordinator. Emergent behavior.              │
+  └───────────────────────────────────────────────┘
 
   Pipeline Pattern:
-  ┌──────────────────────────────────────────────┐
-  │  Agent A ──▶ Agent B ──▶ Agent C ──▶ Output │
-  │  (research)  (analysis)  (writing)           │
+  ┌───────────────────────────────────────────────┐
+  │  Agent A ──▶ Agent B ──▶ Agent C ──▶ Output   │
+  │  (research)  (analysis)  (writing)            │
   │                                               │
-  │  Sequential, each agent builds on previous   │
-  └──────────────────────────────────────────────┘
+  │  Sequential, each agent builds on previous    │
+  └───────────────────────────────────────────────┘
 ```
 
 ---
@@ -214,24 +214,24 @@ The dominant pattern: main agent spawns ephemeral child agents.
 Agent runs can be long (minutes to hours). They must survive crashes.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │              Durable Execution with Checkpointing        │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Agent Run:                                             │
-│  Step 1: Research → ✓ (checkpoint saved)               │
-│  Step 2: Analyze  → ✓ (checkpoint saved)               │
-│  Step 3: Write    → ✗ CRASH!                           │
+│  Agent Run:                                              │
+│  Step 1: Research → ✓ (checkpoint saved)                 │
+│  Step 2: Analyze  → ✓ (checkpoint saved)                 │
+│  Step 3: Write    → ✗ CRASH!                             │
 │                                                          │
-│  Restart:                                               │
-│  Step 1: Research → ✓ (loaded from checkpoint)         │
-│  Step 2: Analyze  → ✓ (loaded from checkpoint)         │
-│  Step 3: Write    → ✓ (re-executed)                    │
-│  Step 4: Review   → ✓                                  │
+│  Restart:                                                │
+│  Step 1: Research → ✓ (loaded from checkpoint)           │
+│  Step 2: Analyze  → ✓ (loaded from checkpoint)           │
+│  Step 3: Write    → ✓ (re-executed)                      │
+│  Step 4: Review   → ✓                                    │
 │                                                          │
-│  Only step 3 re-executed. Steps 1-2 skipped.           │
+│  Only step 3 re-executed. Steps 1-2 skipped.             │
 │                                                          │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Journal-Based Execution
@@ -239,12 +239,12 @@ Agent runs can be long (minutes to hours). They must survive crashes.
 ```
   Append-only log of completed steps:
 
-  ┌─────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────┐
   │  Journal (JSONL):                                    │
   │  {"step": "research", "input": "topic", "result": "...", "ts": "..."} │
   │  {"step": "analyze", "input": "...", "result": "...", "ts": "..."}    │
   │  {"step": "write", "input": "...", "result": "...", "ts": "..."}      │
-  └─────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────┘
 
   On restart:
   1. Load journal
@@ -297,41 +297,41 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Claude Code Architecture                     │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Agent Harness                                    │   │
-│  │                                                   │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │   │
-│  │  │ Permission│  │ Tool     │  │ Context      │  │   │
-│  │  │ System   │  │ Registry │  │ Management   │  │   │
-│  │  │          │  │          │  │              │  │   │
-│  │  │ allow/   │  │ read,    │  │ token budget,│  │   │
-│  │  │ ask/deny │  │ edit,    │  │ compaction,  │  │   │
-│  │  │          │  │ bash,    │  │ checkpointing│  │   │
-│  │  │          │  │ grep...  │  │              │  │   │
-│  │  └──────────┘  └──────────┘  └──────────────┘  │   │
-│  │                                                   │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │   │
-│  │  │ Subagent │  │ Task     │  │ Memory       │  │   │
-│  │  │ System   │  │ Tracking │  │ System       │  │   │
-│  │  │          │  │          │  │              │  │   │
-│  │  │ explore, │  │ T1, T2,  │  │ project,     │  │   │
-│  │  │ general, │  │ T3...    │  │ session,     │  │   │
-│  │  │ compose  │  │          │  │ global       │  │   │
-│  │  └──────────┘  └──────────┘  └──────────────┘  │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Safety Layer                                     │   │
-│  │  - Permission evaluation (allow/ask/deny)        │   │
-│  │  - Tool validation (prevent destructive ops)     │   │
-│  │  - User confirmation for risky actions           │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Agent Harness                                    │    │
+│  │                                                   │    │
+│  │  ┌───────────┐  ┌──────────┐  ┌──────────────┐    │    │
+│  │  │ Permission│  │ Tool     │  │ Context      │    │    │
+│  │  │ System    │  │ Registry │  │ Management   │    │    │
+│  │  │           │  │          │  │              │    │    │
+│  │  │ allow/    │  │ read,    │  │ token budget,│    │    │
+│  │  │ ask/deny  │  │ edit,    │  │ compaction,  │    │    │
+│  │  │           │  │ bash,    │  │ checkpointing│    │    │
+│  │  │           │  │ grep...  │  │              │    │    │
+│  │  └───────────┘  └──────────┘  └──────────────┘    │    │
+│  │                                                   │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐     │    │
+│  │  │ Subagent │  │ Task     │  │ Memory       │     │    │
+│  │  │ System   │  │ Tracking │  │ System       │     │    │
+│  │  │          │  │          │  │              │     │    │
+│  │  │ explore, │  │ T1, T2,  │  │ project,     │     │    │
+│  │  │ general, │  │ T3...    │  │ session,     │     │    │
+│  │  │ compose  │  │          │  │ global       │     │    │
+│  │  └──────────┘  └──────────┘  └──────────────┘     │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Safety Layer                                     │    │
+│  │  - Permission evaluation (allow/ask/deny)         │    │
+│  │  - Tool validation (prevent destructive ops)      │    │
+│  │  - User confirmation for risky actions            │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

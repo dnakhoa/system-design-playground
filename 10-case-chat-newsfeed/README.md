@@ -42,37 +42,37 @@ Per year: ~24 TB (text only)
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                Chat System Architecture                   │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
 │  │  Connection Layer (WebSocket Gateway)             │    │
-│  │  ┌──────┐  ┌──────┐  ┌──────┐                   │    │
-│  │  │ WS   │  │ WS   │  │ WS   │  (stateful)       │    │
-│  │  │Server│  │Server│  │Server│                   │    │
-│  │  └──┬───┘  └──┬───┘  └──┬───┘                   │    │
-│  │     └─────────┼─────────┘                       │    │
-│  └───────────────┼─────────────────────────────────┘    │
-│                  │                                       │
-│  ┌───────────────▼─────────────────────────────────┐    │
+│  │  ┌──────┐  ┌──────┐  ┌──────┐                     │    │
+│  │  │ WS   │  │ WS   │  │ WS   │  (stateful)         │    │
+│  │  │Server│  │Server│  │Server│                     │    │
+│  │  └──┬───┘  └──┬───┘  └──┬───┘                     │    │
+│  │     └─────────┼─────────┘                         │    │
+│  └───────────────┼───────────────────────────────────┘    │
+│                  │                                        │
+│  ┌───────────────▼───────────────────────────────────┐    │
 │  │  Chat Service                                     │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │    │
-│  │  │ Message  │  │ Presence │  │  Group   │     │    │
-│  │  │ Service  │  │ Service  │  │  Service │     │    │
-│  │  └──────────┘  └──────────┘  └──────────┘     │    │
-│  └───────────────┬─────────────────────────────────┘    │
-│                  │                                       │
-│  ┌───────────────▼─────────────────────────────────┐    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │    │
+│  │  │ Message  │  │ Presence │  │  Group   │         │    │
+│  │  │ Service  │  │ Service  │  │  Service │         │    │
+│  │  └──────────┘  └──────────┘  └──────────┘         │    │
+│  └───────────────┬───────────────────────────────────┘    │
+│                  │                                        │
+│  ┌───────────────▼───────────────────────────────────┐    │
 │  │  Data Layer                                       │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │    │
-│  │  │ Cassandra│  │  Redis   │  │  Kafka   │     │    │
-│  │  │(messages)│  │(presence,│  │(message  │     │    │
-│  │  │          │  │  sessions)│  │ events)  │     │    │
-│  │  └──────────┘  └──────────┘  └──────────┘     │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│  │  ┌──────────┐  ┌───────────┐  ┌──────────┐        │    │
+│  │  │ Cassandra│  │  Redis    │  │  Kafka   │        │    │
+│  │  │(messages)│  │(presence, │  │(message  │        │    │
+│  │  │          │  │  sessions)│  │ events)  │        │    │
+│  │  └──────────┘  └───────────┘  └──────────┘        │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### WebSocket Gateway
@@ -132,12 +132,12 @@ The connection layer is the most critical component. Each user maintains a persi
 ### Presence System
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Presence System                                  │
   │                                                   │
   │  User connects:                                   │
-  │  Redis SET presence:{user_id} EX 60              │
-  │  (expires after 60 seconds if no heartbeat)      │
+  │  Redis SET presence:{user_id} EX 60               │
+  │  (expires after 60 seconds if no heartbeat)       │
   │                                                   │
   │  Heartbeat:                                       │
   │  Every 30 seconds: Redis EXPIRE presence:{user} 60│
@@ -148,7 +148,7 @@ The connection layer is the most critical component. Each user maintains a persi
   │                                                   │
   │  Check presence:                                  │
   │  Redis GET presence:{user_id} → EXISTS = online   │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Read Receipts
@@ -185,21 +185,21 @@ When a user posts, their content must appear in all followers' feeds.
 
 ```
   Fan-out on Write (Push):
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  User posts tweet                                 │
   │  │                                                │
-  │  ├──▶ Follower 1's feed (write to their feed)    │
-  │  ├──▶ Follower 2's feed                          │
-  │  ├──▶ Follower 3's feed                          │
-  │  └──▶ Follower 10,000's feed                     │
+  │  ├──▶ Follower 1's feed (write to their feed)     │
+  │  ├──▶ Follower 2's feed                           │
+  │  ├──▶ Follower 3's feed                           │
+  │  └──▶ Follower 10,000's feed                      │
   │                                                   │
   │  ✓ Feed read is fast (pre-computed)               │
-  │  ✗ Write amplification (1 post → 10K writes)     │
-  │  ✗ Celebrity problem (1 post → 10M writes!)      │
-  └─────────────────────────────────────────────────┘
+  │  ✗ Write amplification (1 post → 10K writes)      │
+  │  ✗ Celebrity problem (1 post → 10M writes!)       │
+  └───────────────────────────────────────────────────┘
 
   Fan-out on Read (Pull):
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  User opens feed                                  │
   │  │                                                │
   │  ├──▶ Check: Who does this user follow?           │
@@ -208,57 +208,57 @@ When a user posts, their content must appear in all followers' feeds.
   │  └──▶ Return feed                                 │
   │                                                   │
   │  ✓ No write amplification                         │
-  │  ✗ Feed read is slow (multiple DB queries)       │
-  │  ✗ High latency for users following many people  │
-  └─────────────────────────────────────────────────┘
+  │  ✗ Feed read is slow (multiple DB queries)        │
+  │  ✗ High latency for users following many people   │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Hybrid Fan-Out (The Real Solution)
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │           Hybrid Fan-Out Strategy                 │
   │                                                   │
   │  Regular users ( <10K followers):                 │
-  │  → Push on write (fan-out to followers' feeds)   │
+  │  → Push on write (fan-out to followers' feeds)    │
   │                                                   │
-  │  Celebrity users ( >10K followers):              │
-  │  → Pull on read (fetch during feed generation)   │
+  │  Celebrity users ( >10K followers):               │
+  │  → Pull on read (fetch during feed generation)    │
   │                                                   │
   │  Feed generation:                                 │
-  │  1. Start with pre-computed feed (pushed posts)  │
-  │  2. Merge in real-time posts from celebrities    │
+  │  1. Start with pre-computed feed (pushed posts)   │
+  │  2. Merge in real-time posts from celebrities     │
   │  3. Sort by ranking algorithm                     │
   │  4. Return top N posts                            │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Feed Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              News Feed Architecture                       │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  User posts → Post Service → Fan-out Service             │
-│                              │                           │
-│                    ┌─────────┼─────────┐                │
-│                    │         │         │                │
-│                    ▼         ▼         ▼                │
-│              ┌─────────┐ ┌─────┐ ┌─────────┐          │
-│              │Feed Cache│ │Feed │ │Analytics│          │
-│              │(Redis)   │ │DB   │ │(Kafka)  │          │
-│              │per-user  │ │     │ │         │          │
-│              │sorted set│ │     │ │         │          │
-│              └─────────┘ └─────┘ └─────────┘          │
-│                                                          │
-│  Feed read:                                              │
-│  1. ZREVRANGE feed:{user_id} 0 19 (top 20 posts)       │
-│  2. For each post, hydrate with content/user info        │
-│  3. Apply ranking algorithm                              │
-│  4. Return to client                                     │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  User posts → Post Service → Fan-out Service              │
+│                              │                            │
+│                    ┌─────────┼─────────┐                  │
+│                    │         │         │                  │
+│                    ▼         ▼         ▼                  │
+│              ┌──────────┐ ┌─────┐ ┌─────────┐             │
+│              │Feed Cache│ │Feed │ │Analytics│             │
+│              │(Redis)   │ │DB   │ │(Kafka)  │             │
+│              │per-user  │ │     │ │         │             │
+│              │sorted set│ │     │ │         │             │
+│              └──────────┘ └─────┘ └─────────┘             │
+│                                                           │
+│  Feed read:                                               │
+│  1. ZREVRANGE feed:{user_id} 0 19 (top 20 posts)          │
+│  2. For each post, hydrate with content/user info         │
+│  3. Apply ranking algorithm                               │
+│  4. Return to client                                      │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Feed Storage in Redis

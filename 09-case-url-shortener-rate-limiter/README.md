@@ -106,30 +106,30 @@ CREATE INDEX idx_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                    URL Shortener Architecture            │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Client ────▶ Load Balancer ────▶ API Servers           │
+│  Client ────▶ Load Balancer ────▶ API Servers            │
 │                                      │                   │
-│                              ┌───────┼───────┐          │
-│                              │       │       │          │
-│                              ▼       ▼       ▼          │
-│                           ┌─────┐ ┌─────┐ ┌─────┐     │
-│                           │Redis│ │MySQL│ │Kafka│     │
-│                           │cache│ │ DB  │ │     │     │
-│                           └─────┘ └─────┘ └─────┘     │
+│                              ┌───────┼───────┐           │
+│                              │       │       │           │
+│                              ▼       ▼       ▼           │
+│                           ┌─────┐ ┌─────┐ ┌─────┐        │
+│                           │Redis│ │MySQL│ │Kafka│        │
+│                           │cache│ │ DB  │ │     │        │
+│                           └─────┘ └─────┘ └─────┘        │
 │                                                          │
 │  Write Path:                                             │
-│  Client → API → Generate ID → Write DB → Invalidate     │
+│  Client → API → Generate ID → Write DB → Invalidate      │
 │                                  cache → Publish event   │
 │                                                          │
 │  Read Path:                                              │
-│  Client → API → Check Redis → (miss: query DB,          │
+│  Client → API → Check Redis → (miss: query DB,           │
 │                                populate cache)           │
-│                              → Return 301 redirect      │
+│                              → Return 301 redirect       │
 │                              → Publish analytics event   │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Deep Dive: ID Generation Strategies
@@ -240,27 +240,27 @@ Click analytics are written asynchronously to avoid blocking the redirect.
 ### Algorithm Selection
 
 ```
-  ┌─────────────────────────────────────────────────────┐
-  │  Algorithm Choice Matrix                             │
+  ┌───────────────────────────────────────────────────────┐
+  │  Algorithm Choice Matrix                              │
   │                                                       │
   │  Need burst tolerance? ──Yes──▶ Token Bucket          │
-  │       │                       (allows controlled     │
-  │       No                        bursts)              │
+  │       │                       (allows controlled      │
+  │       No                        bursts)               │
   │       │                                               │
   │       ▼                                               │
-  │  Need smooth rate? ────Yes──▶ Leaky Bucket           │
-  │       │                       (constant output)      │
+  │  Need smooth rate? ────Yes──▶ Leaky Bucket            │
+  │       │                       (constant output)       │
   │       No                                              │
   │       │                                               │
   │       ▼                                               │
-  │  Need simplicity? ─────Yes──▶ Fixed Window           │
-  │       │                       (simple counting)      │
+  │  Need simplicity? ─────Yes──▶ Fixed Window            │
+  │       │                       (simple counting)       │
   │       No                                              │
   │       │                                               │
   │       ▼                                               │
-  │  Need accuracy? ───────Yes──▶ Sliding Window         │
-  │                               (no boundary issues)   │
-  └─────────────────────────────────────────────────────┘
+  │  Need accuracy? ───────Yes──▶ Sliding Window          │
+  │                               (no boundary issues)    │
+  └───────────────────────────────────────────────────────┘
 ```
 
 ### Token Bucket Implementation
@@ -293,18 +293,18 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 ### Distributed Rate Limiting with Redis
 
 ```
-  ┌─────────────────────────────────────────────────┐
-  │  Distributed Rate Limiter                        │
+  ┌───────────────────────────────────────────────────┐
+  │  Distributed Rate Limiter                         │
   │                                                   │
-  │  API Server 1 ──┐                                │
-  │  API Server 2 ──┼──▶ Redis Cluster              │
-  │  API Server 3 ──┘    (centralized counters)      │
+  │  API Server 1 ──┐                                 │
+  │  API Server 2 ──┼──▶ Redis Cluster                │
+  │  API Server 3 ──┘    (centralized counters)       │
   │                                                   │
-  │  Redis INCR rate:{client_id}:{window}            │
-  │  Redis EXPIRE rate:{client_id}:{window} 60       │
+  │  Redis INCR rate:{client_id}:{window}             │
+  │  Redis EXPIRE rate:{client_id}:{window} 60        │
   │                                                   │
-  │  If INCR > limit → REJECT (429 Too Many Requests)│
-  └─────────────────────────────────────────────────┘
+  │  If INCR > limit → REJECT (429 Too Many Requests) │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Rate Limiter Response
@@ -320,32 +320,32 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 ### Rate Limiting Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Rate Limiting Architecture                   │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Client ────▶ API Gateway ────▶ Rate Limiter            │
-│                                      │                   │
-│                              ┌───────▼───────┐          │
-│                              │  Redis Cluster │          │
-│                              │  (counters)    │          │
-│                              └───────────────┘          │
-│                                      │                   │
-│                              ┌───────▼───────┐          │
-│                              │  Rules Engine  │          │
-│                              │  - Per IP      │          │
-│                              │  - Per User    │          │
-│                              │  - Per API     │          │
-│                              │  - Per Plan    │          │
-│                              └───────────────┘          │
-│                                                          │
-│  Tiers:                                                  │
-│  Free:      100 req/min                                  │
-│  Pro:       1000 req/min                                 │
-│  Enterprise: 10000 req/min                               │
-│  Internal:  Unlimited                                    │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Client ────▶ API Gateway ────▶ Rate Limiter              │
+│                                      │                    │
+│                              ┌───────▼────────┐           │
+│                              │  Redis Cluster │           │
+│                              │  (counters)    │           │
+│                              └────────────────┘           │
+│                                      │                    │
+│                              ┌───────▼────────┐           │
+│                              │  Rules Engine  │           │
+│                              │  - Per IP      │           │
+│                              │  - Per User    │           │
+│                              │  - Per API     │           │
+│                              │  - Per Plan    │           │
+│                              └────────────────┘           │
+│                                                           │
+│  Tiers:                                                   │
+│  Free:      100 req/min                                   │
+│  Pro:       1000 req/min                                  │
+│  Enterprise: 10000 req/min                                │
+│  Internal:  Unlimited                                     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ---

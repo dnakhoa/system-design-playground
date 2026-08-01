@@ -19,17 +19,17 @@
 All code in one deployable unit.
 
 ```
-  ┌──────────────────────────────────┐
+  ┌───────────────────────────────────┐
   │           Monolith                │
-  │  ┌──────┐ ┌──────┐ ┌──────┐    │
-  │  │User  │ │Order │ │Payment│    │
-  │  │Module│ │Module│ │Module│    │
-  │  └──────┘ └──────┘ └──────┘    │
-  │  ┌──────┐ ┌──────┐ ┌──────┐    │
-  │  │Email │ │Search│ │Report│    │
-  │  │Module│ │Module│ │Module│    │
-  │  └──────┘ └──────┘ └──────┘    │
-  └──────────────────────────────────┘
+  │  ┌──────┐ ┌──────┐ ┌───────┐      │
+  │  │User  │ │Order │ │Payment│      │
+  │  │Module│ │Module│ │Module │      │
+  │  └──────┘ └──────┘ └───────┘      │
+  │  ┌──────┐ ┌──────┐ ┌──────┐       │
+  │  │Email │ │Search│ │Report│       │
+  │  │Module│ │Module│ │Module│       │
+  │  └──────┘ └──────┘ └──────┘       │
+  └───────────────────────────────────┘
 
   ✓ Simple deployment (one artifact)
   ✓ Simple debugging (one codebase)
@@ -56,7 +56,7 @@ Each service is independently deployable and scalable.
                    │
             ┌──────▼──────┐
             │Service Mesh │
-            │  / API GW  │
+            │  / API GW   │
             └─────────────┘
 
   ✓ Independent deployment
@@ -89,27 +89,27 @@ Each service is independently deployable and scalable.
 Each microservice owns a specific business domain with its own language and model.
 
 ```
-  ┌─────────────────────────────────────────────┐
-  │              E-Commerce Domain               │
+  ┌───────────────────────────────────────────────┐
+  │              E-Commerce Domain                │
   │                                               │
-  │  ┌─────────────┐  ┌─────────────┐           │
-  │  │   Catalog   │  │   Ordering  │           │
-  │  │  Context    │  │   Context   │           │
-  │  │             │  │             │           │
-  │  │ Product     │  │ Order       │           │
-  │  │ Category    │  │ LineItem    │           │
-  │  │ Price       │  │ Cart        │           │
-  │  └─────────────┘  └─────────────┘           │
+  │  ┌─────────────┐  ┌─────────────┐             │
+  │  │   Catalog   │  │   Ordering  │             │
+  │  │  Context    │  │   Context   │             │
+  │  │             │  │             │             │
+  │  │ Product     │  │ Order       │             │
+  │  │ Category    │  │ LineItem    │             │
+  │  │ Price       │  │ Cart        │             │
+  │  └─────────────┘  └─────────────┘             │
   │                                               │
-  │  ┌─────────────┐  ┌─────────────┐           │
-  │  │  Inventory  │  │  Payment    │           │
-  │  │  Context    │  │  Context    │           │
-  │  │             │  │             │           │
-  │  │ Stock       │  │ Transaction │           │
-  │  │ Warehouse   │  │ PaymentMethod│          │
-  │  │ Shipment    │  │ Invoice     │           │
-  │  └─────────────┘  └─────────────┘           │
-  └─────────────────────────────────────────────┘
+  │  ┌─────────────┐  ┌──────────────┐            │
+  │  │  Inventory  │  │  Payment     │            │
+  │  │  Context    │  │  Context     │            │
+  │  │             │  │              │            │
+  │  │ Stock       │  │ Transaction  │            │
+  │  │ Warehouse   │  │ PaymentMethod│            │
+  │  │ Shipment    │  │ Invoice      │            │
+  │  └─────────────┘  └──────────────┘            │
+  └───────────────────────────────────────────────┘
 
   Each context = one microservice
   Each service has its own data model (no shared database)
@@ -354,17 +354,17 @@ result = saga.execute({"order_id": "o123", "amount": 99.99})
 ```
 
 ```
-  ┌──────────────────────────────────────────┐
+  ┌────────────────────────────────────────────┐
   │           Order Saga Orchestrator          │
   │                                            │
-  │  1. Create order (Order Service)          │
-  │  2. Reserve stock (Inventory Service)     │
-  │  3. Charge payment (Payment Service)      │
-  │  4. Confirm order (Order Service)         │
+  │  1. Create order (Order Service)           │
+  │  2. Reserve stock (Inventory Service)      │
+  │  3. Charge payment (Payment Service)       │
+  │  4. Confirm order (Order Service)          │
   │                                            │
   │  Compensation chain:                       │
-  │  If step 3 fails → release stock → cancel │
-  └──────────────────────────────────────────┘
+  │  If step 3 fails → release stock → cancel  │
+  └────────────────────────────────────────────┘
 ```
 
 **Pros**: Clear flow, easy to track, centralized logic.
@@ -541,19 +541,19 @@ def get_users_negotiate(accept: str = Header(default="application/json")):
 ### The Three Pillars
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │              Observability Stack                  │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-  │  │  Logs    │  │  Metrics │  │   Traces     │  │
-  │  │          │  │          │  │              │  │
-  │  │ What     │  │ How much │  │ Where did    │  │
-  │  │ happened │  │ / how    │  │ the request  │  │
-  │  │          │  │ fast     │  │ go?          │  │
-  │  └──────────┘  └──────────┘  └──────────────┘  │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐     │
+  │  │  Logs    │  │  Metrics │  │   Traces     │     │
+  │  │          │  │          │  │              │     │
+  │  │ What     │  │ How much │  │ Where did    │     │
+  │  │ happened │  │ / how    │  │ the request  │     │
+  │  │          │  │ fast     │  │ go?          │     │
+  │  └──────────┘  └──────────┘  └──────────────┘     │
   │                                                   │
-  │  Tools: ELK, Prometheus, Jaeger, Zipkin          │
-  └─────────────────────────────────────────────────┘
+  │  Tools: ELK, Prometheus, Jaeger, Zipkin           │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Distributed Tracing
@@ -561,22 +561,22 @@ def get_users_negotiate(accept: str = Header(default="application/json")):
 ```
   Request: GET /api/orders/123
 
-  ┌──────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────┐
   │ Trace ID: abc-123-def                                 │
   │                                                       │
-  │ ┌─────────────────────────────────────────────────┐  │
+  │ ┌──────────────────────────────────────────────────┐  │
   │ │ API Gateway (2ms)                                │  │
-  │ │ ┌────────────────────────────────────────────┐  │  │
+  │ │ ┌─────────────────────────────────────────────┐  │  │
   │ │ │ Order Service (5ms)                         │  │  │
-  │ │ │ ┌──────────────────────────────────────┐   │  │  │
+  │ │ │ ┌───────────────────────────────────────┐   │  │  │
   │ │ │ │ Database Query (3ms)                  │   │  │  │
-  │ │ │ └──────────────────────────────────────┘   │  │  │
-  │ │ │ ┌──────────────────────────────────────┐   │  │  │
+  │ │ │ └───────────────────────────────────────┘   │  │  │
+  │ │ │ ┌───────────────────────────────────────┐   │  │  │
   │ │ │ │ User Service Call (8ms)               │   │  │  │
-  │ │ │ └──────────────────────────────────────┘   │  │  │
-  │ │ └────────────────────────────────────────────┘  │  │
-  │ └─────────────────────────────────────────────────┘  │
-  └──────────────────────────────────────────────────────┘
+  │ │ │ └───────────────────────────────────────┘   │  │  │
+  │ │ └─────────────────────────────────────────────┘  │  │
+  │ └──────────────────────────────────────────────────┘  │
+  └───────────────────────────────────────────────────────┘
 
   Total: 15ms (but user service was the bottleneck at 8ms)
 ```
@@ -590,42 +590,42 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 ### Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│               Netflix Microservices Architecture        │
-├────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  API Gateway (Zuul)                              │   │
-│  │  - Request routing                               │   │
-│  │  - Authentication                                │   │
-│  │  - Rate limiting                                 │   │
-│  │  - Load balancing                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│  ┌──────────────────────┼──────────────────────┐       │
-│  │                      │                      │       │
-│  ▼                      ▼                      ▼       │
-│ ┌──────┐          ┌──────┐              ┌──────┐      │
-│ │User  │          │Catalog│             │Streaming│    │
-│ │Service│          │Service│             │Service  │    │
-│ │      │          │       │             │         │    │
-│ │-Auth │          │-Movies│             │-Playback│    │
-│ │-Profile│         │-Shows │             │-CDN     │    │
-│ │-Preferences│    │-Genres│             │-Quality │    │
-│ └──────┘          └──────┘              └──────┘      │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Data Stores                                      │   │
-│  │  Cassandra (user data) + MySQL (billing)          │   │
-│  │  EVCache (caching) + Elasticsearch (search)       │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Observability                                    │   │
-│  │  Atlas (metrics) + Zuul (tracing) + ELK (logs)   │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│               Netflix Microservices Architecture             │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────────────────────────────────────┐        │
+│  │  API Gateway (Zuul)                              │        │
+│  │  - Request routing                               │        │
+│  │  - Authentication                                │        │
+│  │  - Rate limiting                                 │        │
+│  │  - Load balancing                                │        │
+│  └──────────────────────────────────────────────────┘        │
+│                         │                                    │
+│  ┌──────────────────────┼──────────────────────┐             │
+│  │                      │                      │             │
+│  ▼                      ▼                      ▼             │
+│ ┌────────────┐          ┌───────┐              ┌──────┐      │
+│ │User        │          │Catalog│             │Streaming│    │
+│ │Service     │     │Service│             │Service  │         │
+│ │            │          │       │              │      │      │
+│ │-Auth       │          │-Movies│             │-Playback│    │
+│ │-Profile    │     │-Shows │             │-CDN     │         │
+│ │-Preferences│    │-Genres│             │-Quality │          │
+│ └────────────┘          └───────┘              └──────┘      │
+│                                                              │
+│  ┌───────────────────────────────────────────────────┐       │
+│  │  Data Stores                                      │       │
+│  │  Cassandra (user data) + MySQL (billing)          │       │
+│  │  EVCache (caching) + Elasticsearch (search)       │       │
+│  └───────────────────────────────────────────────────┘       │
+│                                                              │
+│  ┌───────────────────────────────────────────────────┐       │
+│  │  Observability                                    │       │
+│  │  Atlas (metrics) + Zuul (tracing) + ELK (logs)    │       │
+│  └───────────────────────────────────────────────────┘       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Decisions

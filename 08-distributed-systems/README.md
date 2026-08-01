@@ -52,18 +52,18 @@ Multiple nodes must agree on a single value. All nodes must agree, and the value
 Raft is designed for understandability. Used by etcd, TiKV, CockroachDB.
 
 ```
-  ┌─────────────────────────────────────────────────┐
-  │              Raft Cluster                        │
+  ┌───────────────────────────────────────────────────┐
+  │              Raft Cluster                         │
   │                                                   │
-  │  States: Leader, Follower, Candidate             │
+  │  States: Leader, Follower, Candidate              │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │  Leader  │  │Follower  │  │Follower  │      │
-  │  │  (Node 1)│  │ (Node 2) │  │ (Node 3) │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │  Leader  │  │Follower  │  │Follower  │         │
+  │  │  (Node 1)│  │ (Node 2) │  │ (Node 3) │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Term: 1 → 2 → 3 (monotonically increasing)     │
-  └─────────────────────────────────────────────────┘
+  │  Term: 1 → 2 → 3 (monotonically increasing)       │
+  └───────────────────────────────────────────────────┘
 
   Leader election:
   1. Follower doesn't hear from leader → becomes Candidate
@@ -92,12 +92,12 @@ Raft is designed for understandability. Used by etcd, TiKV, CockroachDB.
   ▼
   Notify followers of commit
 
-  ┌─────────────────────────────────────────────┐
-  │  Log Index:  1    2    3    4    5          │
-  │  Leader:    [X=1][X=2][X=3][X=4][X=5] ✓    │
-  │  Follower1: [X=1][X=2][X=3][X=4][X=5] ✓    │
+  ┌──────────────────────────────────────────────┐
+  │  Log Index:  1    2    3    4    5           │
+  │  Leader:    [X=1][X=2][X=3][X=4][X=5] ✓      │
+  │  Follower1: [X=1][X=2][X=3][X=4][X=5] ✓      │
   │  Follower2: [X=1][X=2][X=3][X=4]    (lagging)│
-  └─────────────────────────────────────────────┘
+  └──────────────────────────────────────────────┘
 
   Leader catches up lagging follower in next heartbeat.
 ```
@@ -426,13 +426,13 @@ Sagas avoid the blocking problem of 2PC by using compensating actions instead of
   Confirm: Commit all reservations
   Cancel:  Release all reservations
 
-  ┌──────────────────────────────────────┐
+  ┌───────────────────────────────────────┐
   │  Order Service:                       │
   │  1. Try: Reserve inventory            │
   │  2. Try: Reserve payment              │
   │  3. If all OK → Confirm both          │
   │  4. If any fail → Cancel both         │
-  └──────────────────────────────────────┘
+  └───────────────────────────────────────┘
 
   ✓ No long-held locks
   ✓ Resources reserved atomically
@@ -647,22 +647,22 @@ Coordination services that provide distributed primitives.
 ### etcd Architecture (Raft-based)
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │                  etcd Cluster                     │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │  Leader  │  │Follower  │  │Follower  │      │
-  │  │ (Node 1) │  │ (Node 2) │  │ (Node 3) │      │
-  │  │          │  │          │  │          │      │
-  │  │ Raft Log │  │ Raft Log │  │ Raft Log │      │
-  │  │ [X=1]    │  │ [X=1]    │  │ [X=1]    │      │
-  │  │ [X=2]    │  │ [X=2]    │  │ [X=2]    │      │
-  │  │ [X=3] ✓  │  │ [X=3]    │  │ [X=3]    │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │  Leader  │  │Follower  │  │Follower  │         │
+  │  │ (Node 1) │  │ (Node 2) │  │ (Node 3) │         │
+  │  │          │  │          │  │          │         │
+  │  │ Raft Log │  │ Raft Log │  │ Raft Log │         │
+  │  │ [X=1]    │  │ [X=1]    │  │ [X=1]    │         │
+  │  │ [X=2]    │  │ [X=2]    │  │ [X=2]    │         │
+  │  │ [X=3] ✓  │  │ [X=3]    │  │ [X=3]    │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Client reads from Leader (or any node with      │
-  │  read consistency)                               │
-  └─────────────────────────────────────────────────┘
+  │  Client reads from Leader (or any node with       │
+  │  read consistency)                                │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

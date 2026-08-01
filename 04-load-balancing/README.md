@@ -23,10 +23,10 @@ A single server can handle ~1,000-10,000 concurrent connections. Beyond that, yo
   │  Client  │                     │  Client  │
   └─────┬────┘                     └─────┬────┘
         │                                │
-  ┌─────▼────┐                     ┌─────▼─────┐
-  │  Server  │ ◄── SPOF           │    LB     │ ◄── Distributes
+  ┌─────▼───────┐                     ┌─────▼─────┐
+  │  Server     │ ◄── SPOF           │    LB     │ ◄── Distributes
   │ (overloaded)│                  └──┬───┬───┬┘     traffic
-  └──────────┘                     ┌──▼─┐┌▼──┐┌▼──┐
+  └─────────────┘                     ┌──▼─┐┌▼──┐┌▼──┐
                                    │ S1 ││ S2 ││ S3 │
                                    └────┘└────┘└────┘
 ```
@@ -140,12 +140,12 @@ Minimize reshuffling when servers are added or removed.
 Operates at TCP/UDP level. Routes based on IP + port.
 
 ```
-  ┌──────────────────────────────────┐
-  │         L4 Load Balancer          │
+  ┌────────────────────────────────────┐
+  │         L4 Load Balancer           │
   │                                    │
-  │  Client IP:Port ──▶ Server IP:Port│
-  │  (no inspection of content)       │
-  └──────────────────────────────────┘
+  │  Client IP:Port ──▶ Server IP:Port │
+  │  (no inspection of content)        │
+  └────────────────────────────────────┘
 
   ✓ Very fast (no packet inspection)
   ✓ Low latency (~microseconds)
@@ -159,14 +159,14 @@ Operates at TCP/UDP level. Routes based on IP + port.
 Operates at HTTP level. Routes based on URL, headers, cookies.
 
 ```
-  ┌──────────────────────────────────────┐
-  │         L7 Load Balancer              │
+  ┌────────────────────────────────────────┐
+  │         L7 Load Balancer               │
   │                                        │
-  │  /api/users    → Server Pool A        │
-  │  /api/orders   → Server Pool B        │
-  │  /static/*     → CDN/Cache            │
-  │  Host: admin.* → Admin Servers        │
-  └──────────────────────────────────────┘
+  │  /api/users    → Server Pool A         │
+  │  /api/orders   → Server Pool B         │
+  │  /static/*     → CDN/Cache             │
+  │  Host: admin.* → Admin Servers         │
+  └────────────────────────────────────────┘
 
   ✓ Content-based routing
   ✓ TLS termination (SSL offloading)
@@ -523,10 +523,10 @@ of the next. For a sliding window, store timestamps in a sorted set
        │                │                │
        └────────────────┼────────────────┘
                         │
-                 ┌──────▼──────┐
+                 ┌──────▼───────┐
                  │ Redis Cluster│ ◄── Centralized counters
                  │ (atomic incr)│
-                 └─────────────┘
+                 └──────────────┘
 
   Problem: Each LB has partial view → need centralized counter
   Solution: Redis INCR with TTL (atomic, fast)
@@ -668,20 +668,20 @@ def handle_request(server):
 An API gateway is a single entry point that handles cross-cutting concerns.
 
 ```
-  ┌──────────────────────────────────────────────────┐
-  │                   API Gateway                     │
-  │                                                    │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-  │  │  Auth    │  │  Rate    │  │   Routing    │   │
-  │  │ (JWT,    │  │  Limit   │  │  /api/v1/*   │   │
-  │  │  OAuth)  │  │          │  │  /api/v2/*   │   │
-  │  └──────────┘  └──────────┘  └──────────────┘   │
-  │                                                    │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-  │  │  Logging │  │  TLS     │  │  Request     │   │
-  │  │  & Tracing│  │  Terminate│  │  Transform  │   │
-  │  └──────────┘  └──────────┘  └──────────────┘   │
-  └──────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────┐
+  │                   API Gateway                       │
+  │                                                     │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐       │
+  │  │  Auth    │  │  Rate    │  │   Routing    │       │
+  │  │ (JWT,    │  │  Limit   │  │  /api/v1/*   │       │
+  │  │  OAuth)  │  │          │  │  /api/v2/*   │       │
+  │  └──────────┘  └──────────┘  └──────────────┘       │
+  │                                                     │
+  │  ┌───────────┐  ┌───────────┐  ┌──────────────┐     │
+  │  │  Logging  │  │  TLS      │  │  Request     │     │
+  │  │  & Tracing│  │  Terminate│  │  Transform   │     │
+  │  └───────────┘  └───────────┘  └──────────────┘     │
+  └─────────────────────────────────────────────────────┘
                           │
           ┌───────────────┼───────────────┐
           │               │               │
@@ -739,38 +739,38 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 ### Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                  Cloudflare Architecture                │
-├────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Anycast Network (IP routing)                    │   │
-│  │  - Same IP address in 310+ cities                │   │
-│  │  - BGP routes to nearest data center             │   │
-│  │  - Automatic failover if DC goes down            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Load Balancing Layer                            │   │
-│  │  - Maglev (consistent hashing) for internal LB  │   │
-│  │  - L7 routing (URL, header, cookie-based)        │   │
-│  │  - Rate limiting (token bucket, per-IP)          │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Edge Compute (Workers)                          │   │
-│  │  - Run customer code at the edge                 │   │
-│  │  - DDoS mitigation                               │   │
-│  │  - WAF (Web Application Firewall)                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
+┌──────────────────────────────────────────────────────────┐
+│                  Cloudflare Architecture                 │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Anycast Network (IP routing)                    │    │
+│  │  - Same IP address in 310+ cities                │    │
+│  │  - BGP routes to nearest data center             │    │
+│  │  - Automatic failover if DC goes down            │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Load Balancing Layer                            │    │
+│  │  - Maglev (consistent hashing) for internal LB   │    │
+│  │  - L7 routing (URL, header, cookie-based)        │    │
+│  │  - Rate limiting (token bucket, per-IP)          │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Edge Compute (Workers)                          │    │
+│  │  - Run customer code at the edge                 │    │
+│  │  - DDoS mitigation                               │    │
+│  │  - WAF (Web Application Firewall)                │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌───────────────────────────────────────────────────┐   │
 │  │  Origin Shield                                    │   │
-│  │  - Caches responses before reaching origin       │   │
-│  │  - Reduces origin load by 60-80%                 │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-└────────────────────────────────────────────────────────┘
+│  │  - Caches responses before reaching origin        │   │
+│  │  - Reduces origin load by 60-80%                  │   │
+│  └───────────────────────────────────────────────────┘   │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

@@ -17,68 +17,68 @@
 ## End-to-End AI System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Production AI System Architecture            │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Client (Web/Mobile/API)                                │
-│  │                                                       │
-│  ▼                                                       │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  API Gateway (Module 04)                          │   │
-│  │  - Authentication (JWT, OAuth)                    │   │
-│  │  - Rate limiting (per-user, per-tier)             │   │
-│  │  - Request validation                             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Semantic Cache (Module 03)                       │   │
-│  │  - Embed query → check cache → hit? return cached │   │
-│  │  - Miss? → continue to model router              │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Model Router (this module)                       │   │
-│  │  - Classify query complexity                      │   │
-│  │  - Route to appropriate model                     │   │
-│  │  - Balance cost vs quality                        │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│         ┌───────────────┼───────────────┐              │
-│         ▼               ▼               ▼              │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐      │
-│  │ Small Model│  │ Large Model│  │ Reasoning  │      │
-│  │ (7B, fast) │  │ (70B,      │  │ Model      │      │
-│  │            │  │  accurate) │  │ (o3, deep) │      │
-│  └────────────┘  └────────────┘  └────────────┘      │
-│         │               │               │              │
-│         └───────────────┼───────────────┘              │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  RAG Pipeline (Module 16)                         │   │
-│  │  - Query → Retrieve → Rerank → Augment           │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Guardrails Pipeline (this module)                │   │
-│  │  Input: Validation → PII Detection → Injection   │   │
-│  │  Output: Hallucination → PII → Content Filter    │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Observability (this module)                      │   │
-│  │  - Tracing (OpenTelemetry)                       │   │
-│  │  - Cost tracking                                  │   │
-│  │  - Quality monitoring                             │   │
-│  │  - Drift detection                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Client (Web/Mobile/API)                                  │
+│  │                                                        │
+│  ▼                                                        │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  API Gateway (Module 04)                          │    │
+│  │  - Authentication (JWT, OAuth)                    │    │
+│  │  - Rate limiting (per-user, per-tier)             │    │
+│  │  - Request validation                             │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Semantic Cache (Module 03)                       │    │
+│  │  - Embed query → check cache → hit? return cached │    │
+│  │  - Miss? → continue to model router               │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Model Router (this module)                       │    │
+│  │  - Classify query complexity                      │    │
+│  │  - Route to appropriate model                     │    │
+│  │  - Balance cost vs quality                        │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│         ┌───────────────┼───────────────┐                 │
+│         ▼               ▼               ▼                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐           │
+│  │ Small Model│  │ Large Model│  │ Reasoning  │           │
+│  │ (7B, fast) │  │ (70B,      │  │ Model      │           │
+│  │            │  │  accurate) │  │ (o3, deep) │           │
+│  └────────────┘  └────────────┘  └────────────┘           │
+│         │               │               │                 │
+│         └───────────────┼───────────────┘                 │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  RAG Pipeline (Module 16)                         │    │
+│  │  - Query → Retrieve → Rerank → Augment            │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Guardrails Pipeline (this module)                │    │
+│  │  Input: Validation → PII Detection → Injection    │    │
+│  │  Output: Hallucination → PII → Content Filter     │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Observability (this module)                      │    │
+│  │  - Tracing (OpenTelemetry)                        │    │
+│  │  - Cost tracking                                  │    │
+│  │  - Quality monitoring                             │    │
+│  │  - Drift detection                                │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -88,28 +88,28 @@
 Route queries to the right model based on complexity. This is the single biggest cost optimization lever.
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Model Routing Decision Tree                  │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Query arrives                                          │
-│  │                                                       │
-│  ▼                                                       │
-│  Simple query? (greeting, FAQ, simple lookup)           │
-│  ├── Yes → Small model (7B, $0.001/query)              │
-│  │                                                       │
-│  Medium query? (summarization, analysis, coding)        │
-│  ├── Yes → Medium model (70B, $0.01/query)             │
-│  │                                                       │
-│  Complex query? (reasoning, math, multi-step)           │
-│  ├── Yes → Reasoning model (o3, $0.10/query)           │
-│  │                                                       │
-│  Unknown complexity?                                     │
-│  ├── Start with small model                             │
-│  ├── If quality insufficient → escalate to larger       │
-│  └── Track escalation rate for routing improvements     │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Query arrives                                            │
+│  │                                                        │
+│  ▼                                                        │
+│  Simple query? (greeting, FAQ, simple lookup)             │
+│  ├── Yes → Small model (7B, $0.001/query)                 │
+│  │                                                        │
+│  Medium query? (summarization, analysis, coding)          │
+│  ├── Yes → Medium model (70B, $0.01/query)                │
+│  │                                                        │
+│  Complex query? (reasoning, math, multi-step)             │
+│  ├── Yes → Reasoning model (o3, $0.10/query)              │
+│  │                                                        │
+│  Unknown complexity?                                      │
+│  ├── Start with small model                               │
+│  ├── If quality insufficient → escalate to larger         │
+│  └── Track escalation rate for routing improvements       │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Routing Strategies
@@ -142,23 +142,23 @@ Route queries to the right model based on complexity. This is the single biggest
 
 ```
   Prompt registry:
-  ┌─────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────┐
   │  prompts/                                            │
-  │  ├── customer_support/                              │
-  │  │   ├── v1.0.txt  (2024-01-15, baseline)         │
-  │  │   ├── v1.1.txt  (2024-02-20, + examples)       │
-  │  │   ├── v1.2.txt  (2024-03-10, + safety rules)   │
-  │  │   └── current.txt → v1.2.txt (symlink)          │
+  │  ├── customer_support/                               │
+  │  │   ├── v1.0.txt  (2024-01-15, baseline)            │
+  │  │   ├── v1.1.txt  (2024-02-20, + examples)          │
+  │  │   ├── v1.2.txt  (2024-03-10, + safety rules)      │
+  │  │   └── current.txt → v1.2.txt (symlink)            │
   │  │                                                   │
-  │  ├── code_review/                                   │
-  │  │   ├── v1.0.txt                                   │
-  │  │   └── current.txt → v1.0.txt                     │
+  │  ├── code_review/                                    │
+  │  │   ├── v1.0.txt                                    │
+  │  │   └── current.txt → v1.0.txt                      │
   │  │                                                   │
-  │  └── summarization/                                 │
-  │      ├── v1.0.txt                                   │
-  │      ├── v1.1.txt (shorter summaries)               │
-  │      └── current.txt → v1.1.txt                     │
-  └─────────────────────────────────────────────────────┘
+  │  └── summarization/                                  │
+  │      ├── v1.0.txt                                    │
+  │      ├── v1.1.txt (shorter summaries)                │
+  │      └── current.txt → v1.1.txt                      │
+  └──────────────────────────────────────────────────────┘
 
   Each prompt version:
   - Has a unique ID (v1.2)
@@ -170,27 +170,27 @@ Route queries to the right model based on complexity. This is the single biggest
 ### A/B Testing for LLM Outputs
 
 ```
-  ┌─────────────────────────────────────────────────────┐
-  │  A/B Testing for Prompts                             │
-  │                                                       │
-  │  Traffic: 1000 queries/day                           │
-  │                                                       │
-  │  Control (50%): Prompt v1.1                         │
-  │  Treatment (50%): Prompt v1.2                       │
-  │                                                       │
-  │  Metrics:                                            │
-  │  - User satisfaction (thumbs up/down)               │
-  │  - Task completion rate                              │
-  │  - Latency                                           │
-  │  - Cost                                              │
-  │                                                       │
-  │  After 7 days:                                       │
-  │  - v1.1: 78% satisfaction, $0.005/query             │
-  │  - v1.2: 85% satisfaction, $0.006/query             │
-  │                                                       │
+  ┌────────────────────────────────────────────────────────┐
+  │  A/B Testing for Prompts                               │
+  │                                                        │
+  │  Traffic: 1000 queries/day                             │
+  │                                                        │
+  │  Control (50%): Prompt v1.1                            │
+  │  Treatment (50%): Prompt v1.2                          │
+  │                                                        │
+  │  Metrics:                                              │
+  │  - User satisfaction (thumbs up/down)                  │
+  │  - Task completion rate                                │
+  │  - Latency                                             │
+  │  - Cost                                                │
+  │                                                        │
+  │  After 7 days:                                         │
+  │  - v1.1: 78% satisfaction, $0.005/query                │
+  │  - v1.2: 85% satisfaction, $0.006/query                │
+  │                                                        │
   │  Decision: v1.2 wins (7% improvement, 20% cost increase│
-  │  acceptable)                                         │
-  └─────────────────────────────────────────────────────┘
+  │  acceptable)                                           │
+  └────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -202,85 +202,85 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 ### Input Guardrails
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Input Guardrails Pipeline                    │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  User input                                             │
-│  │                                                       │
-│  ▼                                                       │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  1. Input Validation                              │   │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  User input                                               │
+│  │                                                        │
+│  ▼                                                        │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │  1. Input Validation                               │   │
 │  │  - Length limits                                   │   │
 │  │  - Format validation                               │   │
 │  │  - Character filtering                             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  2. Prompt Injection Detection                    │   │
-│  │  - Pattern matching (known attacks)               │   │
-│  │  - ML classifier (novel attacks)                  │   │
-│  │  - Input/output consistency check                 │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  3. PII Detection & Redaction                     │   │
-│  │  - SSN, credit card, email, phone                 │   │
-│  │  - Redact or mask before sending to LLM          │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  Clean input → LLM                                     │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│  └────────────────────────────────────────────────────┘   │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  2. Prompt Injection Detection                    │    │
+│  │  - Pattern matching (known attacks)               │    │
+│  │  - ML classifier (novel attacks)                  │    │
+│  │  - Input/output consistency check                 │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  3. PII Detection & Redaction                     │    │
+│  │  - SSN, credit card, email, phone                 │    │
+│  │  - Redact or mask before sending to LLM           │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  Clean input → LLM                                        │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Output Guardrails
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Output Guardrails Pipeline                   │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  LLM output                                             │
-│  │                                                       │
-│  ▼                                                       │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  1. Hallucination Check                           │   │
-│  │  - Compare output against retrieved context       │   │
-│  │  - Flag unsupported claims                        │   │
-│  │  - Score: 0 (pure hallucination) to 1 (grounded) │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  2. PII Detection in Output                       │   │
-│  │  - Scan for SSN, credit cards, emails             │   │
-│  │  - Redact if found                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  3. Content Filtering                             │   │
-│  │  - Harmful content detection                      │   │
-│  │  - Policy compliance check                        │   │
-│  │  - Toxicity scoring                               │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  4. Output Validation                             │   │
-│  │  - Schema validation (if structured output)       │   │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  LLM output                                               │
+│  │                                                        │
+│  ▼                                                        │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  1. Hallucination Check                           │    │
+│  │  - Compare output against retrieved context       │    │
+│  │  - Flag unsupported claims                        │    │
+│  │  - Score: 0 (pure hallucination) to 1 (grounded)  │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  2. PII Detection in Output                       │    │
+│  │  - Scan for SSN, credit cards, emails             │    │
+│  │  - Redact if found                                │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  3. Content Filtering                             │    │
+│  │  - Harmful content detection                      │    │
+│  │  - Policy compliance check                        │    │
+│  │  - Toxicity scoring                               │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │  4. Output Validation                              │   │
+│  │  - Schema validation (if structured output)        │   │
 │  │  - Length limits                                   │   │
-│  │  - Format compliance                              │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  Clean output → User                                   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│  │  - Format compliance                               │   │
+│  └────────────────────────────────────────────────────┘   │
+│                         │                                 │
+│                         ▼                                 │
+│  Clean output → User                                      │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Prompt Injection Attack Types
@@ -313,80 +313,80 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 ### The Observability Stack
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              AI Observability Stack                       │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Traces (OpenTelemetry)                          │   │
-│  │  - Every LLM call traced end-to-end              │   │
-│  │  - Latency per component                         │   │
-│  │  - Token usage per call                          │   │
-│  │  - Error rates                                    │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Metrics (Prometheus/Grafana)                    │   │
-│  │  - Requests per second                           │   │
-│  │  - P50/P95/P99 latency                           │   │
-│  │  - Token usage (input/output)                    │   │
-│  │  - Cost per query                                 │   │
-│  │  - Error rate                                     │   │
-│  │  - Cache hit ratio                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Quality Monitoring                               │   │
-│  │  - LLM-as-judge scoring (sample of responses)   │   │
-│  │  - User feedback (thumbs up/down)                │   │
-│  │  - Task completion rate                           │   │
-│  │  - Hallucination rate                             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Drift Detection                                  │   │
-│  │  - Input distribution shift                      │   │
-│  │  - Output quality degradation                    │   │
-│  │  - Model performance drift                       │   │
-│  │  - Cost drift                                    │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Traces (OpenTelemetry)                           │    │
+│  │  - Every LLM call traced end-to-end               │    │
+│  │  - Latency per component                          │    │
+│  │  - Token usage per call                           │    │
+│  │  - Error rates                                    │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Metrics (Prometheus/Grafana)                     │    │
+│  │  - Requests per second                            │    │
+│  │  - P50/P95/P99 latency                            │    │
+│  │  - Token usage (input/output)                     │    │
+│  │  - Cost per query                                 │    │
+│  │  - Error rate                                     │    │
+│  │  - Cache hit ratio                                │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Quality Monitoring                               │    │
+│  │  - LLM-as-judge scoring (sample of responses)     │    │
+│  │  - User feedback (thumbs up/down)                 │    │
+│  │  - Task completion rate                           │    │
+│  │  - Hallucination rate                             │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Drift Detection                                  │    │
+│  │  - Input distribution shift                       │    │
+│  │  - Output quality degradation                     │    │
+│  │  - Model performance drift                        │    │
+│  │  - Cost drift                                     │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Key Metrics Dashboard
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │              AI System Dashboard                         │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Requests: 1,234/min  │  Latency P95: 320ms            │
-│  Errors: 0.12%        │  Cost: $0.003/query            │
+│  Requests: 1,234/min  │  Latency P95: 320ms              │
+│  Errors: 0.12%        │  Cost: $0.003/query              │
 │                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Model Usage Distribution                        │   │
-│  │  Small (7B):  ████████████████████ 65%           │   │
-│  │  Medium (70B): ██████████ 30%                    │   │
+│  ┌───────────────────────────────────────────────────┐   │
+│  │  Model Usage Distribution                         │   │
+│  │  Small (7B):  ████████████████████ 65%            │   │
+│  │  Medium (70B): ██████████ 30%                     │   │
 │  │  Reasoning:    ██ 5%                              │   │
-│  └─────────────────────────────────────────────────┘   │
+│  └───────────────────────────────────────────────────┘   │
 │                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Quality Metrics (last 24h)                      │   │
-│  │  User satisfaction: 87% (↑2% from yesterday)     │   │
-│  │  Hallucination rate: 3.2% (↓0.5%)                │   │
-│  │  Task completion: 92% (→ same)                   │   │
-│  └─────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Quality Metrics (last 24h)                      │    │
+│  │  User satisfaction: 87% (↑2% from yesterday)     │    │
+│  │  Hallucination rate: 3.2% (↓0.5%)                │    │
+│  │  Task completion: 92% (→ same)                   │    │
+│  └──────────────────────────────────────────────────┘    │
 │                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Cost Breakdown                                  │   │
-│  │  LLM API: $1,234/day                            │   │
-│  │  Vector DB: $45/day                              │   │
-│  │  Compute: $234/day                               │   │
-│  │  Total: $1,513/day                               │   │
-│  └─────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Cost Breakdown                                  │    │
+│  │  LLM API: $1,234/day                             │    │
+│  │  Vector DB: $45/day                              │    │
+│  │  Compute: $234/day                               │    │
+│  │  Total: $1,513/day                               │    │
+│  └──────────────────────────────────────────────────┘    │
 │                                                          │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -394,53 +394,53 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 ## Scaling from Prototype to 100M Users
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                    Scaling Stages                         │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Stage 1: Prototype (0-1K users)                        │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  - Single server (FastAPI + SQLite)               │   │
-│  │  - Direct LLM API calls (no routing)             │   │
-│  │  - Basic logging                                  │   │
-│  │  Cost: ~$100/month                               │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  Stage 2: Growth (1K-100K users)                       │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  - Load balancer + 2-3 API servers               │   │
-│  │  - PostgreSQL + Redis cache                       │   │
-│  │  - Basic rate limiting                            │   │
-│  │  - Model routing (small vs large)                │   │
-│  │  Cost: ~$5K/month                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  Stage 3: Scale (100K-10M users)                       │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  - Kubernetes cluster                             │   │
-│  │  - Multiple model endpoints                      │   │
-│  │  - Full guardrails pipeline                      │   │
-│  │  - Observability stack (OpenTelemetry)           │   │
-│  │  - A/B testing framework                         │   │
-│  │  - CDN for static assets                         │   │
-│  │  Cost: ~$50K/month                               │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  Stage 4: Enterprise (10M-100M users)                  │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  - Multi-region deployment                       │   │
-│  │  - Custom model hosting (vLLM clusters)          │   │
-│  │  - Advanced caching (semantic cache)             │   │
-│  │  - ML-based model routing                        │   │
-│  │  - Full audit trail                              │   │
-│  │  - SOC 2 compliance                              │   │
-│  │  Cost: ~$500K/month                              │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Stage 1: Prototype (0-1K users)                          │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  - Single server (FastAPI + SQLite)               │    │
+│  │  - Direct LLM API calls (no routing)              │    │
+│  │  - Basic logging                                  │    │
+│  │  Cost: ~$100/month                                │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  Stage 2: Growth (1K-100K users)                          │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  - Load balancer + 2-3 API servers                │    │
+│  │  - PostgreSQL + Redis cache                       │    │
+│  │  - Basic rate limiting                            │    │
+│  │  - Model routing (small vs large)                 │    │
+│  │  Cost: ~$5K/month                                 │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  Stage 3: Scale (100K-10M users)                          │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  - Kubernetes cluster                             │    │
+│  │  - Multiple model endpoints                       │    │
+│  │  - Full guardrails pipeline                       │    │
+│  │  - Observability stack (OpenTelemetry)            │    │
+│  │  - A/B testing framework                          │    │
+│  │  - CDN for static assets                          │    │
+│  │  Cost: ~$50K/month                                │    │
+│  └───────────────────────────────────────────────────┘    │
+│                         │                                 │
+│                         ▼                                 │
+│  Stage 4: Enterprise (10M-100M users)                     │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  - Multi-region deployment                       │     │
+│  │  - Custom model hosting (vLLM clusters)          │     │
+│  │  - Advanced caching (semantic cache)             │     │
+│  │  - ML-based model routing                        │     │
+│  │  - Full audit trail                              │     │
+│  │  - SOC 2 compliance                              │     │
+│  │  Cost: ~$500K/month                              │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### What Changes at Each Stage

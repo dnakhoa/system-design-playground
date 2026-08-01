@@ -164,20 +164,20 @@ Redis is the most popular caching system. Understanding its internals is critica
 ### Why Redis Is Fast
 
 ```
-  ┌─────────────────────────────────────┐
+  ┌──────────────────────────────────────┐
   │              Redis                   │
-  ├─────────────────────────────────────┤
+  ├──────────────────────────────────────┤
   │  Single-threaded event loop          │
-  │  ┌─────────────────────────────┐    │
-  │  │  Accept → Parse → Execute   │    │
-  │  │       → Respond             │    │
-  │  │  (all in one thread)        │    │
-  │  └─────────────────────────────┘    │
+  │  ┌─────────────────────────────┐     │
+  │  │  Accept → Parse → Execute   │     │
+  │  │       → Respond             │     │
+  │  │  (all in one thread)        │     │
+  │  └─────────────────────────────┘     │
   │                                      │
   │  In-memory data store                │
   │  No disk I/O on hot path             │
   │  Efficient data structures           │
-  └─────────────────────────────────────┘
+  └──────────────────────────────────────┘
 
   Why single-threaded is fast:
   - No context switching
@@ -218,10 +218,10 @@ Content Delivery Networks cache static assets at edge locations worldwide.
 ### CDN Topology
 
 ```
-                        ┌──────────────────┐
+                        ┌───────────────────┐
                         │    Origin Server  │
                         │    (your app)     │
-                        └────────┬─────────┘
+                        └────────┬──────────┘
                                  │
                         ┌────────▼─────────┐
                         │  Origin Shield   │
@@ -672,38 +672,38 @@ Netflix serves 230M+ subscribers with a sophisticated multi-layer caching strate
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                    Netflix Caching Stack                  │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  CDN (Open Connect)                              │    │
-│  │  - 10,000+ edge servers worldwide                │    │
-│  │  - Caches video content (adaptive bitrate)       │    │
-│  │  - 95%+ of traffic served from edge              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Application Cache (EVCache / Memcached)         │    │
-│  │  - User profiles, viewing history, preferences   │    │
-│  │  - Per-device personalization                    │    │
-│  │  - TTL: 10 minutes to 24 hours (varies)          │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Pre-computation Cache                           │    │
-│  │  - Recommendation results (personalized rows)    │    │
-│  │  - Pre-rendered homepage layout                  │    │
-│  │  - Updated every few minutes via background jobs │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Database Layer                                  │    │
-│  │  - Cassandra (user data, viewing history)        │    │
-│  │  - MySQL (billing, subscriptions)                │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  CDN (Open Connect)                              │     │
+│  │  - 10,000+ edge servers worldwide                │     │
+│  │  - Caches video content (adaptive bitrate)       │     │
+│  │  - 95%+ of traffic served from edge              │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Application Cache (EVCache / Memcached)         │     │
+│  │  - User profiles, viewing history, preferences   │     │
+│  │  - Per-device personalization                    │     │
+│  │  - TTL: 10 minutes to 24 hours (varies)          │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Pre-computation Cache                           │     │
+│  │  - Recommendation results (personalized rows)    │     │
+│  │  - Pre-rendered homepage layout                  │     │
+│  │  - Updated every few minutes via background jobs │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Database Layer                                  │     │
+│  │  - Cassandra (user data, viewing history)        │     │
+│  │  - MySQL (billing, subscriptions)                │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

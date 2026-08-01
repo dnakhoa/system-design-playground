@@ -40,25 +40,25 @@ By the end of this module, you will be able to:
 ### The Security Triangle
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    SECURITY TRIANGLE                        │
-│                                                             │
-│                     ┌─────────┐                             │
-│                     │   WHO   │                             │
-│                     │  (AuthN)│                             │
-│                     └────┬────┘                             │
-│                          │                                  │
-│              ┌───────────┴───────────┐                      │
-│              │                       │                      │
-│         ┌────┴────┐            ┌─────┴────┐                 │
-│         │  WHAT   │            │  HOW     │                 │
-│         │ (AuthZ) │            │(Transport)│                │
-│         └─────────┘            └──────────┘                 │
-│                                                             │
-│   Authentication: Prove you are who you claim to be        │
-│   Authorization:  What are you allowed to do?              │
-│   Transport:      How is data protected in transit?        │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    SECURITY TRIANGLE                         │
+│                                                              │
+│                     ┌─────────┐                              │
+│                     │   WHO   │                              │
+│                     │  (AuthN)│                              │
+│                     └────┬────┘                              │
+│                          │                                   │
+│              ┌───────────┴───────────┐                       │
+│              │                       │                       │
+│         ┌────┴────┐            ┌─────┴─────┐                 │
+│         │  WHAT   │            │  HOW      │                 │
+│         │ (AuthZ) │            │(Transport)│                 │
+│         └─────────┘            └───────────┘                 │
+│                                                              │
+│   Authentication: Prove you are who you claim to be          │
+│   Authorization:  What are you allowed to do?                │
+│   Transport:      How is data protected in transit?          │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Authentication Mechanisms Comparison
@@ -160,34 +160,34 @@ print(f"Valid payload: {payload}")
 ┌────────────────────────────────────────────────────────────────┐
 │  RBAC (Role-Based Access Control)                              │
 │                                                                │
-│  User ──▶ Role ──▶ Permission                                 │
+│  User ──▶ Role ──▶ Permission                                  │
 │                                                                │
-│  user_1 ──▶ admin ──▶ {read, write, delete, manage_users}     │
-│  user_2 ──▶ editor ──▶ {read, write}                          │
-│  user_3 ──▶ viewer ──▶ {read}                                 │
+│  user_1 ──▶ admin ──▶ {read, write, delete, manage_users}      │
+│  user_2 ──▶ editor ──▶ {read, write}                           │
+│  user_3 ──▶ viewer ──▶ {read}                                  │
 │                                                                │
-│  ✓ Simple to understand and audit                             │
-│  ✓ Works well for hierarchical organizations                  │
-│  ✗ Role explosion (too many roles for fine-grained control)   │
+│  ✓ Simple to understand and audit                              │
+│  ✓ Works well for hierarchical organizations                   │
+│  ✗ Role explosion (too many roles for fine-grained control)    │
 ├────────────────────────────────────────────────────────────────┤
-│  ABAC (Attribute-Based Access Control)                        │
+│  ABAC (Attribute-Based Access Control)                         │
 │                                                                │
-│  Subject Attributes + Resource Attributes + Environment       │
-│                              ↓                                │
-│                         Policy Engine                         │
-│                              ↓                                │
+│  Subject Attributes + Resource Attributes + Environment        │
+│                              ↓                                 │
+│                         Policy Engine                          │
+│                              ↓                                 │
 │                          Decision                              │
 │                                                                │
 │  Example:                                                      │
 │  IF user.department == "finance"                               │
 │  AND resource.classification == "confidential"                 │
-│  AND time.hour BETWEEN 9 AND 17                               │
+│  AND time.hour BETWEEN 9 AND 17                                │
 │  AND location.country == "US"                                  │
 │  THEN ALLOW                                                    │
 │                                                                │
-│  ✓ Fine-grained, context-aware                               │
-│  ✓ Scales without role explosion                              │
-│  ✗ Complex to implement and audit                             │
+│  ✓ Fine-grained, context-aware                                 │
+│  ✓ Scales without role explosion                               │
+│  ✗ Complex to implement and audit                              │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -264,30 +264,30 @@ print(f"Decrypted: {decrypted}")
 ### Key Management with KMS
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    KMS Key Hierarchy                            │
-│                                                                 │
-│                    ┌─────────────────┐                          │
-│                    │   Master Key    │                          │
-│                    │ (HSM-protected) │                          │
-│                    └────────┬────────┘                          │
-│                             │                                   │
-│              ┌──────────────┼──────────────┐                    │
+┌──────────────────────────────────────────────────────────────────┐
+│                    KMS Key Hierarchy                             │
+│                                                                  │
+│                    ┌─────────────────┐                           │
+│                    │   Master Key    │                           │
+│                    │ (HSM-protected) │                           │
+│                    └────────┬────────┘                           │
+│                             │                                    │
+│              ┌──────────────┼──────────────┐                     │
 │              │              │              │                     │
-│         ┌────┴────┐   ┌────┴────┐   ┌────┴────┐                │
-│         │DEK Key │   │DEK Key │   │DEK Key │                  │
-│         │(DB)    │   │(Files) │   │(Logs)  │                  │
-│         └─────────┘   └─────────┘   └─────────┘                │
-│                                                                 │
-│   DEK = Data Encryption Key                                    │
-│   Master Key encrypts/decrypts DEKs                            │
-│   DEKs encrypt actual data                                     │
-│                                                                 │
-│   Key Rotation Schedule:                                        │
-│   - Master Key: 1-2 years                                      │
-│   - DEKs: 90 days (or per compliance requirement)              │
-│   - TLS certificates: 90 days (Let's Encrypt auto-renew)      │
-└─────────────────────────────────────────────────────────────────┘
+│         ┌────┴────┐   ┌────┴────┐   ┌────┴────┐                  │
+│         │DEK Key  │  │DEK Key │   │DEK Key │                     │
+│         │(DB)     │  │(Files) │   │(Logs)  │                     │
+│         └─────────┘   └─────────┘   └─────────┘                  │
+│                                                                  │
+│   DEK = Data Encryption Key                                      │
+│   Master Key encrypts/decrypts DEKs                              │
+│   DEKs encrypt actual data                                       │
+│                                                                  │
+│   Key Rotation Schedule:                                         │
+│   - Master Key: 1-2 years                                        │
+│   - DEKs: 90 days (or per compliance requirement)                │
+│   - TLS certificates: 90 days (Let's Encrypt auto-renew)         │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### TLS 1.3 Handshake (Simplified)
@@ -416,12 +416,12 @@ at the point of use.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Strategy         │  Implementation      │  Use Case           │
-├───────────────────┼──────────────────────┼─────────────────────┤
-│  Fixed Window     │  Counter per hour    │  Simple APIs        │
-│  Sliding Window   │  Timestamps per min  │  Smooth traffic     │
-│  Token Bucket     │  Tokens + refill     │  Bursty traffic     │
-│  Leaky Bucket     │  Queue + fixed rate  │  Constant output    │
+│  Strategy         │  Implementation      │  Use Case            │
+├───────────────────┼──────────────────────┼───────────────────── ┤
+│  Fixed Window     │  Counter per hour    │  Simple APIs         │
+│  Sliding Window   │  Timestamps per min  │  Smooth traffic      │
+│  Token Bucket     │  Tokens + refill     │  Bursty traffic      │
+│  Leaky Bucket     │  Queue + fixed rate  │  Constant output     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -582,10 +582,10 @@ print(f"Current secret: {rotator.get_current_secret()[:20]}...")
 │                      STRIPE SECURITY LAYERS                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐             │
-│  │   Client    │    │   Client    │    │   Client    │             │
-│  │  (Browser)  │    │  (Mobile)   │    │  (Server)   │             │
-│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐              │
+│  │   Client    │    │   Client    │    │   Client    │              │
+│  │  (Browser)  │    │  (Mobile)   │    │  (Server)   │              │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘              │
 │         │                  │                  │                     │
 │         └──────────────────┼──────────────────┘                     │
 │                            │                                        │
@@ -602,10 +602,10 @@ print(f"Current secret: {rotator.get_current_secret()[:20]}...")
 │                            │                                        │
 │         ┌──────────────────┼──────────────────┐                     │
 │         │                  │                  │                     │
-│    ┌────┴────┐       ┌────┴────┐        ┌────┴────┐               │
-│    │ AuthN   │       │ AuthZ   │        │ PCI DSS │               │
-│    │ Service │       │ Service │        │ Vault   │               │
-│    └────┬────┘       └────┬────┘        └────┬────┘               │
+│    ┌────┴────┐       ┌────┴────┐        ┌────┴────┐                 │
+│    │ AuthN   │       │ AuthZ   │        │ PCI DSS │                 │
+│    │ Service │       │ Service │        │ Vault   │                 │
+│    └────┬────┘       └────┬────┘        └────┬────┘                 │
 │         │                  │                  │                     │
 │         └──────────────────┼──────────────────┘                     │
 │                            │                                        │
@@ -708,15 +708,15 @@ def verify_webhook_signature(payload: bytes, header: str,
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  PCI DSS Requirements for Stripe Integration                  │
+│  PCI DSS Requirements for Stripe Integration                   │
 ├────────────────────────────────────────────────────────────────┤
-│  1. Never store raw card numbers (use tokens)                 │
-│  2. Use Stripe.js/Elements (card data never hits your server) │
-│  3. Validate webhook signatures                               │
-│  4. Use TLS for all communications                            │
-│  5. Implement access controls (least privilege)               │
-│  6. Log and monitor all access to cardholder data             │
-│  7. Regular security testing and penetration testing          │
+│  1. Never store raw card numbers (use tokens)                  │
+│  2. Use Stripe.js/Elements (card data never hits your server)  │
+│  3. Validate webhook signatures                                │
+│  4. Use TLS for all communications                             │
+│  5. Implement access controls (least privilege)                │
+│  6. Log and monitor all access to cardholder data              │
+│  7. Regular security testing and penetration testing           │
 └────────────────────────────────────────────────────────────────┘
 ```
 

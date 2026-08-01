@@ -105,22 +105,22 @@ Kafka is the dominant message queue for high-throughput event streaming.
 ### Architecture
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │                  Kafka Cluster                    │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │ Broker 1 │  │ Broker 2 │  │ Broker 3 │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │ Broker 1 │  │ Broker 2 │  │ Broker 3 │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Topic: "user-events" (3 partitions)             │
+  │  Topic: "user-events" (3 partitions)              │
   │                                                   │
-  │  ┌─────────┐  ┌─────────┐  ┌─────────┐         │
-  │  │Part. 0  │  │Part. 1  │  │Part. 2  │         │
-  │  │msg0,msg3│  │msg1,msg4│  │msg2,msg5│         │
-  │  │msg6,msg9│  │msg7     │  │msg8     │         │
-  │  └─────────┘  └─────────┘  └─────────┘         │
+  │  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+  │  │Part. 0  │  │Part. 1  │  │Part. 2  │            │
+  │  │msg0,msg3│  │msg1,msg4│  │msg2,msg5│            │
+  │  │msg6,msg9│  │msg7     │  │msg8     │            │
+  │  └─────────┘  └─────────┘  └─────────┘            │
   │                                                   │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 
   Producer ────▶ Topic (partitioned by key)
                     │
@@ -269,9 +269,9 @@ print(reconstructed.balance)  # 900
 
 ```
   Traditional (current state):
-  ┌──────────────────────────┐
+  ┌───────────────────────────┐
   │  Account Balance: $900    │  ← Only the latest state.
-  └──────────────────────────┘     How did it get here? No idea.
+  └───────────────────────────┘     How did it get here? No idea.
 
   Event Sourcing (event log):
   ┌──────────────────────────┐
@@ -373,23 +373,23 @@ print(read_db.get_order("o1"))  # Fast read, no JOINs
 ```
 
 ```
-  ┌──────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────┐
   │                                               │
-  │   Commands (Writes)      Queries (Reads)     │
-  │   ┌───────────┐         ┌───────────┐       │
-  │   │  Command  │         │  Query    │       │
-  │   │  Handler  │         │  Handler  │       │
-  │   └─────┬─────┘         └─────┬─────┘       │
-  │         │                      │             │
-  │         ▼                      ▼             │
-  │   ┌───────────┐         ┌───────────┐       │
-  │   │  Write DB │──sync──▶│  Read DB  │       │
-  │   │ (Normalized)│        │(Denormalized)│    │
-  │   └───────────┘         └───────────┘       │
+  │   Commands (Writes)      Queries (Reads)      │
+  │   ┌───────────┐         ┌───────────┐         │
+  │   │  Command  │         │  Query    │         │
+  │   │  Handler  │         │  Handler  │         │
+  │   └─────┬─────┘         └─────┬─────┘         │
+  │         │                      │              │
+  │         ▼                      ▼              │
+  │   ┌─────────────┐         ┌───────────┐       │
+  │   │  Write DB   │──sync──▶│  Read DB  │       │
+  │   │ (Normalized)│        │(Denormalized)│     │
+  │   └─────────────┘         └───────────┘       │
   │                                               │
-  │   Write DB: Optimized for writes             │
-  │   Read DB: Optimized for reads (pre-joined)  │
-  └──────────────────────────────────────────────┘
+  │   Write DB: Optimized for writes              │
+  │   Read DB: Optimized for reads (pre-joined)   │
+  └───────────────────────────────────────────────┘
 
   ✓ Independent scaling of reads and writes
   ✓ Optimized data models for each use case
@@ -576,32 +576,32 @@ Uber processes millions of events per second across ride matching, pricing, driv
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                Uber Event-Driven Architecture            │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Event Sources:                                          │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐          │
-│  │Rider   │ │Driver  │ │Payment │ │GPS     │          │
-│  │App     │ │App     │ │Service │ │Tracker │          │
-│  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘          │
-│      │          │          │          │                 │
-│      └──────────┼──────────┼──────────┘                 │
-│                 │          │                            │
-│         ┌───────▼──────────▼───────┐                   │
-│         │    Kafka Cluster          │                   │
-│         │    (millions of events/s) │                   │
-│         └───────────┬───────────────┘                   │
-│                     │                                   │
-│    ┌────────────────┼────────────────┐                 │
-│    │                │                │                  │
-│    ▼                ▼                ▼                  │
-│ ┌──────┐      ┌──────┐        ┌──────┐               │
-│ │Pricing│      │Matching│      │Analytics│             │
-│ │Engine │      │Engine  │      │Pipeline│              │
-│ └──────┘      └──────┘        └──────┘               │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                Uber Event-Driven Architecture                │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Event Sources:                                              │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                 │
+│  │Rider   │ │Driver  │ │Payment │ │GPS     │                 │
+│  │App     │ │App     │ │Service │ │Tracker │                 │
+│  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘                 │
+│      │          │          │          │                      │
+│      └──────────┼──────────┼──────────┘                      │
+│                 │          │                                 │
+│         ┌───────▼──────────▼───────┐                         │
+│         │    Kafka Cluster          │                        │
+│         │    (millions of events/s) │                        │
+│         └───────────┬───────────────┘                        │
+│                     │                                        │
+│    ┌────────────────┼────────────────┐                       │
+│    │                │                │                       │
+│    ▼                ▼                ▼                       │
+│ ┌───────┐      ┌────────┐        ┌────────┐                  │
+│ │Pricing│      │Matching│      │Analytics│                   │
+│ │Engine │      │Engine  │        │Pipeline│                  │
+│ └───────┘      └────────┘        └────────┘                  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

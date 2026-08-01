@@ -68,12 +68,12 @@ Traditional serving allocates contiguous GPU memory for each sequence:
 
 ```
   GPU Memory:
-  ┌─────────────────────────────────────────────────┐
+  ┌────────────────────────────────────────────────────┐
   │ Seq 1: [████████░░░░░░░░] (allocated 10K, used 5K) │ 50% wasted!
   │ Seq 2: [██████░░░░░░░░░░] (allocated 10K, used 3K) │ 70% wasted!
   │ Seq 3: [██░░░░░░░░░░░░░░] (allocated 10K, used 1K) │ 90% wasted!
-  │ Free:  [░░░░░░░░░░░░░░░░] (no more room!)         │
-  └─────────────────────────────────────────────────┘
+  │ Free:  [░░░░░░░░░░░░░░░░] (no more room!)          │
+  └────────────────────────────────────────────────────┘
 
   Problem: Pre-allocated blocks waste 60-80% of memory
 ```
@@ -84,16 +84,16 @@ PagedAttention borrows from OS virtual memory: KV cache is stored in non-contigu
 
 ```
   GPU Memory (PagedAttention):
-  ┌─────────────────────────────────────────────────┐
-  │ Page Table:                                      │
-  │ Seq 1: [Page 0] → [Page 3] → [Page 7]          │
-  │ Seq 2: [Page 1] → [Page 5]                     │
-  │ Seq 3: [Page 2] → [Page 4] → [Page 6] → [Page 8]│
+  ┌───────────────────────────────────────────────────┐
+  │ Page Table:                                       │
+  │ Seq 1: [Page 0] → [Page 3] → [Page 7]             │
+  │ Seq 2: [Page 1] → [Page 5]                        │
+  │ Seq 3: [Page 2] → [Page 4] → [Page 6] → [Page 8]  │
   │                                                   │
-  │ Physical Pages:                                  │
-  │ [P0:cat] [P1:on] [P2:the] [P3:sat] [P4:is]    │
-  │ [P5:big] [P6:red] [P7:and] [P8:fat]            │
-  └─────────────────────────────────────────────────┘
+  │ Physical Pages:                                   │
+  │ [P0:cat] [P1:on] [P2:the] [P3:sat] [P4:is]        │
+  │ [P5:big] [P6:red] [P7:and] [P8:fat]               │
+  └───────────────────────────────────────────────────┘
 
   Benefits:
   - No memory waste (allocate only what's used)
@@ -160,31 +160,31 @@ New requests join the batch as others complete.
 ### PagedAttention + Continuous Batching
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Modern LLM Serving Stack                         │
   │                                                   │
   │  Request Queue                                    │
-  │  ┌───┬───┬───┬───┬───┬───┐                     │
-  │  │ R1│ R2│ R3│ R4│ R5│ R6│                     │
-  │  └───┴───┴───┴───┴───┴───┘                     │
+  │  ┌───┬───┬───┬───┬───┬───┐                        │
+  │  │ R1│ R2│ R3│ R4│ R5│ R6│                        │
+  │  └───┴───┴───┴───┴───┴───┘                        │
   │       │                                           │
   │       ▼                                           │
-  │  ┌──────────────────────────────────────────┐   │
+  │  ┌────────────────────────────────────────────┐   │
   │  │  Scheduler (Continuous Batching)           │   │
   │  │  - Assigns sequences to GPU blocks         │   │
   │  │  - Manages preemption (swap out long seqs) │   │
   │  │  - Optimizes batch composition             │   │
-  │  └──────────────────────────────────────────┘   │
+  │  └────────────────────────────────────────────┘   │
   │       │                                           │
   │       ▼                                           │
-  │  ┌──────────────────────────────────────────┐   │
-  │  │  GPU Execution                            │   │
-  │  │  - PagedAttention for KV cache            │   │
-  │  │  - Continuous batching                    │   │
-  │  │  - Tensor parallelism across GPUs         │   │
-  │  └──────────────────────────────────────────┘   │
+  │  ┌───────────────────────────────────────────┐    │
+  │  │  GPU Execution                            │    │
+  │  │  - PagedAttention for KV cache            │    │
+  │  │  - Continuous batching                    │    │
+  │  │  - Tensor parallelism across GPUs         │    │
+  │  └───────────────────────────────────────────┘    │
   │                                                   │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ---
@@ -269,31 +269,31 @@ Use a small "draft" model to generate candidate tokens, then verify with the lar
 ### Architecture
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Speculative Decoding                             │
   │                                                   │
-  │  Draft Model (e.g., 1B params)                   │
+  │  Draft Model (e.g., 1B params)                    │
   │  │                                                │
-  │  │ Generate K candidate tokens                   │
-  │  │ (fast, ~1ms per token)                        │
+  │  │ Generate K candidate tokens                    │
+  │  │ (fast, ~1ms per token)                         │
   │  ▼                                                │
-  │  [The, cat, sat, on, the]                        │
+  │  [The, cat, sat, on, the]                         │
   │                                                   │
-  │  Target Model (e.g., 70B params)                 │
+  │  Target Model (e.g., 70B params)                  │
   │  │                                                │
-  │  │ Verify all K tokens in ONE forward pass       │
-  │  │ (same cost as generating 1 token)             │
+  │  │ Verify all K tokens in ONE forward pass        │
+  │  │ (same cost as generating 1 token)              │
   │  ▼                                                │
-  │  [The✓, cat✓, sat✓, on✗]                        │
+  │  [The✓, cat✓, sat✓, on✗]                          │
   │                                                   │
-  │  Result: 3 accepted + 1 correction = 4 tokens    │
-  │  from ONE target forward pass.                   │
+  │  Result: 3 accepted + 1 correction = 4 tokens     │
+  │  from ONE target forward pass.                    │
   │                                                   │
-  │  The rejected position isn't wasted — the target │
-  │  already computed its own distribution there, so │
-  │  it emits the right token for free. Everything   │
-  │  after the first rejection is discarded.         │
-  └─────────────────────────────────────────────────┘
+  │  The rejected position isn't wasted — the target  │
+  │  already computed its own distribution there, so  │
+  │  it emits the right token for free. Everything    │
+  │  after the first rejection is discarded.          │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### What Determines the Actual Speedup
@@ -377,44 +377,44 @@ Split model into stages across GPUs.
 ## GPU Cluster Design
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              LLM Serving GPU Cluster                     │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Load Balancer (L7, routing by model)            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│  ┌──────────────────────┼──────────────────────┐       │
-│  │                      │                      │       │
-│  ▼                      ▼                      ▼       │
-│ ┌────────────┐    ┌────────────┐    ┌────────────┐   │
-│ │ vLLM Node  │    │ vLLM Node  │    │ vLLM Node  │   │
-│ │ 4× A100    │    │ 4× A100    │    │ 2× A100    │   │
-│ │ 70B, TP=4  │    │ 70B, TP=4  │    │ 8B, TP=1   │   │
-│ │ (quality)  │    │ (quality)  │    │ (cheap/fast)│  │
-│ └────────────┘    └────────────┘    └────────────┘   │
-│                                                          │
-│  Only OPEN-WEIGHT models run on your own nodes. Hosted   │
+┌───────────────────────────────────────────────────────────┐
+│              LLM Serving GPU Cluster                      │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Load Balancer (L7, routing by model)            │     │
+│  └──────────────────────────────────────────────────┘     │
+│                         │                                 │
+│  ┌──────────────────────┼──────────────────────┐          │
+│  │                      │                      │          │
+│  ▼                      ▼                      ▼          │
+│ ┌────────────┐    ┌────────────┐    ┌─────────────┐       │
+│ │ vLLM Node  │    │ vLLM Node  │    │ vLLM Node   │       │
+│ │ 4× A100    │    │ 4× A100    │    │ 2× A100     │       │
+│ │ 70B, TP=4  │    │ 70B, TP=4  │    │ 8B, TP=1    │       │
+│ │ (quality)  │    │ (quality)  │    │ (cheap/fast)│       │
+│ └────────────┘    └────────────┘    └─────────────┘       │
+│                                                           │
+│  Only OPEN-WEIGHT models run on your own nodes. Hosted    │
 │  models (GPT-4, Claude, Gemini) are reached over their    │
 │  providers' APIs — you cannot self-host them, and the     │
-│  router below treats them as a separate upstream.        │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Model Router                                     │   │
-│  │  - Simple queries → Small model (7B, cheap)      │   │
-│  │  - Complex queries → Large model (70B, expensive)│   │
-│  │  - Reasoning tasks → Reasoning model             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  KV Cache Offloading                              │   │
-│  │  - Hot KV cache: GPU memory                      │   │
-│  │  - Warm KV cache: CPU memory (NVMe SSD)          │   │
-│  │  - Cold KV cache: Disk (for long contexts)       │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│  router below treats them as a separate upstream.         │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  Model Router                                     │    │
+│  │  - Simple queries → Small model (7B, cheap)       │    │
+│  │  - Complex queries → Large model (70B, expensive) │    │
+│  │  - Reasoning tasks → Reasoning model              │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
+│  │  KV Cache Offloading                              │    │
+│  │  - Hot KV cache: GPU memory                       │    │
+│  │  - Warm KV cache: CPU memory (NVMe SSD)           │    │
+│  │  - Cold KV cache: Disk (for long contexts)        │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ---

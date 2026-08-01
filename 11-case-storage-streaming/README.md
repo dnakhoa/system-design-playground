@@ -45,24 +45,24 @@ Large files are split into chunks for efficient upload and deduplication.
 ### Sync Protocol
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │              Sync Protocol                        │
   │                                                   │
   │  Device A uploads new file:                       │
-  │  1. Split into chunks (4MB each)                 │
-  │  2. Hash each chunk (SHA-256)                    │
-  │  3. Check server: "Do you have this hash?"       │
-  │  4. Server: "Yes" → Skip upload (dedup)          │
-  │     Server: "No" → Upload chunk                  │
-  │  5. Server creates file metadata                 │
-  │  6. Server notifies other devices                │
+  │  1. Split into chunks (4MB each)                  │
+  │  2. Hash each chunk (SHA-256)                     │
+  │  3. Check server: "Do you have this hash?"        │
+  │  4. Server: "Yes" → Skip upload (dedup)           │
+  │     Server: "No" → Upload chunk                   │
+  │  5. Server creates file metadata                  │
+  │  6. Server notifies other devices                 │
   │                                                   │
   │  Device B syncs:                                  │
-  │  1. Server pushes notification: "new file"       │
-  │  2. Device B checks which chunks it needs        │
-  │  3. Downloads only missing chunks                │
-  │  4. Reassembles file locally                     │
-  └─────────────────────────────────────────────────┘
+  │  1. Server pushes notification: "new file"        │
+  │  2. Device B checks which chunks it needs         │
+  │  3. Downloads only missing chunks                 │
+  │  4. Reassembles file locally                      │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Conflict Resolution
@@ -87,29 +87,29 @@ When two devices edit the same file offline:
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              File Storage Architecture                    │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Client ────▶ Load Balancer ────▶ API Servers           │
-│                                      │                   │
-│  ┌───────────────────────────────────┼───────────────┐  │
-│  │                                   │               │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──▼──────┐       │  │
-│  │  │ Metadata │  │  Chunk   │  │  Sync   │       │  │
-│  │  │ Service  │  │ Storage  │  │ Service │       │  │
-│  │  │(MySQL)   │  │ (S3)     │  │         │       │  │
-│  │  └──────────┘  └──────────┘  └─────────┘       │  │
-│  │                                                  │  │
-│  │  Metadata: file_id, owner, path, chunks,         │  │
-│  │            versions, sharing permissions          │  │
-│  │                                                  │  │
-│  │  Chunk Storage: S3/GCS (11 nines durability)    │  │
-│  └──────────────────────────────────────────────────┘  │
-│                                                          │
-│  Notification: Kafka → Push Service → Device            │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Client ────▶ Load Balancer ────▶ API Servers             │
+│                                      │                    │
+│  ┌───────────────────────────────────┼───────────────┐    │
+│  │                                   │               │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──▼──────┐       │       │
+│  │  │ Metadata │  │  Chunk   │  │  Sync   │       │       │
+│  │  │ Service  │  │ Storage  │  │ Service │       │       │
+│  │  │(MySQL)   │  │ (S3)     │  │         │       │       │
+│  │  └──────────┘  └──────────┘  └─────────┘       │       │
+│  │                                                  │     │
+│  │  Metadata: file_id, owner, path, chunks,         │     │
+│  │            versions, sharing permissions          │    │
+│  │                                                  │     │
+│  │  Chunk Storage: S3/GCS (11 nines durability)    │      │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  Notification: Kafka → Push Service → Device              │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -128,28 +128,28 @@ When two devices edit the same file offline:
 ```
   Upload → Transcode → Store → Distribute → Stream
 
-  ┌─────────────────────────────────────────────────┐
-  │           Video Transcoding Pipeline              │
-  │                                                   │
-  │  Original video (4K, 60fps, 50GB)                │
-  │  │                                                │
-  │  ▼                                                │
-  │  ┌──────────────────────────────────────────┐    │
-  │  │  Transcoding Service (parallelized)       │    │
+  ┌────────────────────────────────────────────────────┐
+  │           Video Transcoding Pipeline               │
+  │                                                    │
+  │  Original video (4K, 60fps, 50GB)                  │
+  │  │                                                 │
+  │  ▼                                                 │
+  │  ┌────────────────────────────────────────────┐    │
+  │  │  Transcoding Service (parallelized)        │    │
   │  │                                            │    │
-  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ │    │
-  │  │  │ 4K/60fps │ │ 1080p/30 │ │ 720p/30  │ │    │
-  │  │  │ (20Mbps) │ │ (5Mbps)  │ │ (2.5Mbps)│ │    │
-  │  │  └──────────┘ └──────────┘ └──────────┘ │    │
-  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ │    │
-  │  │  │ 480p/30  │ │ 360p/30  │ │ Audio    │ │    │
-  │  │  │ (1Mbps)  │ │ (0.5Mbps)│ │ only     │ │    │
-  │  │  └──────────┘ └──────────┘ └──────────┘ │    │
-  │  └──────────────────────────────────────────┘    │
-  │  │                                                │
-  │  ▼                                                │
-  │  Store all variants in CDN (edge locations)       │
-  └─────────────────────────────────────────────────┘
+  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐    │    │
+  │  │  │ 4K/60fps │ │ 1080p/30 │ │ 720p/30  │    │    │
+  │  │  │ (20Mbps) │ │ (5Mbps)  │ │ (2.5Mbps)│    │    │
+  │  │  └──────────┘ └──────────┘ └──────────┘    │    │
+  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐    │    │
+  │  │  │ 480p/30  │ │ 360p/30  │ │ Audio    │    │    │
+  │  │  │ (1Mbps)  │ │ (0.5Mbps)│ │ only     │    │    │
+  │  │  └──────────┘ └──────────┘ └──────────┘    │    │
+  │  └────────────────────────────────────────────┘    │
+  │  │                                                 │
+  │  ▼                                                 │
+  │  Store all variants in CDN (edge locations)        │
+  └────────────────────────────────────────────────────┘
 ```
 
 ### Adaptive Bitrate Streaming (HLS/DASH)
@@ -179,28 +179,28 @@ When two devices edit the same file offline:
 ### CDN Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                Video CDN Architecture                    │
-├─────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  Origin Server (S3/GCS)                                 │
-│  │  All video variants stored here                      │
-│  │                                                      │
-│  ▼                                                      │
-│  Origin Shield (mid-tier)                               │
-│  │  Protects origin from direct requests                │
-│  │                                                      │
-│  ▼                                                      │
-│  Edge Servers (10,000+ locations)                       │
-│  │  Cache popular videos close to users                 │
-│  │  Serve 95%+ of requests                              │
-│  │                                                      │
-│  ▼                                                      │
-│  User's Device                                          │
-│  │  Downloads segments, plays video                     │
-│  │  Adjusts quality based on bandwidth                  │
+│  Origin Server (S3/GCS)                                  │
+│  │  All video variants stored here                       │
+│  │                                                       │
+│  ▼                                                       │
+│  Origin Shield (mid-tier)                                │
+│  │  Protects origin from direct requests                 │
+│  │                                                       │
+│  ▼                                                       │
+│  Edge Servers (10,000+ locations)                        │
+│  │  Cache popular videos close to users                  │
+│  │  Serve 95%+ of requests                               │
+│  │                                                       │
+│  ▼                                                       │
+│  User's Device                                           │
+│  │  Downloads segments, plays video                      │
+│  │  Adjusts quality based on bandwidth                   │
 │                                                          │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 
   Netflix Open Connect:
   - 10,000+ custom servers in ISPs worldwide
@@ -214,10 +214,10 @@ When two devices edit the same file offline:
   User watch history + Metadata + Collaborative filtering
   │
   ▼
-  ┌─────────────────────────────────────────────────┐
-  │  Recommendation Pipeline                         │
+  ┌───────────────────────────────────────────────────┐
+  │  Recommendation Pipeline                          │
   │                                                   │
-  │  1. Candidate generation (1000s of videos)       │
+  │  1. Candidate generation (1000s of videos)        │
   │  - Collaborative filtering (users like you)       │
   │  - Content-based (similar to what you watched)    │
   │                                                   │
@@ -233,7 +233,7 @@ When two devices edit the same file offline:
   │  4. Presentation (rows of 10-20)                  │
   │  - Group by category                              │
   │  - Personalize row order                          │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ---
@@ -258,45 +258,45 @@ Dropbox's sync protocol is one of the most well-documented file sync systems.
 ### The Magic Pocket Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Dropbox Sync Architecture                    │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Client-side                                     │   │
-│  │  - Filesystem watcher (inotify/FSEvents)        │   │
-│  │  - Chunking engine (4MB blocks)                 │   │
-│  │  - Local metadata DB (SQLite)                   │   │
-│  │  - Deduplication (content-addressable)          │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Block Server                                    │   │
-│  │  - Receives chunks from clients                  │   │
-│  │  - Deduplicates by content hash                 │   │
-│  │  - Stores in Magic Pocket (custom storage)      │   │
-│  │  - Replicates across data centers               │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Metadata Server                                 │   │
-│  │  - File tree (folder → files → chunks)          │   │
-│  │  - Version history (append-only)                │   │
-│  │  - Sharing permissions                           │   │
-│  │  - Consensus (Paxos) for consistency            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│                         ▼                               │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Notification Service                            │   │
-│  │  - Long polling / WebSocket                      │   │
-│  │  - Push notifications to clients                │   │
-│  │  - Delta sync (only changed chunks)             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Client-side                                     │     │
+│  │  - Filesystem watcher (inotify/FSEvents)         │     │
+│  │  - Chunking engine (4MB blocks)                  │     │
+│  │  - Local metadata DB (SQLite)                    │     │
+│  │  - Deduplication (content-addressable)           │     │
+│  └──────────────────────────────────────────────────┘     │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Block Server                                    │     │
+│  │  - Receives chunks from clients                  │     │
+│  │  - Deduplicates by content hash                  │     │
+│  │  - Stores in Magic Pocket (custom storage)       │     │
+│  │  - Replicates across data centers                │     │
+│  └──────────────────────────────────────────────────┘     │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Metadata Server                                 │     │
+│  │  - File tree (folder → files → chunks)           │     │
+│  │  - Version history (append-only)                 │     │
+│  │  - Sharing permissions                           │     │
+│  │  - Consensus (Paxos) for consistency             │     │
+│  └──────────────────────────────────────────────────┘     │
+│                         │                                 │
+│                         ▼                                 │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Notification Service                            │     │
+│  │  - Long polling / WebSocket                      │     │
+│  │  - Push notifications to clients                 │     │
+│  │  - Delta sync (only changed chunks)              │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Delta Sync
@@ -343,25 +343,25 @@ Only changed chunks are transferred, not the entire file.
 ### Transcoding Formats
 
 ```
-  ┌─────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────┐
   │  Video Format Comparison                              │
   │                                                       │
-  │  H.264 (AVC):                                        │
-  │  - Most widely supported                             │
+  │  H.264 (AVC):                                         │
+  │  - Most widely supported                              │
   │  - Good compression                                   │
-  │  - Hardware encoding on most devices                 │
+  │  - Hardware encoding on most devices                  │
   │                                                       │
-  │  H.265 (HEVC):                                       │
-  │  - 50% better compression than H.264                 │
-  │  - Licensing issues                                  │
-  │  - Limited device support                            │
+  │  H.265 (HEVC):                                        │
+  │  - 50% better compression than H.264                  │
+  │  - Licensing issues                                   │
+  │  - Limited device support                             │
   │                                                       │
-  │  AV1:                                                │
+  │  AV1:                                                 │
   │  - Royalty-free                                       │
-  │  - 30% better than H.265                             │
-  │  - Slow encoding (improving)                         │
-  │  - Future-proof                                      │
-  └─────────────────────────────────────────────────────┘
+  │  - 30% better than H.265                              │
+  │  - Slow encoding (improving)                          │
+  │  - Future-proof                                       │
+  └───────────────────────────────────────────────────────┘
 ```
 
 ### HLS Playlist Structure

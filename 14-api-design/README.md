@@ -585,15 +585,15 @@ Rate limiting protects services from abuse, ensures fair usage, and maintains av
 ### Limit Dimensions
 
 ```
-┌─────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────┐
 │              Rate Limiting Layers                │
-├──────────────┬──────────────┬───────────────────┤
-│  Per-User    │  Per-API     │  Per-Tier         │
-├──────────────┼──────────────┼───────────────────┤
-│ 100 req/min  │ 10k req/min  │ Free: 100/min     │
-│ per user     │ per endpoint │ Pro: 1000/min     │
+├──────────────┬──────────────┬─────────────────── ┤
+│  Per-User    │  Per-API     │  Per-Tier          │
+├──────────────┼──────────────┼─────────────────── ┤
+│ 100 req/min  │ 10k req/min  │ Free: 100/min      │
+│ per user     │ per endpoint │ Pro: 1000/min      │
 │              │              │ Enterprise: 10k/min│
-└──────────────┴──────────────┴───────────────────┘
+└──────────────┴──────────────┴────────────────────┘
 ```
 
 ### Response Headers
@@ -869,20 +869,20 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 ## Summary
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                   API Design Principles                  │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  1. Resources are nouns, not verbs                      │
-│  2. HTTP methods are your vocabulary — use them right   │
-│  3. Status codes are a contract — be precise            │
-│  4. Version explicitly, deprecate responsibly           │
-│  5. Errors should be machine-readable AND human-friendly│
-│  6. Rate limit everything — your future self will thank │
-│  7. Pick REST, gRPC, or GraphQL based on the consumer  │
-│  8. Study great APIs (Stripe, GitHub) — steal patterns  │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. Resources are nouns, not verbs                       │
+│  2. HTTP methods are your vocabulary — use them right    │
+│  3. Status codes are a contract — be precise             │
+│  4. Version explicitly, deprecate responsibly            │
+│  5. Errors should be machine-readable AND human-friendly │
+│  6. Rate limit everything — your future self will thank  │
+│  7. Pick REST, gRPC, or GraphQL based on the consumer    │
+│  8. Study great APIs (Stripe, GitHub) — steal patterns   │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
