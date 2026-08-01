@@ -19,7 +19,7 @@ By the end of this module, you will be able to:
 1. Design RESTful APIs using resource naming conventions, HTTP semantics, and status codes
 2. Choose between REST, gRPC, and GraphQL based on system requirements
 3. Implement API versioning and deprecation strategies that balance stability with evolution
-4. Structure consistent error responses following RFC 7807
+4. Structure consistent error responses following RFC 9457 (Problem Details)
 5. Apply rate limiting and throttling to protect backend services
 6. Analyze real-world API designs (Stripe) for patterns worth adopting
 
@@ -35,8 +35,9 @@ By the end of this module, you will be able to:
 6. [Rate Limiting & Throttling](#6-rate-limiting--throttling)
 7. [Case Study: Stripe's API Design](#7-case-study-stripes-api-design)
 8. [Practice Exercise](#8-practice-exercise)
-9. [Discussion Questions](#9-discussion-questions)
-10. [Key References](#10-key-references)
+9. [Common Mistakes](#9-common-mistakes)
+10. [Discussion Questions](#10-discussion-questions)
+11. [Key References](#11-key-references)
 
 ---
 
@@ -211,12 +212,27 @@ GET /orders?cursor=eyJpZCI6MTAwfQ==&limit=50
 GET /users?status=active&role=admin
 GET /orders?created_after=2025-01-01&total_gte=100
 
-# Sorting
+# Sorting — prefix convention: "-" descending, bare ascending
 GET /users?sort=-created_at,name
-GET /orders?sort=total desc,created_at asc
+GET /orders?sort=-total,created_at
 ```
 
-Use a consistent convention: `-field` for descending, `field` for ascending. Document supported filters explicitly.
+Use one convention: `-field` for descending, `field` for ascending. Document the
+supported filters and sortable fields explicitly.
+
+> **Avoid the `sort=total desc` form.** Spaces are not legal in a URL and must be
+> percent-encoded (`sort=total%20desc`), so the readable version only appears to
+> work — and it needs a second parser for the direction keyword. The `-field`
+> prefix has neither problem.
+
+**Two rules that prevent real outages:**
+
+- **Only allow sorting on indexed columns.** `?sort=-description` on a
+  10M-row table is a full scan an anonymous caller can trigger at will.
+  Keep an allowlist and return `400` for anything else.
+- **Always append a unique tiebreaker** (`sort=-created_at,id`). Two rows with
+  identical timestamps have no defined order, so a paginated scan can show one
+  row twice and skip another.
 
 ---
 
@@ -483,9 +499,11 @@ Link: <https://docs.myapp.com/v2-migration>; rel="deprecation"
 
 ## 5. Error Handling
 
-### RFC 7807 Problem Details
+### RFC 9457 Problem Details
 
-RFC 7807 defines a standard JSON error format:
+RFC 9457 defines a standard JSON error format. It obsoleted RFC 7807 in 2023 —
+the field names are unchanged, so existing 7807 payloads remain valid; cite 9457
+as the current reference.
 
 ```json
 {
@@ -567,15 +585,15 @@ Rate limiting protects services from abuse, ensures fair usage, and maintains av
 ### Limit Dimensions
 
 ```
-┌─────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────┐
 │              Rate Limiting Layers                │
-├──────────────┬──────────────┬───────────────────┤
-│  Per-User    │  Per-API     │  Per-Tier         │
-├──────────────┼──────────────┼───────────────────┤
-│ 100 req/min  │ 10k req/min  │ Free: 100/min     │
-│ per user     │ per endpoint │ Pro: 1000/min     │
+├──────────────┬──────────────┬─────────────────── ┤
+│  Per-User    │  Per-API     │  Per-Tier          │
+├──────────────┼──────────────┼─────────────────── ┤
+│ 100 req/min  │ 10k req/min  │ Free: 100/min      │
+│ per user     │ per endpoint │ Pro: 1000/min      │
 │              │              │ Enterprise: 10k/min│
-└──────────────┴──────────────┴───────────────────┘
+└──────────────┴──────────────┴────────────────────┘
 ```
 
 ### Response Headers
@@ -774,9 +792,26 @@ Endpoints to design:
 - What status codes should POST /loans return for success, already-borrowed, and not-found?
 - How do you handle overdue fine calculation — eagerly or on-read?
 
+## 9. Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Verbs in resource paths** | `/getUser`, `/createOrder` discard the meaning HTTP methods already carry | Nouns for resources; methods for operations |
+| **200 OK with an error in the body** | Clients, proxies, and monitoring all read the status code — a 200 error is invisible to every one of them | Correct status code plus a machine-readable body |
+| **Unpaginated list endpoints** | The first large tenant takes down the endpoint, and removing it later is a breaking change | Paginate from day one, with a default *and* maximum page size |
+| **Offset pagination over a live dataset** | Inserts and deletes shift rows between pages, so items are duplicated and skipped | Cursor pagination keyed on a stable sort |
+| **Sorting without a unique tiebreaker** | Rows with equal sort keys have no defined order, so pages overlap | Always append a unique column: `sort=-created_at,id` |
+| **Sorting on arbitrary columns** | `?sort=-description` on 10M rows is a full scan any caller can trigger | Allowlist sortable (indexed) fields; 400 on anything else |
+| **Breaking changes without a version** | Clients you don't control fail silently in production | Additive changes in place; new version for real breaks, with `Deprecation`/`Sunset` headers |
+| **Inconsistent error shapes** | Every client writes bespoke parsing per endpoint | One envelope everywhere — RFC 9457 Problem Details is a good default |
+| **Leaking internals in error messages** | Stack traces and SQL fragments are reconnaissance for an attacker | Generic message plus a `request_id`; keep detail in your logs |
+| **No rate limit headers** | Clients can't back off intelligently, so they retry blindly into the limit | `X-RateLimit-*` on success, `Retry-After` on 429 |
+| **PATCH that replaces the resource** | Clients lose fields they never mentioned | PATCH merges; PUT replaces. Honour the distinction |
+| **`allow_origins=["*"]` with credentials** | Any site can act as the logged-in user; browsers reject the combination for good reason | Explicit origin allowlist |
+
 ---
 
-## 9. Discussion Questions
+## 10. Discussion Questions
 
 ### Q1: Your team is building a mobile app and a web dashboard that consume the same backend. Which API style would you choose and why?
 
@@ -810,12 +845,12 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 
 ---
 
-## 10. Key References
+## 11. Key References
 
 - **REST**: [RFC 7231 — HTTP/1.1 Semantics](https://tools.ietf.org/html/rfc7231), Roy Fielding's [dissertation](https://www.ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm)
 - **gRPC**: [grpc.io documentation](https://grpc.io/docs/), [Protocol Buffers Language Guide](https://developers.google.com/protocol-buffers/docs/proto3)
 - **GraphQL**: [graphql.org specification](https://graphql.org/learn/), [Apollo GraphQL docs](https://www.apollographql.com/docs/)
-- **RFC 7807**: [Problem Details for HTTP APIs](https://tools.ietf.org/html/rfc7807)
+- **RFC 9457**: [Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457) (obsoletes RFC 7807)
 - **Stripe API**: [stripe.com/docs/api](https://stripe.com/docs/api)
 - **Richardson Maturity Model**: Leonard Richardson's [presentation at QCon](https://martinfowler.com/articles/richardsonMaturityModel.html)
 
@@ -834,22 +869,30 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 ## Summary
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                   API Design Principles                  │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  1. Resources are nouns, not verbs                      │
-│  2. HTTP methods are your vocabulary — use them right   │
-│  3. Status codes are a contract — be precise            │
-│  4. Version explicitly, deprecate responsibly           │
-│  5. Errors should be machine-readable AND human-friendly│
-│  6. Rate limit everything — your future self will thank │
-│  7. Pick REST, gRPC, or GraphQL based on the consumer  │
-│  8. Study great APIs (Stripe, GitHub) — steal patterns  │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. Resources are nouns, not verbs                       │
+│  2. HTTP methods are your vocabulary — use them right    │
+│  3. Status codes are a contract — be precise             │
+│  4. Version explicitly, deprecate responsibly            │
+│  5. Errors should be machine-readable AND human-friendly │
+│  6. Rate limit everything — your future self will thank  │
+│  7. Pick REST, gRPC, or GraphQL based on the consumer    │
+│  8. Study great APIs (Stripe, GitHub) — steal patterns   │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-*Next: [Module 15 — Observability](../15-observability/)*
+## Navigation
+
+**Previous:** [Module 13: Security](../13-security/README.md)
+
+**Next:** [Module 15: Observability](../15-observability/README.md)
+
+---
+
+*Module 14 of 19 in the System Design Playground*

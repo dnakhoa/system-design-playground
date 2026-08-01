@@ -52,18 +52,18 @@ Multiple nodes must agree on a single value. All nodes must agree, and the value
 Raft is designed for understandability. Used by etcd, TiKV, CockroachDB.
 
 ```
-  ┌─────────────────────────────────────────────────┐
-  │              Raft Cluster                        │
+  ┌───────────────────────────────────────────────────┐
+  │              Raft Cluster                         │
   │                                                   │
-  │  States: Leader, Follower, Candidate             │
+  │  States: Leader, Follower, Candidate              │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │  Leader  │  │Follower  │  │Follower  │      │
-  │  │  (Node 1)│  │ (Node 2) │  │ (Node 3) │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │  Leader  │  │Follower  │  │Follower  │         │
+  │  │  (Node 1)│  │ (Node 2) │  │ (Node 3) │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Term: 1 → 2 → 3 (monotonically increasing)     │
-  └─────────────────────────────────────────────────┘
+  │  Term: 1 → 2 → 3 (monotonically increasing)       │
+  └───────────────────────────────────────────────────┘
 
   Leader election:
   1. Follower doesn't hear from leader → becomes Candidate
@@ -92,12 +92,12 @@ Raft is designed for understandability. Used by etcd, TiKV, CockroachDB.
   ▼
   Notify followers of commit
 
-  ┌─────────────────────────────────────────────┐
-  │  Log Index:  1    2    3    4    5          │
-  │  Leader:    [X=1][X=2][X=3][X=4][X=5] ✓    │
-  │  Follower1: [X=1][X=2][X=3][X=4][X=5] ✓    │
+  ┌──────────────────────────────────────────────┐
+  │  Log Index:  1    2    3    4    5           │
+  │  Leader:    [X=1][X=2][X=3][X=4][X=5] ✓      │
+  │  Follower1: [X=1][X=2][X=3][X=4][X=5] ✓      │
   │  Follower2: [X=1][X=2][X=3][X=4]    (lagging)│
-  └─────────────────────────────────────────────┘
+  └──────────────────────────────────────────────┘
 
   Leader catches up lagging follower in next heartbeat.
 ```
@@ -266,12 +266,15 @@ print(f"C: receives msg, ts={ts_c1}")  # C: receives msg, ts=3
 
 # Process C sends to B
 ts_msg2 = c.send()
+print(f"C: sends msg, ts={ts_msg2}")   # C: sends msg, ts=4
 
 # Process B receives
 ts_b1 = b.receive(ts_msg2)
-print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=4
+print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=5
 
-# Ordering: a1(1) < sends(2) < c_receives(3) < b_receives(4)
+# Causal chain: a1(1) → a_sends(2) → c_receives(3) → c_sends(4) → b_receives(5)
+# Each receive takes max(local, received) + 1, so the counter strictly
+# increases along the chain: 1 → 2 → 3 → 4 → 5.
 ```
 
 ```
@@ -279,16 +282,26 @@ print(f"B: receives msg, ts={ts_b1}")  # B: receives msg, ts=4
   Rule 2: When sending a message, include current counter
   Rule 3: When receiving a message, set counter = max(local, received) + 1
 
-  Process A:    Process B:    Process C:
-  │              │              │
-  │ a1 (1)      │              │
-  │ ─────────────│──msg────────▶│
-  │              │              │ c1 (2)
-  │              │ b1 (2)      │
-  │              │◀──msg────────│
-  │ a2 (3)      │              │
+  Process A          Process B          Process C
+  ────────────────────────────────────────────────────
+  a1 (1)
+  a_send (2) ─────────────────────────▶ c_recv (3)
+                                        c_send (4)
+                     b_recv (5) ◀───────
+  a2 (3)
 
-  Lamport ordering: a1 < b1 < c1 < a2 (but NOT total order — parallel events)
+  What Lamport clocks DO give you:
+    If x → y (x causally precedes y), then LC(x) < LC(y).
+    So a1(1) < a_send(2) < c_recv(3) < c_send(4) < b_recv(5).
+
+  What they DO NOT give you:
+    LC(x) < LC(y) does NOT imply x → y.
+    Here a2 and c_recv both have timestamp 3, and a2 is CONCURRENT with
+    everything on C — the equal timestamps tell you nothing about ordering.
+
+  This one-way implication is the whole limitation of Lamport clocks:
+  you can rule causality IN, never OUT. To detect concurrency you need
+  vector clocks (next section).
 ```
 
 ### Vector Clocks
@@ -413,13 +426,13 @@ Sagas avoid the blocking problem of 2PC by using compensating actions instead of
   Confirm: Commit all reservations
   Cancel:  Release all reservations
 
-  ┌──────────────────────────────────────┐
+  ┌───────────────────────────────────────┐
   │  Order Service:                       │
   │  1. Try: Reserve inventory            │
   │  2. Try: Reserve payment              │
   │  3. If all OK → Confirm both          │
   │  4. If any fail → Cancel both         │
-  └──────────────────────────────────────┘
+  └───────────────────────────────────────┘
 
   ✓ No long-held locks
   ✓ Resources reserved atomically
@@ -448,7 +461,7 @@ class GCounter:
     
     def increment(self, amount: int = 1):
         """Increment this node's counter."""
-        self counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
+        self.counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
     
     def value(self) -> int:
         """Get total count across all nodes."""
@@ -535,14 +548,24 @@ print(f"After merge: {node_a.value()}")  # 11 (10-3) + (5-1) = 11
 ```
 
 ```
-  Two G-counters: one for increments, one for decrements
+  Two G-counters: one for increments, one for decrements.
+  Each node only ever writes its OWN slot — that is what makes max() safe.
 
-  Node A: {inc: {A: 5}, dec: {A: 2}} = net 3
-  Node B: {inc: {A: 3}, dec: {A: 1}} = net 2
+  Node A: {inc: {A: 5}, dec: {A: 2}}  → net 3
+  Node B: {inc: {B: 3}, dec: {B: 1}}  → net 2
 
-  Merge: max of each component in each counter
-  Total: (5+3) - (2+1) = 8 - 3 = 5
+  Merge: take max of each component, per counter
+    inc: {A: max(5,–)=5, B: max(–,3)=3}  → sum 8
+    dec: {A: max(2,–)=2, B: max(–,1)=1}  → sum 3
+    net = 8 - 3 = 5   ✓ (equals 3 + 2, as it must)
 ```
+
+> **Why the node keys must differ.** If both nodes wrote slot `A`, the merge
+> would take `max(5, 3) = 5`, not `5 + 3 = 8`, and Node B's three increments
+> would vanish. Summing works only because each replica owns exactly one slot;
+> `max` then means "the furthest this replica has ever counted." A worked
+> example that shows `(5+3)` while both slots are keyed `A` is quietly
+> contradicting its own merge rule.
 
 ### LWW-Register (Last-Writer-Wins)
 
@@ -624,22 +647,22 @@ Coordination services that provide distributed primitives.
 ### etcd Architecture (Raft-based)
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │                  etcd Cluster                     │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │  Leader  │  │Follower  │  │Follower  │      │
-  │  │ (Node 1) │  │ (Node 2) │  │ (Node 3) │      │
-  │  │          │  │          │  │          │      │
-  │  │ Raft Log │  │ Raft Log │  │ Raft Log │      │
-  │  │ [X=1]    │  │ [X=1]    │  │ [X=1]    │      │
-  │  │ [X=2]    │  │ [X=2]    │  │ [X=2]    │      │
-  │  │ [X=3] ✓  │  │ [X=3]    │  │ [X=3]    │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │  Leader  │  │Follower  │  │Follower  │         │
+  │  │ (Node 1) │  │ (Node 2) │  │ (Node 3) │         │
+  │  │          │  │          │  │          │         │
+  │  │ Raft Log │  │ Raft Log │  │ Raft Log │         │
+  │  │ [X=1]    │  │ [X=1]    │  │ [X=1]    │         │
+  │  │ [X=2]    │  │ [X=2]    │  │ [X=2]    │         │
+  │  │ [X=3] ✓  │  │ [X=3]    │  │ [X=3]    │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Client reads from Leader (or any node with      │
-  │  read consistency)                               │
-  └─────────────────────────────────────────────────┘
+  │  Client reads from Leader (or any node with       │
+  │  read consistency)                                │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
@@ -678,6 +701,21 @@ Coordination services that provide distributed primitives.
 2. How do you handle concurrent updates?
 3. How do you aggregate counts across nodes?
 4. What's the trade-off between accuracy and performance?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Trusting wall-clock time for ordering** | Clocks drift and NTP steps backwards; two events can carry impossible timestamps | Logical clocks for causality; fencing tokens for mutual exclusion |
+| **Distributed locks without fencing tokens** | A GC-paused holder wakes up believing it still owns the lock and writes over the new owner | Monotonic token with every write; the resource rejects stale tokens |
+| **Reading `LC(x) < LC(y)` as "x caused y"** | Lamport clocks are one-way: causality implies ordering, not the reverse | Vector clocks when you must *detect* concurrency |
+| **Even-numbered cluster sizes** | 4 nodes tolerate 1 failure, same as 3, but cost more and split evenly | Odd sizes: 3, 5, 7 |
+| **Expecting consensus to survive minority partitions** | Raft/Paxos need a majority; the minority side must stop accepting writes | Accept CP here, or choose an AP store for that data |
+| **CRDT slots shared between replicas** | `max()` merge discards the other replica's increments | Each replica writes only its own slot |
+| **Last-write-wins as the default merge** | Concurrent updates are silently discarded, and the "winner" depends on clock skew | Detect concurrency with vector clocks; merge, or surface both versions |
+| **2PC for cross-service transactions** | Blocking protocol, coordinator is a SPOF, locks held through the stall | Saga with compensations, or TCC |
+| **Assuming a failed node is a stopped node** | Slow, partitioned, and dead are indistinguishable from outside | Design for "unreachable"; use leases and fencing rather than liveness guesses |
+| **Building consensus yourself** | It is famously easy to get subtly, silently wrong | Use etcd, ZooKeeper, or Consul |
 
 ---
 

@@ -19,16 +19,19 @@ A single server can handle ~1,000-10,000 concurrent connections. Beyond that, yo
 ```
   Without load balancing:           With load balancing:
 
-  ┌──────────┐                     ┌──────────┐
-  │  Client  │                     │  Client  │
-  └─────┬────┘                     └─────┬────┘
-        │                                │
-  ┌─────▼────┐                     ┌─────▼─────┐
-  │  Server  │ ◄── SPOF           │    LB     │ ◄── Distributes
-  │ (overloaded)│                  └──┬───┬───┬┘     traffic
-  └──────────┘                     ┌──▼─┐┌▼──┐┌▼──┐
-                                   │ S1 ││ S2 ││ S3 │
-                                   └────┘└────┘└────┘
+  ┌──────────────┐              ┌──────────────┐
+  │    Client    │              │    Client    │
+  └───────┬──────┘              └───────┬──────┘
+          │                             │
+  ┌───────▼──────┐              ┌───────▼──────┐
+  │    Server    │◀── SPOF      │      LB      │◀── distributes
+  │ (overloaded) │              └───┬───┬───┬──┘    traffic
+  └──────────────┘                  │   │   │
+                              ┌─────┘   │   └─────┐
+                              │         │         │
+                          ┌───▼──┐  ┌───▼──┐  ┌───▼──┐
+                          │  S1  │  │  S2  │  │  S3  │
+                          └──────┘  └──────┘  └──────┘
 ```
 
 ### Benefits
@@ -112,19 +115,25 @@ Hash the client IP to determine which server handles all their requests.
 Minimize reshuffling when servers are added or removed.
 
 ```
-  Hash ring with servers at positions:
+  Hash ring with servers at positions hash(server_id) mod 2^32:
 
-       ┌─────── S1 ───────┐
-      /                     \
-    S4                       S2
-      \                     /
-       └─────── S3 ───────┘
+              0 / 2^32
+                  ▲
+          ╭────── S1 ───────╮
+         ╱                   ╲
+        ╱                     ╲
+      S4            ⟳          S2
+        ╲                     ╱
+         ╲                   ╱
+          ╰────── S3 ───────╯
 
-  Request → hash(key) → clockwise to nearest server
+              clockwise ⟳
+
+  Request → hash(key) → walk clockwise → first server wins
 
   Adding S5 between S1 and S2:
-  - Only requests between S1 and S5 need to move
-  - All other requests stay with their server
+  - Only requests that fell between S1 and S5 move (they were on S2)
+  - Every other request stays exactly where it was
 
   ✓ Minimal disruption on scale events
   ✓ Even distribution with virtual nodes
@@ -140,12 +149,12 @@ Minimize reshuffling when servers are added or removed.
 Operates at TCP/UDP level. Routes based on IP + port.
 
 ```
-  ┌──────────────────────────────────┐
-  │         L4 Load Balancer          │
+  ┌────────────────────────────────────┐
+  │         L4 Load Balancer           │
   │                                    │
-  │  Client IP:Port ──▶ Server IP:Port│
-  │  (no inspection of content)       │
-  └──────────────────────────────────┘
+  │  Client IP:Port ──▶ Server IP:Port │
+  │  (no inspection of content)        │
+  └────────────────────────────────────┘
 
   ✓ Very fast (no packet inspection)
   ✓ Low latency (~microseconds)
@@ -159,14 +168,14 @@ Operates at TCP/UDP level. Routes based on IP + port.
 Operates at HTTP level. Routes based on URL, headers, cookies.
 
 ```
-  ┌──────────────────────────────────────┐
-  │         L7 Load Balancer              │
+  ┌────────────────────────────────────────┐
+  │         L7 Load Balancer               │
   │                                        │
-  │  /api/users    → Server Pool A        │
-  │  /api/orders   → Server Pool B        │
-  │  /static/*     → CDN/Cache            │
-  │  Host: admin.* → Admin Servers        │
-  └──────────────────────────────────────┘
+  │  /api/users    → Server Pool A         │
+  │  /api/orders   → Server Pool B         │
+  │  /static/*     → CDN/Cache             │
+  │  Host: admin.* → Admin Servers         │
+  └────────────────────────────────────────┘
 
   ✓ Content-based routing
   ✓ TLS termination (SSL offloading)
@@ -450,6 +459,8 @@ limiter = SlidingWindow(limit=100, window_seconds=60)
 ### Distributed Rate Limiting
 
 ```python
+import time
+
 import redis
 
 class DistributedRateLimiter:
@@ -461,29 +472,35 @@ class DistributedRateLimiter:
         self.window = window
     
     def allow(self, client_id: str) -> bool:
-        key = f"rate:{client_id}"
-        
-        # Atomic: increment and set expiry in one transaction
+        # Bucket the key by window so each window gets a fresh counter and
+        # its own independent expiry.
+        window_id = int(time.time()) // self.window
+        key = f"rate:{client_id}:{window_id}"
+
         pipe = self.r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, self.window)
-        results = pipe.execute()
-        
-        count = results[0]
+        # NX = only set a TTL if the key has none. Without NX, every request
+        # pushes the expiry forward, the window never closes, and a client
+        # that keeps retrying stays blocked indefinitely.
+        pipe.expire(key, self.window, nx=True)
+        count = pipe.execute()[0]
+
         return count <= self.limit
-    
+
     def allow_with_tier(self, client_id: str, tier: str) -> bool:
         """Multi-tier rate limiting (free/pro/enterprise)."""
         limits = {"free": 100, "pro": 1000, "enterprise": 10000}
         limit = limits.get(tier, 100)
-        
-        key = f"rate:{client_id}:{tier}"
+
+        window_id = int(time.time()) // self.window
+        key = f"rate:{client_id}:{tier}:{window_id}"
+
         pipe = self.r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, 60)
-        results = pipe.execute()
-        
-        return results[0] <= limit
+        pipe.expire(key, self.window, nx=True)
+        count = pipe.execute()[0]
+
+        return count <= limit
 
 # Usage
 r = redis.Redis(host='redis-cluster', port=6379)
@@ -496,6 +513,18 @@ else:
     return 429, "Rate limit exceeded"
 ```
 
+**Two traps in distributed counters:**
+
+| Trap | Symptom | Fix |
+|------|---------|-----|
+| `EXPIRE` on every request | Window never closes; an actively-retrying client is locked out permanently | `EXPIRE ... NX`, or set the TTL only when `INCR` returns 1 |
+| `INCR` then `EXPIRE` as separate round trips | A crash between the two leaves a key with no TTL — a permanent ban | Pipeline them, or use a Lua script for true atomicity |
+
+This is a **fixed window**, so it inherits the boundary-burst problem: a client
+can send `limit` requests at the end of one window and `limit` more at the start
+of the next. For a sliding window, store timestamps in a sorted set
+(`ZADD` + `ZREMRANGEBYSCORE` + `ZCARD`) inside one Lua script.
+
 ```
   ┌──────────┐     ┌──────────┐     ┌──────────┐
   │  LB 1    │     │  LB 2    │     │  LB 3    │
@@ -503,10 +532,10 @@ else:
        │                │                │
        └────────────────┼────────────────┘
                         │
-                 ┌──────▼──────┐
+                 ┌──────▼───────┐
                  │ Redis Cluster│ ◄── Centralized counters
                  │ (atomic incr)│
-                 └─────────────┘
+                 └──────────────┘
 
   Problem: Each LB has partial view → need centralized counter
   Solution: Redis INCR with TTL (atomic, fast)
@@ -648,20 +677,20 @@ def handle_request(server):
 An API gateway is a single entry point that handles cross-cutting concerns.
 
 ```
-  ┌──────────────────────────────────────────────────┐
-  │                   API Gateway                     │
-  │                                                    │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-  │  │  Auth    │  │  Rate    │  │   Routing    │   │
-  │  │ (JWT,    │  │  Limit   │  │  /api/v1/*   │   │
-  │  │  OAuth)  │  │          │  │  /api/v2/*   │   │
-  │  └──────────┘  └──────────┘  └──────────────┘   │
-  │                                                    │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-  │  │  Logging │  │  TLS     │  │  Request     │   │
-  │  │  & Tracing│  │  Terminate│  │  Transform  │   │
-  │  └──────────┘  └──────────┘  └──────────────┘   │
-  └──────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────┐
+  │                   API Gateway                       │
+  │                                                     │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐       │
+  │  │  Auth    │  │  Rate    │  │   Routing    │       │
+  │  │ (JWT,    │  │  Limit   │  │  /api/v1/*   │       │
+  │  │  OAuth)  │  │          │  │  /api/v2/*   │       │
+  │  └──────────┘  └──────────┘  └──────────────┘       │
+  │                                                     │
+  │  ┌───────────┐  ┌───────────┐  ┌──────────────┐     │
+  │  │  Logging  │  │  TLS      │  │  Request     │     │
+  │  │  & Tracing│  │  Terminate│  │  Transform   │     │
+  │  └───────────┘  └───────────┘  └──────────────┘     │
+  └─────────────────────────────────────────────────────┘
                           │
           ┌───────────────┼───────────────┐
           │               │               │
@@ -719,38 +748,38 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 ### Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                  Cloudflare Architecture                │
-├────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Anycast Network (IP routing)                    │   │
-│  │  - Same IP address in 310+ cities                │   │
-│  │  - BGP routes to nearest data center             │   │
-│  │  - Automatic failover if DC goes down            │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Load Balancing Layer                            │   │
-│  │  - Maglev (consistent hashing) for internal LB  │   │
-│  │  - L7 routing (URL, header, cookie-based)        │   │
-│  │  - Rate limiting (token bucket, per-IP)          │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Edge Compute (Workers)                          │   │
-│  │  - Run customer code at the edge                 │   │
-│  │  - DDoS mitigation                               │   │
-│  │  - WAF (Web Application Firewall)                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
+┌──────────────────────────────────────────────────────────┐
+│                  Cloudflare Architecture                 │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Anycast Network (IP routing)                    │    │
+│  │  - Same IP address in 310+ cities                │    │
+│  │  - BGP routes to nearest data center             │    │
+│  │  - Automatic failover if DC goes down            │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Load Balancing Layer                            │    │
+│  │  - Maglev (consistent hashing) for internal LB   │    │
+│  │  - L7 routing (URL, header, cookie-based)        │    │
+│  │  - Rate limiting (token bucket, per-IP)          │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │  Edge Compute (Workers)                          │    │
+│  │  - Run customer code at the edge                 │    │
+│  │  - DDoS mitigation                               │    │
+│  │  - WAF (Web Application Firewall)                │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌───────────────────────────────────────────────────┐   │
 │  │  Origin Shield                                    │   │
-│  │  - Caches responses before reaching origin       │   │
-│  │  - Reduces origin load by 60-80%                 │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-└────────────────────────────────────────────────────────┘
+│  │  - Caches responses before reaching origin        │   │
+│  │  - Reduces origin load by 60-80%                  │   │
+│  └───────────────────────────────────────────────────┘   │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
@@ -790,6 +819,20 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 2. How do you handle distributed counting across 10 servers?
 3. What happens when Redis is unavailable?
 4. How do you handle clock skew across servers?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **`EXPIRE` on every rate-limit request** | The window never closes, so an actively-retrying client is locked out permanently | `EXPIRE ... NX`, or set the TTL only when `INCR` returns 1 |
+| **`INCR` and `EXPIRE` as separate round trips** | A crash between them leaves a key with no TTL — a permanent ban | Pipeline them, or use a Lua script for real atomicity |
+| **Round-robin to servers with long-lived connections** | Request *count* is balanced while actual load is not; WebSocket servers drift badly out of balance | Least-connections for stateful traffic; round-robin only for uniform short requests |
+| **No health checks, or checking only the port** | A TCP listener can accept while the app is deadlocked or its DB is unreachable | Application-level `/health` that exercises real dependencies |
+| **Health check that fails on a dependency outage** | Every instance reports unhealthy at once and the LB has nowhere to route — a total outage from a partial one | Separate liveness from readiness; degrade rather than removing every node |
+| **DNS as the failover mechanism** | Clients and resolvers ignore TTLs; propagation takes minutes to hours | Anycast or an LB with health checks; treat DNS as coarse geo-routing only |
+| **No rate-limiter fallback** | Redis down means either no limiting at all or a total outage | Decide fail-open vs fail-closed *per endpoint* and make it explicit |
+| **Rate limiting without response headers** | Clients can't self-regulate, so they hammer you and retry blindly | Always return `X-RateLimit-*` and `Retry-After` |
+| **Sticky sessions as the scaling plan** | Losing one server logs out every user on it, and load never rebalances | Externalize session state; keep servers stateless |
 
 ---
 

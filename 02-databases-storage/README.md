@@ -17,20 +17,25 @@
 The choice isn't "SQL is old, NoSQL is new." It's about **what your data looks like and how you query it**.
 
 ```
-                    Do you need ACID transactions?
-                           /         \\
-                         Yes          No
-                         /              \\
-                ┌──────────┐      Is your data structured
-                │   SQL    │      and relational?
-                │PostgreSQL│       /         \\
-                │  MySQL   │     Yes          No
-                │ CockroachDB│   /              \\
-                └──────────┘  ┌──────────┐  ┌──────────┐
-                              │ Document │  │Key-Value │
-                              │ MongoDB  │  │ DynamoDB │
-                              │Firestore │  │  Redis   │
-                              └──────────┘  └──────────┘
+              Do you need multi-row ACID transactions?
+                       │
+            ┌──── Yes ─┴─ No ─────────────┐
+            │                             │
+     ┌──────▼───────┐        Is your data relational,
+     │     SQL      │        with queries that JOIN?
+     │  PostgreSQL  │                     │
+     │    MySQL     │          ┌─── Yes ──┴── No ───┐
+     │ CockroachDB  │          │                    │
+     └──────────────┘   ┌──────▼──────┐      ┌──────▼──────┐
+                        │  Document   │      │  Key-Value  │
+                        │   MongoDB   │      │  DynamoDB   │
+                        │  Firestore  │      │    Redis    │
+                        └─────────────┘      └─────────────┘
+
+  Caveat: this tree is a starting point, not a verdict. MongoDB has had
+  multi-document transactions since 4.0 and DynamoDB has TransactWriteItems,
+  so "needs ACID" no longer rules out every NoSQL store. Decide on your
+  actual query patterns and consistency needs, not the SQL/NoSQL label.
 ```
 
 ### Comparison Table
@@ -39,7 +44,7 @@ The choice isn't "SQL is old, NoSQL is new." It's about **what your data looks l
 |--------|------------------------|-------------------|----------------------------|------------------------|
 | **Schema** | Rigid, predefined | Flexible, JSON | Minimal (key→value) | Column families |
 | **ACID** | Full support | Limited (transactions since 4.0) | None (eventual) | Light-weight transactions |
-| **Scaling** | Vertical (read replicas) | Horizontal (sharding) | Horizontal (built-in) | Horizontal (ring topology) |
+| **Scaling** | Vertical, plus read replicas; sharding is manual | Horizontal (sharding) | Horizontal (built-in) | Horizontal (ring topology) |
 | **Query power** | JOINs, aggregations, subqueries | Embedding, limited joins | Get/Set only | Range scans on partition keys |
 | **Best for** | Financial, inventory, relationships | Content management, catalogs | Session data, caching, leaderboards | Time-series, IoT, event logs |
 | **Real systems** | Instagram (MySQL), Stripe | Uber (Schemaless), eBay | Twitter (Redis), Facebook (Memcached) | Netflix (Cassandra), Apple |
@@ -174,20 +179,36 @@ Sharding splits data across multiple database instances. Each shard holds a subs
 When you add or remove a shard, only ~1/N keys need to move (vs all keys with modulo hashing).
 
 ```
-  Hash ring with 4 nodes:
+  Hash ring, 4 nodes. Positions are hash(node_id) mod 2^32.
 
-       ┌─────── A ───────┐
-      /                    \
-     D                      B
-      \                    /
-       └─────── C ───────┘
+              0 / 2^32
+                  ▲
+          ╭───── Node A ─────╮
+         ╱                    ╲
+        ╱    k1 ●              ╲
+   Node D           ⟳          Node B
+        ╲              ● k2    ╱
+         ╲                    ╱
+          ╰───── Node C ─────╯
 
-  Key k1 → travels clockwise from k1's position → lands on B
-  Key k2 → travels clockwise from k2's position → lands on C
+              clockwise ⟳
+
+  Each key walks CLOCKWISE to the first node it meets:
+    k1 sits between A and B  →  owned by Node B
+    k2 sits between B and C  →  owned by Node C
 
   Adding node E between A and B:
   - Only keys that were on B and fall between A and E move to E
-  - All other keys stay in place
+  - All other keys stay in place — that is the whole point
+
+  Contrast with `hash(key) % N`: changing N from 4 to 5 remaps roughly
+  4/5 of ALL keys. On a cache that means a near-total miss storm; on a
+  sharded database it means moving most of your data.
+
+  In practice each physical node is placed at many points on the ring
+  ("virtual nodes", typically 100-256). Without them, four nodes land at
+  four arbitrary positions and the arcs between them differ wildly in
+  size, so load is uneven no matter how good the hash is.
 ```
 
 ---
@@ -197,10 +218,10 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
 ### Leader-Follower (Primary-Replica)
 
 ```
-  ┌──────────┐
+  ┌───────────┐
   │  Leader   │ ◄─── All writes
   │ (Primary) │
-  └─────┬────┘
+  └─────┬─────┘
         │ replication log
    ┌────┼────┐
    │    │    │
@@ -237,7 +258,15 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
   ✗ Complex replication logic
 ```
 
-**Used by**: CockroachDB, Spanner, MySQL multi-master
+**Used by**: MySQL Group Replication (multi-primary mode), CouchDB, BDR for
+PostgreSQL, and offline-first mobile sync (each device is effectively a leader).
+
+> **CockroachDB and Spanner are *not* multi-leader.** They shard data into
+> ranges and run a **Raft/Paxos group per range**, each with a single elected
+> leader. The cluster accepts writes in every region, but any given *row* has
+> exactly one leader at a time — which is precisely how they avoid the
+> write-conflict resolution that real multi-leader systems must handle. They
+> are best understood as **many single-leader groups**, not multi-leader.
 
 ### Leaderless (Dynamo-Style)
 
@@ -272,11 +301,16 @@ When you add or remove a shard, only ~1/N keys need to move (vs all keys with mo
 ### ACID (Traditional SQL)
 
 ```
-Atomicity    — All or nothing (transaction要么全成功，要么全回滚)
+Atomicity    — All or nothing (a transaction either fully commits
+               or fully rolls back — never halfway)
 Consistency  — Data always valid (constraints always enforced)
 Isolation    — Concurrent transactions don't interfere
 Durability   — Committed data survives crashes
 ```
+
+> **Note on the "C" in ACID:** it means *integrity constraints hold*, which is
+> not the same "consistency" as in CAP (where it means *all replicas agree*).
+> Two different words spelled the same way — a frequent source of confusion.
 
 **When ACID matters**: Banking, payments, inventory, booking systems
 
@@ -320,27 +354,27 @@ NewSQL systems promise SQL interfaces with horizontal scalability.
 Instagram serves 2B+ users with a complex data architecture:
 
 ```
-┌───────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────┐
 │                    Instagram Stack                      │
-├───────────────────────────────────────────────────────┤
-│  Application Layer                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │ Django   │  │ Celery   │  │ Custom Services  │    │
-│  │ (Python) │  │ (async)  │  │ (Go, C++)        │    │
-│  └──────────┘  └──────────┘  └──────────────────┘    │
-├───────────────────────────────────────────────────────┤
-│  Data Layer                                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │  MySQL   │  │  Redis   │  │  Cassandra       │    │
-│  │ (users,  │  │ (cache,  │  │ (time-series,    │    │
-│  │  posts,  │  │  sessions│  │  feeds, events)  │    │
-│  │  follows)│  │  counts) │  │                  │    │
-│  └──────────┘  └──────────┘  └──────────────────┘    │
-│  ┌──────────┐  ┌──────────┐                           │
-│  │memcached │  │ Elastic- │                           │
-│  │(objects) │  │ search   │                           │
-│  └──────────┘  └──────────┘                           │
-└───────────────────────────────────────────────────────┘
+├─────────────────────────────────────────────────────────┤
+│  Application Layer                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐       │
+│  │ Django   │  │ Celery   │  │ Custom Services  │       │
+│  │ (Python) │  │ (async)  │  │ (Go, C++)        │       │
+│  └──────────┘  └──────────┘  └──────────────────┘       │
+├─────────────────────────────────────────────────────────┤
+│  Data Layer                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐       │
+│  │  MySQL   │  │  Redis   │  │  Cassandra       │       │
+│  │ (users,  │  │ (cache,  │  │ (time-series,    │       │
+│  │  posts,  │  │  sessions│  │  feeds, events)  │       │
+│  │  follows)│  │  counts) │  │                  │       │
+│  └──────────┘  └──────────┘  └──────────────────┘       │
+│  ┌──────────┐  ┌──────────┐                             │
+│  │memcached │  │ Elastic- │                             │
+│  │(objects) │  │ search   │                             │
+│  └──────────┘  └──────────┘                             │
+└─────────────────────────────────────────────────────────┘
 ```
 
 **Why this mix?**
@@ -363,16 +397,16 @@ Instagram serves 2B+ users with a complex data architecture:
 
 ```
 NORMALIZED (3NF)                    DENORMALIZED
-┌─────────┐  ┌─────────┐          ┌──────────────────────┐
+┌─────────┐  ┌─────────┐          ┌───────────────────────┐
 │ users   │  │ posts   │          │ user_posts (wide)     │
-│─────────│  │─────────│          │──────────────────────│
-│ id      │  │ id      │          │ user_id              │
-│ name    │  │ user_id │──FK──▶   │ user_name            │
-│ email   │  │ content │          │ user_avatar_url      │
-└─────────┘  │ created │          │ post_id              │
-             └─────────┘          │ post_content         │
-  ✓ No duplication                │ post_created         │
-  ✓ JOINs needed                  └──────────────────────┘
+│─────────│  │─────────│          │────────────────────── │
+│ id      │  │ id      │          │ user_id               │
+│ name    │  │ user_id │──FK──▶   │ user_name             │
+│ email   │  │ content │          │ user_avatar_url       │
+└─────────┘  │ created │          │ post_id               │
+             └─────────┘          │ post_content          │
+  ✓ No duplication                │ post_created          │
+  ✓ JOINs needed                  └───────────────────────┘
                                   ✓ No JOINs needed
                                   ✓ Fast reads
                                   ✗ Data duplication
@@ -418,6 +452,19 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 2. **E-commerce inventory**: Product stock counts. Strong consistency required, high read throughput. Which database? Why?
 3. **Session store**: User login sessions. Sub-millisecond reads, TTL support. Which database? Why?
 4. **Time-series metrics**: Server metrics (CPU, memory) at 1-second intervals. Write-heavy, range queries. Which database? Why?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **"NoSQL doesn't do transactions"** | MongoDB has had multi-document ACID since 4.0; DynamoDB has `TransactWriteItems` | Decide on query patterns and consistency needs, not the SQL/NoSQL label |
+| **Calling Spanner/CockroachDB multi-leader** | They run a Raft group *per range*, each with one leader — that's how they avoid write conflicts | Reserve "multi-leader" for systems that genuinely need conflict resolution |
+| **Sharding before you need to** | Cross-shard JOINs and transactions disappear; resharding is a migration project | Exhaust read replicas and vertical scaling first — most workloads never need shards |
+| **Choosing a shard key by convenience** | `created_at` sends every new write to one shard; low-cardinality keys create permanent hotspots | Shard on something high-cardinality and evenly accessed, usually a tenant or user ID |
+| **Adding an index per query** | Every index taxes all writes and competes for buffer-pool memory | Design composite indexes for query *patterns*; verify with `EXPLAIN` before adding |
+| **Composite index in the wrong order** | `(user_id, date)` can't serve a `date`-only filter — an index is usable left-to-right only | Put equality columns first, range columns last |
+| **Reading from a replica right after writing** | Replication lag means the write may not be visible yet | Route read-your-writes to the primary, or pin the session until the replica catches up |
+| **Confusing the two "consistency"s** | ACID's C means constraints hold; CAP's C means replicas agree | Say "integrity constraints" or "linearizable" and skip the ambiguous word |
 
 ---
 

@@ -51,13 +51,13 @@ Most systems operate in the "useful life" phase with a relatively constant failu
 Prevent cascading failures by stopping calls to a failing service.
 
 ```
-  ┌─────────────────────────────────────────┐
+  ┌───────────────────────────────────────────┐
   │           Circuit Breaker States          │
   │                                           │
-  │  ┌──────────┐    failure    ┌──────────┐ │
-  │  │  CLOSED  │──────────────▶│   OPEN   │ │
-  │  │ (normal) │               │(rejected)│ │
-  │  └────▲─────┘               └────┬─────┘ │
+  │  ┌──────────┐    failure    ┌──────────┐  │
+  │  │  CLOSED  │──────────────▶│   OPEN   │  │
+  │  │ (normal) │               │(rejected)│  │
+  │  └────▲─────┘               └────┬─────┘  │
   │       │                          │        │
   │       │    success               │        │
   │       │◀─────────────────────────│        │
@@ -67,7 +67,7 @@ Prevent cascading failures by stopping calls to a failing service.
   │       └─────────────────────│HALF-OPEN │  │
   │         success             │(testing) │  │
   │                             └──────────┘  │
-  └─────────────────────────────────────────┘
+  └───────────────────────────────────────────┘
 
   CLOSED: Requests flow normally. Counter tracks failures.
   OPEN: All requests fail fast (no call to downstream).
@@ -281,14 +281,34 @@ def retry_with_jitter(
 # → No thundering herd
 ```
 
-```
-  Wait time = min(base × 2^attempt + random(0, 100ms), max_wait)
+The code above implements **full jitter** — the AWS-recommended default:
 
-  Attempt 1: Wait 100-200ms  (random)
-  Attempt 2: Wait 200-300ms
-  Attempt 3: Wait 400-500ms
-  Attempt 4: Wait 800-900ms
 ```
+  cap   = min(base × 2^attempt, max_delay)
+  sleep = random(0, cap)          ← the whole range, not a small nudge
+
+  base = 100ms:
+  Attempt 1: cap 100ms  → sleep 0-100ms
+  Attempt 2: cap 200ms  → sleep 0-200ms
+  Attempt 3: cap 400ms  → sleep 0-400ms
+  Attempt 4: cap 800ms  → sleep 0-800ms
+```
+
+### Jitter Variants
+
+Which one you pick changes how well retries de-correlate:
+
+| Variant | Formula | Notes |
+|---------|---------|-------|
+| **None** | `cap` | Every client retries in lockstep — the thundering herd you were trying to avoid |
+| **Full** | `random(0, cap)` | Best spread; AWS default. Some retries fire almost immediately |
+| **Equal** | `cap/2 + random(0, cap/2)` | Guarantees a minimum wait, still spreads well |
+| **Decorrelated** | `min(max, random(base, prev × 3))` | Lowest total completion time in AWS's simulations |
+
+> **Watch for this mismatch:** a diagram that shows "wait 100-200ms, then
+> 200-300ms" is describing *equal* jitter, but `random.uniform(0, delay)` in
+> code is *full* jitter — the ranges start at 0. If your docs and code disagree
+> here, the docs are usually the ones that are wrong.
 
 ### Retry Decision Matrix
 
@@ -350,25 +370,39 @@ def service_a_handler(request):
     except requests.Timeout:
         return {"error": "Service B timeout"}
 
-# Key principle: timeouts decrease downstream
+# Key principle: timeouts decrease downstream, so the innermost hop
+# always fails first and the error propagates up without anyone waiting
+# out their full budget.
 # Client(30s) → Gateway(25s) → ServiceA(20s) → ServiceB(15s) → DB(10s)
 ```
 
 ```
-  Client ──30s timeout──▶ API Gateway ──25s timeout──▶ Service A
-                                                       │
-                                                  ──20s timeout──▶ Service B
-                                                                      │
-                                                                 ──15s timeout──▶ Database
+  Client ──30s──▶ Gateway ──25s──▶ Service A ──20s──▶ Service B ──10s──▶ DB
+                                                       (matches TIMEOUT_CONFIG above)
 
-  If DB takes 14s: Service B waits 14s + some processing
-  Total: Client sees 14s + 2s + 1s + processing ≈ 18s (under 30s) ✓
+  Happy path — DB answers in 8s:
+    Service B returns at ~8s, A at ~9s, Gateway at ~10s.
+    Client sees ≈10s, well inside its 30s budget. ✓
 
-  If DB takes 16s: Service B times out at 15s
-  Service A times out at 20s (after waiting for Service B)
-  Client times out at 30s (after waiting for Service A)
+  Sad path — DB hangs:
+    Service B gives up at 10s (its DB timeout) and returns an error.
+    Service A sees that error at ~10s — it does NOT wait out its own 20s.
+    Client gets a response at ~11s instead of 30s.
 
-  Total: 30s timeout, but 3 services wasted resources
+  The point: because each timeout is SHORTER than its caller's, the innermost
+  hop fails first and the error propagates up immediately. Nobody waits for
+  the full 30s, and no service sits holding a connection it can't use.
+```
+
+**What goes wrong if you invert the order** — say the DB timeout is 30s while
+the client's is 10s:
+
+```
+  Client gives up at 10s and disconnects.
+  Gateway, Service A, Service B, and the DB all keep working for 20 more
+  seconds on a response nobody will read — burning connections, threads,
+  and DB time. Under load this is how a slow dependency turns into an
+  outage: every abandoned request still costs you full capacity.
 ```
 
 ### Timeout Best Practices
@@ -456,24 +490,24 @@ def call_service_b(request, deadline: Deadline):
 ### RPO and RTO
 
 ```
-  ┌──────────────────────────────────────────────┐
-  │                                               │
-  │  RPO (Recovery Point Objective)               │
-  │  = How much data can you afford to lose?      │
-  │                                               │
-  │  RTO (Recovery Time Objective)                │
-  │  = How quickly must you recover?              │
-  │                                               │
-  │  ─────────────────────────────────────────── │
-  │  Timeline:                                    │
-  │                                               │
-  │  Last Backup    Disaster    Recovery         │
-  │      │            │            │              │
-  │      ▼            ▼            ▼              │
-  │  ────●────────────●────────────●────▶         │
-  │      │←── RPO ──→│←── RTO ──→│              │
+  ┌────────────────────────────────────────────────┐
+  │                                                │
+  │  RPO (Recovery Point Objective)                │
+  │  = How much data can you afford to lose?       │
+  │                                                │
+  │  RTO (Recovery Time Objective)                 │
+  │  = How quickly must you recover?               │
+  │                                                │
+  │  ───────────────────────────────────────────   │
+  │  Timeline:                                     │
+  │                                                │
+  │  Last Backup    Disaster    Recovery           │
+  │      │            │            │               │
+  │      ▼            ▼            ▼               │
+  │  ────●────────────●────────────●────▶          │
+  │      │←── RPO ──→│←── RTO ──→│                 │
   │      │  (data loss)│  (downtime)│              │
-  └──────────────────────────────────────────────┘
+  └────────────────────────────────────────────────┘
 ```
 
 | RPO | RTO | Strategy | Cost |
@@ -506,6 +540,10 @@ def call_service_b(request, deadline: Deadline):
 ---
 
 ## SLOs, SLAs, and Error Budgets
+
+> These definitions are the foundation for alerting. **[Module 15,
+> Section 6](../15-observability/README.md#6-slo-based-alerting)** turns an error
+> budget into a concrete paging policy using multi-window burn-rate alerts.
 
 ### Definitions
 
@@ -571,12 +609,25 @@ incidents = [10, 15]  # Two incidents: 10 min + 15 min
 remaining = budget.remaining_minutes(incidents)
 status = budget.status(incidents)
 
-print(f"Remaining: {remaining:.1f} minutes")
+print(f"Remaining: {remaining:.1f} minutes ({budget.remaining_pct(incidents):.0f}%)")
 print(f"Status: {status}")
 # Output:
 # Monthly budget: 43.2 minutes
-# Remaining: 18.2 minutes
-# Status: RELIABILITY_FOCUS
+# Remaining: 18.2 minutes (42%)
+# Status: EXTRA_REVIEW
+```
+
+Check the arithmetic yourself — this is the kind of thing to get right before
+you wire it to a deploy gate:
+
+```
+budget  = (1 - 0.999) × 30 days × 24 h × 60 min = 43.2 min
+spent   = 10 + 15                               = 25.0 min
+left    = 43.2 - 25.0                           = 18.2 min
+percent = 18.2 / 43.2                           = 42%
+
+42% is in the 20-50% band → EXTRA_REVIEW (not RELIABILITY_FOCUS,
+which starts below 20%).
 ```
 
 ### Error Budget Policy
@@ -613,34 +664,34 @@ Deliberately inject failures to find weaknesses before they cause outages.
 ### Chaos Engineering Practice
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │           Chaos Engineering Process               │
   │                                                   │
-  │  ┌──────────┐                                    │
+  │  ┌──────────┐                                     │
   │  │Define    │ "The system should handle           │
   │  │hypothesis│  server failure without user impact"│
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
-  │  │Plan      │ "Kill one server in US-East        │
+  │  ┌────▼─────┐                                     │
+  │  │Plan      │ "Kill one server in US-East         │
   │  │experiment│  during business hours"             │
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Run       │ Execute the failure injection       │
-  │  │experiment│                                    │
-  │  └────┬─────┘                                    │
+  │  │experiment│                                     │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Analyze   │ Compare metrics before/during/      │
   │  │results   │ after. Did SLO hold?                │
-  │  └────┬─────┘                                    │
+  │  └────┬─────┘                                     │
   │       │                                           │
-  │  ┌────▼─────┐                                    │
+  │  ┌────▼─────┐                                     │
   │  │Fix       │ Address any weaknesses found        │
-  │  │weaknesses│                                    │
-  │  └──────────┘                                    │
-  └─────────────────────────────────────────────────┘
+  │  │weaknesses│                                     │
+  │  └──────────┘                                     │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Chaos Tools
@@ -697,6 +748,21 @@ Google's SRE practices are the gold standard for reliability engineering.
 2. How do you handle payment service failures?
 3. What's your disaster recovery strategy?
 4. How do you prevent cascading failures?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Retries without jitter** | Every client retries on the same schedule, so the herd hits again in lockstep | Full jitter: `sleep = random(0, min(base × 2^n, cap))` |
+| **Retries at every layer** | 3 retries at 4 layers is 81 requests to a service already failing | Retry at one layer — usually the outermost that can act on failure |
+| **Retrying without a circuit breaker** | Retries add load exactly when the dependency needs less | Breaker opens after N failures and sheds load until it recovers |
+| **Timeouts that increase downstream** | The caller gives up while everything below keeps burning capacity on a response nobody reads | Timeouts strictly decrease downstream; propagate a deadline |
+| **No timeout at all** | One hung dependency exhausts the connection pool and takes the service with it | Every network call gets an explicit timeout — no exceptions |
+| **SLOs at 100%** | It leaves no error budget, so all change becomes unshippable | Pick a target users actually notice; spend the difference on velocity |
+| **SLIs measured server-side only** | You miss DNS, TLS, and network failures — the ones users see | Measure client-side or at the edge |
+| **Untested backups** | A backup you've never restored is a hypothesis, not a recovery plan | Restore drills on a schedule; measure against your RTO |
+| **Chaos experiments without a hypothesis** | Breaking things at random produces incidents, not learning | State the steady-state expectation, inject one fault, bound the blast radius |
+| **Health checks that fail on dependency outage** | All instances go unhealthy at once, converting partial failure into total | Separate liveness from readiness; degrade instead of disappearing |
 
 ---
 

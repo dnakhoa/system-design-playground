@@ -52,24 +52,33 @@ Hit Ratio = Cache Hits / (Cache Hits + Cache Misses)
 The most common pattern. The application manages the cache explicitly.
 
 ```
-  Read path:
-  ┌────────┐     1. Check cache     ┌────────┐
-  │  App   │────────────────────────▶│ Cache  │
-  │        │◀── 2. Cache HIT ────────│(Redis) │
-  │        │                         └────────┘
-  │        │     3. Cache MISS
-  │        │───────────────────────────────────▶┌────────┐
-  │        │◀── 4. Return data ────────────────│   DB   │
-  │        │     5. Populate cache              └────────┘
-  │        │────────────────▶ Cache
-  └────────┘
+  READ PATH
 
-  Write path:
-  ┌────────┐     1. Write to DB     ┌────────┐
-  │  App   │────────────────────────▶│   DB   │
-  │        │     2. Invalidate cache └────────┘
-  │        │────────────────▶ Cache (DELETE key)
-  └────────┘
+  ┌─────────┐                              ┌─────────┐
+  │         │ ──① check cache────────────▶ │  Cache  │
+  │   App   │ ◀─② HIT: return value─────── │ (Redis) │
+  │         │                              └─────────┘
+  │         │
+  │         │ ──③ MISS: query DB─────────▶ ┌─────────┐
+  │         │ ◀─④ return rows──────────────│   DB    │
+  │         │                              └─────────┘
+  │         │ ──⑤ SET key (populate)─────▶ ┌─────────┐
+  │         │                              │  Cache  │
+  └─────────┘                              └─────────┘
+
+  WRITE PATH
+
+  ┌─────────┐                              ┌─────────┐
+  │         │ ──① write───────────────────▶│   DB    │
+  │   App   │                              └─────────┘
+  │         │ ──② DEL key (invalidate)────▶┌─────────┐
+  │         │                              │  Cache  │
+  └─────────┘                              └─────────┘
+
+  Note step ② deletes rather than updates. Writing the new value into
+  the cache looks tidier but races: two concurrent writers can leave the
+  cache holding the older of the two values. Deleting is safe because the
+  next reader repopulates from the database.
 ```
 
 | Pros | Cons |
@@ -107,17 +116,21 @@ Cache and database are updated simultaneously.
 Writes go to cache first, then asynchronously flushed to DB.
 
 ```
-  ┌────────┐     1. Write to cache  ┌────────┐
-  │  App   │────────────────────────▶│ Cache  │
-  └────────┘     (fast!)            └───┬────┘
-                                        │
-                                   2. Async flush
-                                   (batched, delayed)
-                                        │
-                                        ▼
-                                   ┌────────┐
-                                   │   DB   │
-                                   └────────┘
+  ┌─────────┐                              ┌─────────┐
+  │   App   │ ──① write (returns now)────▶ │  Cache  │
+  └─────────┘                              └────┬────┘
+                                                │
+                                         ② async flush
+                                        (batched, delayed)
+                                                │
+                                                ▼
+                                           ┌─────────┐
+                                           │   DB    │
+                                           └─────────┘
+
+  The write returns as soon as the cache accepts it, so latency is
+  cache-only. The gap between ① and ② is the exposure window: a cache
+  crash in that window loses every unflushed write.
 ```
 
 | Pros | Cons |
@@ -164,20 +177,20 @@ Redis is the most popular caching system. Understanding its internals is critica
 ### Why Redis Is Fast
 
 ```
-  ┌─────────────────────────────────────┐
+  ┌──────────────────────────────────────┐
   │              Redis                   │
-  ├─────────────────────────────────────┤
+  ├──────────────────────────────────────┤
   │  Single-threaded event loop          │
-  │  ┌─────────────────────────────┐    │
-  │  │  Accept → Parse → Execute   │    │
-  │  │       → Respond             │    │
-  │  │  (all in one thread)        │    │
-  │  └─────────────────────────────┘    │
+  │  ┌─────────────────────────────┐     │
+  │  │  Accept → Parse → Execute   │     │
+  │  │       → Respond             │     │
+  │  │  (all in one thread)        │     │
+  │  └─────────────────────────────┘     │
   │                                      │
   │  In-memory data store                │
   │  No disk I/O on hot path             │
   │  Efficient data structures           │
-  └─────────────────────────────────────┘
+  └──────────────────────────────────────┘
 
   Why single-threaded is fast:
   - No context switching
@@ -218,10 +231,10 @@ Content Delivery Networks cache static assets at edge locations worldwide.
 ### CDN Topology
 
 ```
-                        ┌──────────────────┐
+                        ┌───────────────────┐
                         │    Origin Server  │
                         │    (your app)     │
-                        └────────┬─────────┘
+                        └────────┬──────────┘
                                  │
                         ┌────────▼─────────┐
                         │  Origin Shield   │
@@ -367,14 +380,20 @@ def get_user(user_id: int) -> dict:
 def update_user(user_id: int, name: str):
     db.execute("UPDATE users SET name = %s WHERE id = %s", name, user_id)
     
-    # Bump version (old key expires naturally)
-    r.incr(f"user:{user_id}:version")
+    # Bump version. INCR returns the NEW version, so the key we want to
+    # evict is new_version - 1. Reading the counter again here would give
+    # us the new version and delete the key we are about to populate.
+    new_version = r.incr(f"user:{user_id}:version")
     
-    # Optional: explicitly delete old version
-    old_version = r.get(f"user:{user_id}:version")
-    if old_version:
-        r.delete(f"user:{user_id}:v{old_version}")
+    # Optional: reclaim the superseded key immediately instead of
+    # waiting for its TTL to lapse.
+    if new_version > 1:
+        r.delete(f"user:{user_id}:v{new_version - 1}")
 ```
+
+> **Why not read the version back?** `INCR` is the only race-free way to learn
+> the version you just created. A separate `GET` can observe another writer's
+> increment, and subtracting from *that* value evicts a live key.
 
 | Pros | Cons |
 |------|------|
@@ -387,18 +406,28 @@ def update_user(user_id: int, name: str):
 When a popular cache key expires, 1000+ simultaneous requests all miss and hit the origin.
 
 ```
-  BEFORE:                         AFTER EXPIRY:
-  ┌──────────┐                    ┌──────────┐
-  │   Cache  │ ◄── All hit       │   Cache  │ ◄── All MISS
-  │  (warm)  │                    │ (expired)│
-  └──────────┘                    └────┬─────┘
-                                       │
-                              ┌────────┼────────┐
-                              │        │        │
-                              ▼        ▼        ▼
-                           ┌─────┐ ┌─────┐ ┌─────┐
-                           │ DB  │ │ DB  │ │ DB  │  ← 1000 requests hit DB!
-                           └─────┘ └─────┘ └─────┘
+  BEFORE EXPIRY                    AFTER EXPIRY
+
+  1000 req/s                       1000 req/s
+      │                                │
+      ▼                                ▼
+  ┌──────────┐                     ┌──────────┐
+  │  Cache   │                     │  Cache   │
+  │  (warm)  │ ── all HIT          │(expired) │ ── all MISS
+  └──────────┘                     └────┬─────┘
+                                        │
+                                  ┌─────┴─────┐
+                                  │ 1000 req  │
+                                  │ stampede  │
+                                  └─────┬─────┘
+                                        │
+                                        ▼
+                                   ┌──────────┐
+                                   │    DB    │ ← built for 200 req/s
+                                   └──────────┘
+
+  One key expiring converts a fully-cached workload into an unthrottled
+  flood. The database was sized for the MISS rate, not the request rate.
 ```
 
 ### Solutions
@@ -469,35 +498,76 @@ def get_with_early_expiration(key: str, ttl: int = 3600) -> str:
 ```python
 import threading
 
-# Global lock map for request coalescing
-_inflight = {}
+# Global map of in-flight fetches, one Future per key.
+_inflight: dict[str, "Future"] = {}
 _lock = threading.Lock()
+
+class Future:
+    """Minimal result-carrying handle. concurrent.futures.Future works too."""
+
+    def __init__(self):
+        self._event = threading.Event()
+        self._value = None
+        self._error = None
+
+    def set_result(self, value):
+        self._value = value
+        self._event.set()
+
+    def set_error(self, error):
+        self._error = error
+        self._event.set()
+
+    def result(self, timeout: float = 5.0):
+        if not self._event.wait(timeout):
+            raise TimeoutError("leader did not publish a result in time")
+        if self._error:
+            raise self._error
+        return self._value
 
 def get_with_coalescing(key: str, ttl: int = 3600) -> str:
     """Deduplicate concurrent requests for the same key."""
     value = r.get(key)
     if value:
         return value
-    
+
     with _lock:
-        if key in _inflight:
-            # Another request is already fetching: wait for it
-            return _inflight[key].wait()
-        
-        # We're the first: create an event for others to wait on
-        event = threading.Event()
-        _inflight[key] = event
-    
+        existing = _inflight.get(key)
+        if existing is not None:
+            leader = False
+            future = existing
+        else:
+            # We're the first: publish a Future for others to wait on.
+            leader = True
+            future = Future()
+            _inflight[key] = future
+
+    if not leader:
+        # Followers block on the Future and receive the leader's VALUE.
+        return future.result()
+
     try:
-        # Fetch from DB (only ONE request does this)
+        # Fetch from DB (only ONE request does this).
         data = db.query(key)
         r.setex(key, ttl, data)
-        event.set()  # Wake up all waiting requests
+        future.set_result(data)
         return data
+    except Exception as exc:
+        # Never leave followers blocked forever on a failed fetch.
+        future.set_error(exc)
+        raise
     finally:
+        # Remove the entry only AFTER the result is published, so a late
+        # follower either sees the Future or re-reads the now-warm cache.
         with _lock:
-            del _inflight[key]
+            _inflight.pop(key, None)
 ```
+
+> **The bug this avoids:** `threading.Event.wait()` returns a **bool**, not the
+> fetched value. A coalescing implementation that does `return event.wait()`
+> hands every follower `True` instead of the data. The waiter needs a handle
+> that carries a result — and the leader must publish an error on the failure
+> path, or followers block until their timeout.
 
 ---
 
@@ -625,38 +695,38 @@ Netflix serves 230M+ subscribers with a sophisticated multi-layer caching strate
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                    Netflix Caching Stack                  │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  CDN (Open Connect)                              │    │
-│  │  - 10,000+ edge servers worldwide                │    │
-│  │  - Caches video content (adaptive bitrate)       │    │
-│  │  - 95%+ of traffic served from edge              │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Application Cache (EVCache / Memcached)         │    │
-│  │  - User profiles, viewing history, preferences   │    │
-│  │  - Per-device personalization                    │    │
-│  │  - TTL: 10 minutes to 24 hours (varies)          │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Pre-computation Cache                           │    │
-│  │  - Recommendation results (personalized rows)    │    │
-│  │  - Pre-rendered homepage layout                  │    │
-│  │  - Updated every few minutes via background jobs │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Database Layer                                  │    │
-│  │  - Cassandra (user data, viewing history)        │    │
-│  │  - MySQL (billing, subscriptions)                │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  CDN (Open Connect)                              │     │
+│  │  - 10,000+ edge servers worldwide                │     │
+│  │  - Caches video content (adaptive bitrate)       │     │
+│  │  - 95%+ of traffic served from edge              │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Application Cache (EVCache / Memcached)         │     │
+│  │  - User profiles, viewing history, preferences   │     │
+│  │  - Per-device personalization                    │     │
+│  │  - TTL: 10 minutes to 24 hours (varies)          │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Pre-computation Cache                           │     │
+│  │  - Recommendation results (personalized rows)    │     │
+│  │  - Pre-rendered homepage layout                  │     │
+│  │  - Updated every few minutes via background jobs │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │  Database Layer                                  │     │
+│  │  - Cassandra (user data, viewing history)        │     │
+│  │  - MySQL (billing, subscriptions)                │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

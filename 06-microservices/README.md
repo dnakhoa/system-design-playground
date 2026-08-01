@@ -19,17 +19,17 @@
 All code in one deployable unit.
 
 ```
-  ┌──────────────────────────────────┐
+  ┌───────────────────────────────────┐
   │           Monolith                │
-  │  ┌──────┐ ┌──────┐ ┌──────┐    │
-  │  │User  │ │Order │ │Payment│    │
-  │  │Module│ │Module│ │Module│    │
-  │  └──────┘ └──────┘ └──────┘    │
-  │  ┌──────┐ ┌──────┐ ┌──────┐    │
-  │  │Email │ │Search│ │Report│    │
-  │  │Module│ │Module│ │Module│    │
-  │  └──────┘ └──────┘ └──────┘    │
-  └──────────────────────────────────┘
+  │  ┌──────┐ ┌──────┐ ┌───────┐      │
+  │  │User  │ │Order │ │Payment│      │
+  │  │Module│ │Module│ │Module │      │
+  │  └──────┘ └──────┘ └───────┘      │
+  │  ┌──────┐ ┌──────┐ ┌──────┐       │
+  │  │Email │ │Search│ │Report│       │
+  │  │Module│ │Module│ │Module│       │
+  │  └──────┘ └──────┘ └──────┘       │
+  └───────────────────────────────────┘
 
   ✓ Simple deployment (one artifact)
   ✓ Simple debugging (one codebase)
@@ -56,7 +56,7 @@ Each service is independently deployable and scalable.
                    │
             ┌──────▼──────┐
             │Service Mesh │
-            │  / API GW  │
+            │  / API GW   │
             └─────────────┘
 
   ✓ Independent deployment
@@ -89,27 +89,27 @@ Each service is independently deployable and scalable.
 Each microservice owns a specific business domain with its own language and model.
 
 ```
-  ┌─────────────────────────────────────────────┐
-  │              E-Commerce Domain               │
+  ┌───────────────────────────────────────────────┐
+  │              E-Commerce Domain                │
   │                                               │
-  │  ┌─────────────┐  ┌─────────────┐           │
-  │  │   Catalog   │  │   Ordering  │           │
-  │  │  Context    │  │   Context   │           │
-  │  │             │  │             │           │
-  │  │ Product     │  │ Order       │           │
-  │  │ Category    │  │ LineItem    │           │
-  │  │ Price       │  │ Cart        │           │
-  │  └─────────────┘  └─────────────┘           │
+  │  ┌─────────────┐  ┌─────────────┐             │
+  │  │   Catalog   │  │   Ordering  │             │
+  │  │  Context    │  │   Context   │             │
+  │  │             │  │             │             │
+  │  │ Product     │  │ Order       │             │
+  │  │ Category    │  │ LineItem    │             │
+  │  │ Price       │  │ Cart        │             │
+  │  └─────────────┘  └─────────────┘             │
   │                                               │
-  │  ┌─────────────┐  ┌─────────────┐           │
-  │  │  Inventory  │  │  Payment    │           │
-  │  │  Context    │  │  Context    │           │
-  │  │             │  │             │           │
-  │  │ Stock       │  │ Transaction │           │
-  │  │ Warehouse   │  │ PaymentMethod│          │
-  │  │ Shipment    │  │ Invoice     │           │
-  │  └─────────────┘  └─────────────┘           │
-  └─────────────────────────────────────────────┘
+  │  ┌─────────────┐  ┌──────────────┐            │
+  │  │  Inventory  │  │  Payment     │            │
+  │  │  Context    │  │  Context     │            │
+  │  │             │  │              │            │
+  │  │ Stock       │  │ Transaction  │            │
+  │  │ Warehouse   │  │ PaymentMethod│            │
+  │  │ Shipment    │  │ Invoice      │            │
+  │  └─────────────┘  └──────────────┘            │
+  └───────────────────────────────────────────────┘
 
   Each context = one microservice
   Each service has its own data model (no shared database)
@@ -296,7 +296,7 @@ from dataclasses import dataclass, field
 from typing import List, Callable
 from enum import Enum
 
-class SagaStep(Enum):
+class StepStatus(Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -307,7 +307,7 @@ class SagaStep:
     name: str
     action: Callable
     compensation: Callable
-    status: SagaStep = SagaStep.PENDING
+    status: StepStatus = StepStatus.PENDING
 
 class OrderSagaOrchestrator:
     """Centralized orchestrator for the order saga."""
@@ -325,18 +325,18 @@ class OrderSagaOrchestrator:
             try:
                 print(f"Executing: {step.name}")
                 step.action(order_data)
-                step.status = SagaStep.COMPLETED
+                step.status = StepStatus.COMPLETED
                 completed_steps.append(step)
             except Exception as e:
                 print(f"Failed: {step.name} — {e}")
-                step.status = SagaStep.FAILED
+                step.status = StepStatus.FAILED
                 
                 # Compensate in reverse order
                 for completed in reversed(completed_steps):
                     try:
                         print(f"Compensating: {completed.name}")
                         completed.compensation(order_data)
-                        completed.status = SagaStep.COMPENSATED
+                        completed.status = StepStatus.COMPENSATED
                     except Exception as comp_error:
                         print(f"Compensation failed: {completed.name} — {comp_error}")
                 
@@ -354,17 +354,17 @@ result = saga.execute({"order_id": "o123", "amount": 99.99})
 ```
 
 ```
-  ┌──────────────────────────────────────────┐
+  ┌────────────────────────────────────────────┐
   │           Order Saga Orchestrator          │
   │                                            │
-  │  1. Create order (Order Service)          │
-  │  2. Reserve stock (Inventory Service)     │
-  │  3. Charge payment (Payment Service)      │
-  │  4. Confirm order (Order Service)         │
+  │  1. Create order (Order Service)           │
+  │  2. Reserve stock (Inventory Service)      │
+  │  3. Charge payment (Payment Service)       │
+  │  4. Confirm order (Order Service)          │
   │                                            │
   │  Compensation chain:                       │
-  │  If step 3 fails → release stock → cancel │
-  └──────────────────────────────────────────┘
+  │  If step 3 fails → release stock → cancel  │
+  └────────────────────────────────────────────┘
 ```
 
 **Pros**: Clear flow, easy to track, centralized logic.
@@ -533,22 +533,27 @@ def get_users_negotiate(accept: str = Header(default="application/json")):
 
 ## Observability in Microservices
 
+> This section is the overview. **[Module 15: Observability](../15-observability/README.md)**
+> covers it in depth: metric cardinality, why percentiles cannot be averaged,
+> context propagation across queues and thread pools, sampling strategies, and
+> SLO burn-rate alerting.
+
 ### The Three Pillars
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │              Observability Stack                  │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-  │  │  Logs    │  │  Metrics │  │   Traces     │  │
-  │  │          │  │          │  │              │  │
-  │  │ What     │  │ How much │  │ Where did    │  │
-  │  │ happened │  │ / how    │  │ the request  │  │
-  │  │          │  │ fast     │  │ go?          │  │
-  │  └──────────┘  └──────────┘  └──────────────┘  │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐     │
+  │  │  Logs    │  │  Metrics │  │   Traces     │     │
+  │  │          │  │          │  │              │     │
+  │  │ What     │  │ How much │  │ Where did    │     │
+  │  │ happened │  │ / how    │  │ the request  │     │
+  │  │          │  │ fast     │  │ go?          │     │
+  │  └──────────┘  └──────────┘  └──────────────┘     │
   │                                                   │
-  │  Tools: ELK, Prometheus, Jaeger, Zipkin          │
-  └─────────────────────────────────────────────────┘
+  │  Tools: ELK, Prometheus, Jaeger, Zipkin           │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Distributed Tracing
@@ -556,22 +561,22 @@ def get_users_negotiate(accept: str = Header(default="application/json")):
 ```
   Request: GET /api/orders/123
 
-  ┌──────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────┐
   │ Trace ID: abc-123-def                                 │
   │                                                       │
-  │ ┌─────────────────────────────────────────────────┐  │
+  │ ┌──────────────────────────────────────────────────┐  │
   │ │ API Gateway (2ms)                                │  │
-  │ │ ┌────────────────────────────────────────────┐  │  │
+  │ │ ┌─────────────────────────────────────────────┐  │  │
   │ │ │ Order Service (5ms)                         │  │  │
-  │ │ │ ┌──────────────────────────────────────┐   │  │  │
+  │ │ │ ┌───────────────────────────────────────┐   │  │  │
   │ │ │ │ Database Query (3ms)                  │   │  │  │
-  │ │ │ └──────────────────────────────────────┘   │  │  │
-  │ │ │ ┌──────────────────────────────────────┐   │  │  │
+  │ │ │ └───────────────────────────────────────┘   │  │  │
+  │ │ │ ┌───────────────────────────────────────┐   │  │  │
   │ │ │ │ User Service Call (8ms)               │   │  │  │
-  │ │ │ └──────────────────────────────────────┘   │  │  │
-  │ │ └────────────────────────────────────────────┘  │  │
-  │ └─────────────────────────────────────────────────┘  │
-  └──────────────────────────────────────────────────────┘
+  │ │ │ └───────────────────────────────────────┘   │  │  │
+  │ │ └─────────────────────────────────────────────┘  │  │
+  │ └──────────────────────────────────────────────────┘  │
+  └───────────────────────────────────────────────────────┘
 
   Total: 15ms (but user service was the bottleneck at 8ms)
 ```
@@ -585,42 +590,42 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 ### Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│               Netflix Microservices Architecture        │
-├────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  API Gateway (Zuul)                              │   │
-│  │  - Request routing                               │   │
-│  │  - Authentication                                │   │
-│  │  - Rate limiting                                 │   │
-│  │  - Load balancing                                │   │
-│  └─────────────────────────────────────────────────┘   │
-│                         │                               │
-│  ┌──────────────────────┼──────────────────────┐       │
-│  │                      │                      │       │
-│  ▼                      ▼                      ▼       │
-│ ┌──────┐          ┌──────┐              ┌──────┐      │
-│ │User  │          │Catalog│             │Streaming│    │
-│ │Service│          │Service│             │Service  │    │
-│ │      │          │       │             │         │    │
-│ │-Auth │          │-Movies│             │-Playback│    │
-│ │-Profile│         │-Shows │             │-CDN     │    │
-│ │-Preferences│    │-Genres│             │-Quality │    │
-│ └──────┘          └──────┘              └──────┘      │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Data Stores                                      │   │
-│  │  Cassandra (user data) + MySQL (billing)          │   │
-│  │  EVCache (caching) + Elasticsearch (search)       │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  Observability                                    │   │
-│  │  Atlas (metrics) + Zuul (tracing) + ELK (logs)   │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│               Netflix Microservices Architecture             │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────────────────────────────────────┐        │
+│  │  API Gateway (Zuul)                              │        │
+│  │  - Request routing                               │        │
+│  │  - Authentication                                │        │
+│  │  - Rate limiting                                 │        │
+│  │  - Load balancing                                │        │
+│  └──────────────────────────────────────────────────┘        │
+│                         │                                    │
+│      ┌──────────────────┼──────────────────┐                 │
+│      │                  │                  │                 │
+│      ▼                  ▼                  ▼                 │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │    User    │  │   Catalog    │  │  Streaming   │          │
+│  │  Service   │  │   Service    │  │   Service    │          │
+│  │            │  │              │  │              │          │
+│  │ - Auth     │  │ - Movies     │  │ - Playback   │          │
+│  │ - Profile  │  │ - Shows      │  │ - CDN        │          │
+│  │ - Prefs    │  │ - Genres     │  │ - Quality    │          │
+│  └────────────┘  └──────────────┘  └──────────────┘          │
+│                                                              │
+│  ┌───────────────────────────────────────────────────┐       │
+│  │  Data Stores                                      │       │
+│  │  Cassandra (user data) + MySQL (billing)          │       │
+│  │  EVCache (caching) + Elasticsearch (search)       │       │
+│  └───────────────────────────────────────────────────┘       │
+│                                                              │
+│  ┌───────────────────────────────────────────────────┐       │
+│  │  Observability                                    │       │
+│  │  Atlas (metrics) + Zuul (tracing) + ELK (logs)    │       │
+│  └───────────────────────────────────────────────────┘       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Decisions
@@ -659,6 +664,21 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 2. How many microservices would you create?
 3. Which services communicate synchronously vs asynchronously?
 4. How do you handle the order saga across services?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Microservices before the domain is understood** | You cement the wrong boundaries, and moving them later costs far more than in a monolith | Start modular-monolith; extract once boundaries stop moving |
+| **A shared database between services** | The schema becomes an unversioned public API — nobody can migrate independently | One datastore per service; integrate over APIs or events |
+| **Splitting by technical layer** | An "API service" plus a "DB service" means every feature touches both — distributed, but not decoupled | Split by business capability so a change lands in one service |
+| **Synchronous call chains for everything** | Availability multiplies: five 99.9% hops give 99.5%, and latency accumulates | Async events where the caller doesn't need an answer now |
+| **Distributed transactions via 2PC** | The coordinator is a SPOF and participants hold locks while blocked | Saga with compensating actions, or TCC for reservations |
+| **Sagas without idempotent compensations** | Compensation runs at least once; a double refund is its own incident | Make every compensation idempotent and safe out of order |
+| **Assuming compensation always succeeds** | The refund can fail too, leaving the saga half-undone | Persist saga state, retry compensations, escalate to human review |
+| **Versioning by breaking `/v1`** | Clients you don't control break silently | Additive changes in place; a new version only for genuine breaks, with a sunset window |
+| **No distributed tracing** | With 20 services, "it's slow" is unfalsifiable | Propagate a trace ID from the edge through every hop, from day one |
+| **Shared libraries as the reuse strategy** | A bump requires redeploying every service — that's a monolith with extra steps | Duplicate small things; share via APIs, not compile-time coupling |
 
 ---
 

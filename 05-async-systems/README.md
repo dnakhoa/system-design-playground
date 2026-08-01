@@ -105,22 +105,22 @@ Kafka is the dominant message queue for high-throughput event streaming.
 ### Architecture
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │                  Kafka Cluster                    │
   │                                                   │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-  │  │ Broker 1 │  │ Broker 2 │  │ Broker 3 │      │
-  │  └──────────┘  └──────────┘  └──────────┘      │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+  │  │ Broker 1 │  │ Broker 2 │  │ Broker 3 │         │
+  │  └──────────┘  └──────────┘  └──────────┘         │
   │                                                   │
-  │  Topic: "user-events" (3 partitions)             │
+  │  Topic: "user-events" (3 partitions)              │
   │                                                   │
-  │  ┌─────────┐  ┌─────────┐  ┌─────────┐         │
-  │  │Part. 0  │  │Part. 1  │  │Part. 2  │         │
-  │  │msg0,msg3│  │msg1,msg4│  │msg2,msg5│         │
-  │  │msg6,msg9│  │msg7     │  │msg8     │         │
-  │  └─────────┘  └─────────┘  └─────────┘         │
+  │  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+  │  │Part. 0  │  │Part. 1  │  │Part. 2  │            │
+  │  │msg0,msg3│  │msg1,msg4│  │msg2,msg5│            │
+  │  │msg6,msg9│  │msg7     │  │msg8     │            │
+  │  └─────────┘  └─────────┘  └─────────┘            │
   │                                                   │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 
   Producer ────▶ Topic (partitioned by key)
                     │
@@ -269,18 +269,19 @@ print(reconstructed.balance)  # 900
 
 ```
   Traditional (current state):
-  ┌──────────────────────────┐
-  │  Account Balance: $500    │  ← Only the latest state
-  └──────────────────────────┘
+  ┌───────────────────────────┐
+  │  Account Balance: $900    │  ← Only the latest state.
+  └───────────────────────────┘     How did it get here? No idea.
 
   Event Sourcing (event log):
   ┌──────────────────────────┐
   │  1. AccountCreated: $0   │
-  │  2. Deposited: +$1000    │
-  │  3. Withdrawn: -$300     │
-  │  4. Deposited: -$200     │
-  │  5. Balance = $500       │  ← Derived from events
-  └──────────────────────────┘
+  │  2. Deposited:   +$1000  │  →  running balance $1000
+  │  3. Withdrawn:    -$300  │  →  running balance  $700
+  │  4. Deposited:    +$200  │  →  running balance  $900
+  ├──────────────────────────┤
+  │  Balance = $900          │  ← Derived by replaying events
+  └──────────────────────────┘     (matches the code above)
 
   ✓ Complete audit trail
   ✓ Can reconstruct state at any point in time
@@ -372,23 +373,26 @@ print(read_db.get_order("o1"))  # Fast read, no JOINs
 ```
 
 ```
-  ┌──────────────────────────────────────────────┐
-  │                                               │
-  │   Commands (Writes)      Queries (Reads)     │
-  │   ┌───────────┐         ┌───────────┐       │
-  │   │  Command  │         │  Query    │       │
-  │   │  Handler  │         │  Handler  │       │
-  │   └─────┬─────┘         └─────┬─────┘       │
-  │         │                      │             │
-  │         ▼                      ▼             │
-  │   ┌───────────┐         ┌───────────┐       │
-  │   │  Write DB │──sync──▶│  Read DB  │       │
-  │   │ (Normalized)│        │(Denormalized)│    │
-  │   └───────────┘         └───────────┘       │
-  │                                               │
-  │   Write DB: Optimized for writes             │
-  │   Read DB: Optimized for reads (pre-joined)  │
-  └──────────────────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────┐
+  │                                                       │
+  │    Commands (writes)            Queries (reads)       │
+  │                                                       │
+  │   ┌────────────────┐         ┌────────────────┐       │
+  │   │    Command     │         │     Query      │       │
+  │   │    Handler     │         │    Handler     │       │
+  │   └───────┬────────┘         └───────┬────────┘       │
+  │           │                          │                │
+  │           ▼                          ▼                │
+  │   ┌────────────────┐         ┌────────────────┐       │
+  │   │    Write DB    │ ──sync─▶│    Read DB     │       │
+  │   │  (normalized)  │         │ (denormalized) │       │
+  │   └────────────────┘         └────────────────┘       │
+  │                                                       │
+  │   Optimized for                 Optimized for         │
+  │   correctness and               fast reads —          │
+  │   transactions                  pre-joined, no        │
+  │                                 JOINs at query time   │
+  └───────────────────────────────────────────────────────┘
 
   ✓ Independent scaling of reads and writes
   ✓ Optimized data models for each use case
@@ -575,32 +579,37 @@ Uber processes millions of events per second across ride matching, pricing, driv
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                Uber Event-Driven Architecture            │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Event Sources:                                          │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐          │
-│  │Rider   │ │Driver  │ │Payment │ │GPS     │          │
-│  │App     │ │App     │ │Service │ │Tracker │          │
-│  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘          │
-│      │          │          │          │                 │
-│      └──────────┼──────────┼──────────┘                 │
-│                 │          │                            │
-│         ┌───────▼──────────▼───────┐                   │
-│         │    Kafka Cluster          │                   │
-│         │    (millions of events/s) │                   │
-│         └───────────┬───────────────┘                   │
-│                     │                                   │
-│    ┌────────────────┼────────────────┐                 │
-│    │                │                │                  │
-│    ▼                ▼                ▼                  │
-│ ┌──────┐      ┌──────┐        ┌──────┐               │
-│ │Pricing│      │Matching│      │Analytics│             │
-│ │Engine │      │Engine  │      │Pipeline│              │
-│ └──────┘      └──────┘        └──────┘               │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                Uber Event-Driven Architecture                 │
+├───────────────────────────────────────────────────────────────┤
+│                                                               │
+│  EVENT SOURCES                                                │
+│                                                               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │  Rider   │  │  Driver  │  │ Payment  │  │   GPS    │       │
+│  │   App    │  │   App    │  │ Service  │  │ Tracker  │       │
+│  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘       │
+│        │             │             │             │            │
+│        └─────────────┴──────┬──────┴─────────────┘            │
+│                             │                                 │
+│              ┌──────────────▼──────────────┐                  │
+│              │        Kafka Cluster        │                  │
+│              │  millions of events/second  │                  │
+│              │  partitioned by ride_id     │                  │
+│              └──────────────┬──────────────┘                  │
+│                             │                                 │
+│        ┌────────────────────┼────────────────────┐            │
+│        │                    │                    │            │
+│  ┌─────▼──────┐      ┌──────▼─────┐      ┌───────▼────┐       │
+│  │  Pricing   │      │  Matching  │      │ Analytics  │       │
+│  │   Engine   │      │   Engine   │      │  Pipeline  │       │
+│  └────────────┘      └────────────┘      └────────────┘       │
+│                                                               │
+│  Consumers are independent: Analytics falling behind does     │
+│  not slow Matching, because each consumer group tracks its    │
+│  own offsets.                                                 │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
@@ -644,6 +653,20 @@ When a user places an order:
 2. What happens if the email service is down?
 3. How do you handle duplicate events?
 4. How do you track the order's progress through the pipeline?
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Believing "exactly-once delivery" exists** | Over a network it's impossible; Kafka gives exactly-once *processing* within its own transaction boundary | At-least-once delivery plus idempotent consumers |
+| **At-least-once without idempotency** | Redelivery is normal, not exceptional — duplicate charges and double-sent emails follow | Deduplicate on a stable business key before doing work |
+| **Partitioning by a random key when order matters** | Kafka orders within a partition only; a ride's events land on different partitions and process out of order | Partition by the entity whose order matters (`ride_id`, `account_id`) |
+| **Partitioning by a hot key** | One partition takes 10x the traffic; a single consumer becomes the bottleneck | Choose a high-cardinality key, or add a salt and re-aggregate downstream |
+| **No dead letter queue** | A permanently-bad message retries forever and blocks its partition | DLQ after bounded retries, with an alert and a replay path |
+| **Retrying non-retryable errors** | A malformed payload will fail identically 1,000 times | Split transient (network, 5xx) from permanent (validation) and DLQ the latter at once |
+| **Async for work the user is waiting on** | "Queued" isn't "done" — a checkout that returns before payment clears misleads the user | Keep the user-blocking path synchronous; make only side effects async |
+| **Event sourcing with no snapshots** | Replay time grows without bound; a 10-year account takes minutes to load | Snapshot periodically and replay only events since the snapshot |
+| **Events carrying only IDs when consumers need data** | Every consumer calls back to the producer, recreating the coupling the queue removed | Event-carried state transfer for the fields consumers actually read |
 
 ---
 

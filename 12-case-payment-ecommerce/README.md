@@ -24,36 +24,36 @@
 ### Payment Flow
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                Payment Processing Flow                    │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Client → Payment Service → Payment Gateway → Bank       │
-│                                                          │
-│  1. Client submits payment                               │
-│     { card: "4242...", amount: 99.99, order_id: "123" } │
-│                                                          │
-│  2. Payment Service:                                     │
-│     a. Validate input                                    │
-│     b. Check idempotency (order_id already processed?)   │
-│     c. Create payment record (status: PENDING)          │
-│     d. Call payment gateway (Stripe, Adyen, etc.)       │
-│                                                          │
-│  3. Payment Gateway:                                     │
-│     a. Tokenize card                                     │
-│     b. fraud check                                       │
-│     c. Route to card network (Visa, Mastercard)          │
-│     d. Bank approves/declines                           │
-│     e. Return result                                    │
-│                                                          │
-│  4. Payment Service:                                     │
-│     a. Update payment status (COMPLETED / FAILED)       │
-│     b. Notify order service                              │
-│     c. Publish event to Kafka (for analytics)           │
-│                                                          │
-│  5. Client receives confirmation                         │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Client → Payment Service → Payment Gateway → Bank        │
+│                                                           │
+│  1. Client submits payment                                │
+│     { card: "4242...", amount: 99.99, order_id: "123" }   │
+│                                                           │
+│  2. Payment Service:                                      │
+│     a. Validate input                                     │
+│     b. Check idempotency (order_id already processed?)    │
+│     c. Create payment record (status: PENDING)            │
+│     d. Call payment gateway (Stripe, Adyen, etc.)         │
+│                                                           │
+│  3. Payment Gateway:                                      │
+│     a. Tokenize card                                      │
+│     b. fraud check                                        │
+│     c. Route to card network (Visa, Mastercard)           │
+│     d. Bank approves/declines                             │
+│     e. Return result                                      │
+│                                                           │
+│  4. Payment Service:                                      │
+│     a. Update payment status (COMPLETED / FAILED)         │
+│     b. Notify order service                               │
+│     c. Publish event to Kafka (for analytics)             │
+│                                                           │
+│  5. Client receives confirmation                          │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Idempotency
@@ -84,20 +84,20 @@ The most critical property in payment systems. Each payment must be processed ex
 ### Exactly-Once Processing
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Exactly-Once Payment Processing                  │
   │                                                   │
-  │  1. Begin transaction                            │
+  │  1. Begin transaction                             │
   │  2. Check idempotency key in DB                   │
-  │  3. If exists → return cached result             │
+  │  3. If exists → return cached result              │
   │  4. Process payment with gateway                  │
   │  5. Store result with idempotency key             │
   │  6. Commit transaction                            │
   │                                                   │
   │  If crash at any point:                           │
   │  - Before commit: Transaction rolled back         │
-  │  - After commit: Idempotency key prevents retry  │
-  └─────────────────────────────────────────────────┘
+  │  - After commit: Idempotency key prevents retry   │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Reconciliation
@@ -105,23 +105,23 @@ The most critical property in payment systems. Each payment must be processed ex
 Daily reconciliation ensures all systems agree on transaction state.
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Reconciliation Process                           │
   │                                                   │
   │  End of day:                                      │
-  │  1. Fetch all transactions from our DB           │
-  │  2. Fetch all transactions from payment gateway  │
+  │  1. Fetch all transactions from our DB            │
+  │  2. Fetch all transactions from payment gateway   │
   │  3. Match by transaction_id                       │
   │                                                   │
   │  Match status:                                    │
-  │  ✓ Matched: Both systems agree                   │
-  │  ⚠ Mismatch: Amount or status differs            │
-  │  ✗ Missing in gateway: Payment we think succeeded│
-  │  ✗ Missing in our DB: Payment we missed          │
+  │  ✓ Matched: Both systems agree                    │
+  │  ⚠ Mismatch: Amount or status differs             │
+  │  ✗ Missing in gateway: Payment we think succeeded │
+  │  ✗ Missing in our DB: Payment we missed           │
   │                                                   │
-  │  Auto-resolve: 95%+ match automatically          │
-  │  Manual review: Remaining 5% flagged for review  │
-  └─────────────────────────────────────────────────┘
+  │  Auto-resolve: 95%+ match automatically           │
+  │  Manual review: Remaining 5% flagged for review   │
+  └───────────────────────────────────────────────────┘
 ```
 
 ---
@@ -131,37 +131,37 @@ Daily reconciliation ensures all systems agree on transaction state.
 ### Order Lifecycle
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌────────────────────────────────────────────────────┐
   │              Order State Machine                   │
-  │                                                   │
-  │  ┌──────────┐  payment  ┌──────────┐            │
-  │  │  PENDING │──────────▶│  PAID    │            │
-  │  └──────────┘           └────┬─────┘            │
-  │       │                      │                   │
-  │  cancel│               fulfill│                   │
-  │       ▼                      ▼                   │
-  │  ┌──────────┐          ┌──────────┐             │
-  │  │CANCELLED │          │ FULFILLING│             │
-  │  └──────────┘          └────┬─────┘             │
-  │                              │                    │
-  │                        ship│                      │
-  │                              ▼                    │
-  │                         ┌──────────┐             │
-  │                         │ SHIPPED  │             │
-  │                         └────┬─────┘             │
-  │                              │                    │
+  │                                                    │
+  │  ┌──────────┐  payment  ┌──────────┐               │
+  │  │  PENDING │──────────▶│  PAID    │               │
+  │  └──────────┘           └────┬─────┘               │
+  │       │                      │                     │
+  │  cancel│               fulfill│                    │
+  │       ▼                      ▼                     │
+  │  ┌──────────┐          ┌───────────┐               │
+  │  │CANCELLED │          │ FULFILLING│               │
+  │  └──────────┘          └────┬──────┘               │
+  │                              │                     │
+  │                        ship│                       │
+  │                              ▼                     │
+  │                         ┌──────────┐               │
+  │                         │ SHIPPED  │               │
+  │                         └────┬─────┘               │
+  │                              │                     │
   │                        deliver│                    │
-  │                              ▼                    │
-  │                         ┌──────────┐             │
-  │                         │ DELIVERED│             │
-  │                         └────┬─────┘             │
-  │                              │                    │
-  │                        refund│                    │
-  │                              ▼                    │
-  │                         ┌──────────┐             │
-  │                         │ REFUNDED │             │
-  │                         └──────────┘             │
-  └─────────────────────────────────────────────────┘
+  │                              ▼                     │
+  │                         ┌──────────┐               │
+  │                         │ DELIVERED│               │
+  │                         └────┬─────┘               │
+  │                              │                     │
+  │                        refund│                     │
+  │                              ▼                     │
+  │                         ┌──────────┐               │
+  │                         │ REFUNDED │               │
+  │                         └──────────┘               │
+  └────────────────────────────────────────────────────┘
 ```
 
 ### Inventory Management
@@ -195,40 +195,63 @@ The classic race condition problem:
 Flash sales create massive traffic spikes (100x normal).
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Flash Sale Architecture                      │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Before sale:                                           │
-│  1. Pre-warm cache with product details                 │
-│  2. Pre-compute inventory in Redis (atomic DECR)       │
-│  3. Queue-based entry (virtual waiting room)           │
-│                                                          │
-│  During sale:                                           │
-│  1. User enters virtual queue                           │
-│  2. Queue assigns position: "You are #1,234 in line"   │
-│  3. As users ahead complete/fail, position advances    │
-│  4. When it's your turn: 15-minute window to purchase  │
-│                                                          │
-│  Purchase flow:                                         │
-│  1. Redis DECR inventory:{product_id}                   │
-│  2. If result >= 0: Reserve item (TTL: 10 minutes)     │
-│  3. Process payment                                     │
-│  4. If payment succeeds: Confirm reservation            │
-│  5. If payment fails: INCR inventory back               │
-│                                                          │
-│  Key optimizations:                                     │
-│  - All reads from Redis (no DB until payment)           │
-│  - Payment processed async (queue)                      │
-│  - Rate limiting per user (1 purchase per user)         │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  Before sale:                                             │
+│  1. Pre-warm cache with product details                   │
+│  2. Pre-compute inventory in Redis (atomic DECR)          │
+│  3. Queue-based entry (virtual waiting room)              │
+│                                                           │
+│  During sale:                                             │
+│  1. User enters virtual queue                             │
+│  2. Queue assigns position: "You are #1,234 in line"      │
+│  3. As users ahead complete/fail, position advances       │
+│  4. When it's your turn: 15-minute window to purchase     │
+│                                                           │
+│  Purchase flow:                                           │
+│  1. Redis DECR inventory:{product_id}                     │
+│  2. If result >= 0: Reserve item (TTL: 10 minutes)        │
+│  3. If result <  0: INCR back immediately, then reject    │
+│  4. Process payment                                       │
+│  5. If payment succeeds: Confirm reservation              │
+│  6. If payment fails: INCR inventory back                 │
+│                                                           │
+│  Key optimizations:                                       │
+│  - All reads from Redis (no DB until payment)             │
+│  - Payment processed async (queue)                        │
+│  - Rate limiting per user (1 purchase per user)           │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
+
+**Step 3 is not optional.** A bare `DECR` that rejects without restoring drives
+the counter arbitrarily negative once stock runs out — and with 1M users hitting
+a 10,000-unit sale, it lands somewhere around -990,000. Then the first refund
+`INCR` has to climb back through a million phantom decrements before the counter
+is positive again, so genuinely returned stock never becomes buyable.
+
+Do the check and the decrement atomically instead:
+
+```lua
+-- reserve.lua — KEYS[1] = inventory key, ARGV[1] = qty
+-- Never lets the counter go below zero, so no repair path is needed.
+local stock = tonumber(redis.call('GET', KEYS[1]) or '0')
+if stock >= tonumber(ARGV[1]) then
+  return redis.call('DECRBY', KEYS[1], ARGV[1])
+end
+return -1        -- out of stock; counter untouched
+```
+
+Redis runs each script atomically, so the read and the write cannot interleave
+with another buyer. `DECR`-then-compensate has a window where the counter lies;
+this does not.
 
 ### Cart Design
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Cart Storage Strategy                            │
   │                                                   │
   │  Logged-in users:                                 │
@@ -236,16 +259,16 @@ Flash sales create massive traffic spikes (100x normal).
   │  MySQL: carts table (durable backup)              │
   │                                                   │
   │  Guest users:                                     │
-  │  Redis: cart:{session_id} → Hash of product:qty  │
+  │  Redis: cart:{session_id} → Hash of product:qty   │
   │  TTL: 7 days                                      │
   │  On login: Merge guest cart with user cart        │
   │                                                   │
   │  Cart operations:                                 │
-  │  HSET cart:123 product_456 2  (add 2 of product) │
+  │  HSET cart:123 product_456 2  (add 2 of product)  │
   │  HGET cart:123 product_456     (get quantity)     │
-  │  HDEL cart:123 product_456     (remove product)  │
-  │  HGETALL cart:123              (get all items)   │
-  └─────────────────────────────────────────────────┘
+  │  HDEL cart:123 product_456     (remove product)   │
+  │  HGETALL cart:123              (get all items)    │
+  └───────────────────────────────────────────────────┘
 ```
 
 ---
@@ -267,99 +290,128 @@ Flash sales create massive traffic spikes (100x normal).
 ### Payment State Machine
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              Payment State Machine                        │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────┐  authorize  ┌──────────────┐             │
-│  │ CREATED  │────────────▶│ AUTHORIZED   │             │
-│  └──────────┘             └──────┬───────┘             │
-│       │                          │                      │
-│  cancel│                    capture│                     │
-│       ▼                          ▼                      │
-│  ┌──────────┐             ┌──────────────┐             │
-│  │CANCELLED │             │  CAPTURED    │             │
-│  └──────────┘             └──────┬───────┘             │
-│                                   │                      │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────┐  authorize  ┌──────────────┐                │
+│  │ CREATED  │────────────▶│ AUTHORIZED   │                │
+│  └──────────┘             └──────┬───────┘                │
+│       │                          │                        │
+│  cancel│                    capture│                      │
+│       ▼                          ▼                        │
+│  ┌──────────┐             ┌──────────────┐                │
+│  │CANCELLED │             │  CAPTURED    │                │
+│  └──────────┘             └──────┬───────┘                │
+│                                   │                       │
 │                              refund│                      │
-│                                   ▼                      │
-│                            ┌──────────────┐             │
-│                            │  REFUNDED    │             │
-│                            └──────────────┘             │
-│                                                          │
-│  Two-phase approach:                                    │
-│  1. Authorize: Hold funds on card (no money moved)      │
-│  2. Capture: Actually transfer money                    │
-│  This allows order confirmation before charging         │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│                                   ▼                       │
+│                            ┌──────────────┐               │
+│                            │  REFUNDED    │               │
+│                            └──────────────┘               │
+│                                                           │
+│  Two-phase approach:                                      │
+│  1. Authorize: Hold funds on card (no money moved)        │
+│  2. Capture: Actually transfer money                      │
+│  This allows order confirmation before charging           │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Idempotency Implementation
 
 ```python
+import json
+
 import redis
-import uuid
 
 class PaymentService:
     def __init__(self):
         self.redis = redis.Redis()
         self.db = Database()
-    
-    def process_payment(self, order_id, amount, idempotency_key=None):
-        # Generate idempotency key if not provided
+
+    def process_payment(self, order_id, amount, idempotency_key):
+        """The idempotency key is REQUIRED and must come from the client.
+
+        Generating one server-side would defeat the whole mechanism: a retry
+        would arrive with a fresh key, miss the dedup check, and charge the
+        customer twice — exactly the failure idempotency exists to prevent.
+        The key must be stable across retries of the same logical intent, so
+        only the caller can mint it.
+        """
         if not idempotency_key:
-            idempotency_key = f"{order_id}:{uuid.uuid4()}"
-        
-        # Check if already processed
-        cached = self.redis.get(f"idempotency:{idempotency_key}")
-        if cached:
-            return json.loads(cached)  # Return cached result
-        
-        # Process payment
+            raise ValueError("idempotency_key is required for payment writes")
+
+        dedup_key = f"idempotency:{idempotency_key}"
+
+        # Claim the key BEFORE charging. SET NX is atomic, so exactly one
+        # concurrent request wins the claim; the rest see the in-flight
+        # marker. Checking-then-setting would let two parallel retries both
+        # pass the check and both charge.
+        claimed = self.redis.set(dedup_key, json.dumps({"status": "in_flight"}),
+                                 nx=True, ex=86400)
+
+        if not claimed:
+            existing = json.loads(self.redis.get(dedup_key))
+            if existing["status"] == "in_flight":
+                # A concurrent attempt is mid-charge. Tell the client to retry
+                # rather than risking a second charge.
+                raise ConcurrentRequestError("payment already in flight", retry_after=2)
+            return existing["result"]  # Replay the recorded response
+
         try:
-            result = self.payment_gateway.charge(order_id, amount)
-            
-            # Store result with TTL (24 hours)
-            self.redis.setex(
-                f"idempotency:{idempotency_key}",
-                86400,  # 24 hours
-                json.dumps(result)
+            result = self.payment_gateway.charge(
+                order_id, amount,
+                # Pass the key downstream too — the gateway dedups as well.
+                idempotency_key=idempotency_key,
             )
-            
-            # Store in DB for durability
-            self.db.save_payment(order_id, result)
-            
+
+            # Persist durably FIRST, then record the response for replay.
+            # Redis is a cache; the ledger is the source of truth.
+            self.db.save_payment(order_id, idempotency_key, result)
+            self.redis.setex(dedup_key, 86400,
+                             json.dumps({"status": "done", "result": result}))
             return result
-        except Exception as e:
-            # Don't cache failures (allow retry)
+
+        except Exception:
+            # Release the claim so a legitimate retry can proceed. Leaving the
+            # marker in place would block the customer for the full 24h TTL.
+            self.redis.delete(dedup_key)
             raise
 ```
+
+**The subtle failure mode:** if the gateway charge *succeeds* but the process
+dies before `save_payment`, the `except` branch never runs and the claim
+survives with `status: "in_flight"` until its TTL lapses — the customer is
+charged with no local record. This is exactly the gap that daily
+**reconciliation** (above) exists to close: compare the gateway's settled
+transactions against your ledger and repair the difference. No amount of
+in-process cleverness removes the need for it.
 
 ### Fraud Detection
 
 ```
-  ┌─────────────────────────────────────────────────────┐
-  │  Fraud Detection Pipeline                            │
+  ┌───────────────────────────────────────────────────────┐
+  │  Fraud Detection Pipeline                             │
   │                                                       │
-  │  Transaction → Rule Engine → ML Model → Decision     │
+  │  Transaction → Rule Engine → ML Model → Decision      │
   │                                                       │
-  │  Rule Engine (fast, deterministic):                  │
-  │  - Amount > $10,000 → FLAG                          │
-  │  - Country mismatch (card US, IP Russia) → FLAG     │
-  │  - 10+ transactions in 1 minute → BLOCK             │
-  │  - Known fraudulent card → BLOCK                     │
+  │  Rule Engine (fast, deterministic):                   │
+  │  - Amount > $10,000 → FLAG                            │
+  │  - Country mismatch (card US, IP Russia) → FLAG       │
+  │  - 10+ transactions in 1 minute → BLOCK               │
+  │  - Known fraudulent card → BLOCK                      │
   │                                                       │
-  │  ML Model (slower, more accurate):                   │
-  │  - Features: amount, time, location, device, history │
-  │  - Score: 0-1 probability of fraud                   │
-  │  - Threshold: >0.8 → BLOCK, >0.5 → FLAG            │
+  │  ML Model (slower, more accurate):                    │
+  │  - Features: amount, time, location, device, history  │
+  │  - Score: 0-1 probability of fraud                    │
+  │  - Threshold: >0.8 → BLOCK, >0.5 → FLAG               │
   │                                                       │
-  │  Decision:                                           │
-  │  - APPROVE: Process payment                          │
-  │  - FLAG: Process but review manually                 │
-  │  - BLOCK: Reject payment                             │
-  └─────────────────────────────────────────────────────┘
+  │  Decision:                                            │
+  │  - APPROVE: Process payment                           │
+  │  - FLAG: Process but review manually                  │
+  │  - BLOCK: Reject payment                              │
+  └───────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -373,58 +425,76 @@ class PaymentService:
 
   Solution: Reserve inventory during checkout
 
-  ┌─────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────┐
   │  Inventory Reservation Flow                           │
   │                                                       │
-  │  1. User clicks "Checkout"                           │
-  │     → Redis DECR inventory:{product_id}              │
-  │     → If result >= 0: Reserve (TTL: 10 minutes)      │
-  │     → If result < 0: "Out of stock"                  │
+  │  1. User clicks "Checkout"                            │
+  │     → Redis DECR inventory:{product_id}               │
+  │     → If result >= 0: Reserve (TTL: 10 minutes)       │
+  │     → If result < 0: "Out of stock"                   │
   │                                                       │
-  │  2. User completes payment (within 10 minutes)       │
-  │     → Confirm reservation (remove TTL)               │
-  │     → Decrement DB inventory                         │
+  │  2. User completes payment (within 10 minutes)        │
+  │     → Confirm reservation (remove TTL)                │
+  │     → Decrement DB inventory                          │
   │                                                       │
-  │  3. User abandons checkout (after 10 minutes)        │
-  │     → TTL expires → Redis INCR inventory             │
-  │     → Item becomes available again                   │
+  │  3. User abandons checkout (after 10 minutes)         │
+  │     → reservation key expires                         │
+  │     → sweeper returns the unit to inventory           │
+  │     → Item becomes available again                    │
   │                                                       │
-  │  Benefits:                                           │
-  │  - No overselling                                    │
-  │  - Automatic release on timeout                      │
-  │  - Redis handles contention (atomic operations)      │
-  └─────────────────────────────────────────────────────┘
+  │  Benefits:                                            │
+  │  - No overselling                                     │
+  │  - Automatic release on timeout                       │
+  │  - Redis handles contention (atomic operations)       │
+  └───────────────────────────────────────────────────────┘
 ```
+
+> **Redis does not run your code when a key expires.** A TTL deletes the key
+> silently — it will not `INCR` anything. "TTL expires → INCR inventory" needs
+> an actual mechanism:
+>
+> | Mechanism | Trade-off |
+> |-----------|-----------|
+> | **Keyspace notifications** (`Kx`, event `expired`) | Near-real-time, but delivery is fire-and-forget — a disconnected subscriber loses the event and that unit leaks permanently |
+> | **Sweeper job** over a reservation `ZSET` scored by expiry time | Reliable and replayable; reclaims within one poll interval (a few seconds) |
+> | **Reconcile against the DB** | Backstop for whatever the first two miss |
+>
+> Make the sweeper the primary path. On a flash sale, a lost expiry event means
+> permanently unsellable stock — worse than a few seconds of reclaim delay.
+>
+> Note also that Redis expires keys **lazily** (on access) as well as via a
+> background sampler, so even the notification can arrive well after the nominal
+> TTL. Never treat a TTL as a scheduler.
 
 ### Flash Sale Detailed Flow
 
 ```
-  ┌─────────────────────────────────────────────────────┐
-  │  Flash Sale: 10,000 items, 1M users                  │
+  ┌───────────────────────────────────────────────────────┐
+  │  Flash Sale: 10,000 items, 1M users                   │
   │                                                       │
-  │  T-24h: Pre-warm                                     │
-  │  - Load product details into Redis                   │
-  │  - Set inventory:10000 in Redis                      │
-  │  - Pre-render product page (static HTML)             │
-  │  - CDN cache the page                                │
+  │  T-24h: Pre-warm                                      │
+  │  - Load product details into Redis                    │
+  │  - Set inventory:10000 in Redis                       │
+  │  - Pre-render product page (static HTML)              │
+  │  - CDN cache the page                                 │
   │                                                       │
-  │  T-0: Sale starts                                    │
-  │  - Virtual queue: users get position number          │
-  │  - Position 1-10000: "You can buy!"                 │
-  │  - Position 10001+: "You're in queue, wait..."      │
+  │  T-0: Sale starts                                     │
+  │  - Virtual queue: users get position number           │
+  │  - Position 1-10000: "You can buy!"                   │
+  │  - Position 10001+: "You're in queue, wait..."        │
   │                                                       │
-  │  Purchase (position 1-10000):                        │
-  │  1. Redis DECR inventory → result = 9999             │
-  │  2. Reserve: SET reservation:user_123 EX 600         │
-  │  3. Redirect to payment                              │
-  │  4. Payment succeeds → Confirm: DEL reservation      │
-  │  5. Payment fails → INCR inventory back              │
+  │  Purchase (position 1-10000):                         │
+  │  1. Redis DECR inventory → result = 9999              │
+  │  2. Reserve: SET reservation:user_123 EX 600          │
+  │  3. Redirect to payment                               │
+  │  4. Payment succeeds → Confirm: DEL reservation       │
+  │  5. Payment fails → INCR inventory back               │
   │                                                       │
   │  Queue advancement:                                   │
-  │  - User completes/fails → Next position advances     │
-  │  - Position 10001 becomes 10000 → "You can buy!"   │
-  │  - Push notification: "It's your turn!"              │
-  └─────────────────────────────────────────────────────┘
+  │  - User completes/fails → Next position advances      │
+  │  - Position 10001 becomes 10000 → "You can buy!"      │
+  │  - Push notification: "It's your turn!"               │
+  └───────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -473,6 +543,22 @@ Design a daily reconciliation system:
 - How do you report discrepancies?
 - How do you prevent duplicate reconciliations?
 
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Generating the idempotency key server-side** | A retry arrives with a fresh key, misses dedup, and charges twice — defeating the entire mechanism | The client mints a key that is stable across retries of one intent |
+| **Check-then-set for idempotency** | Two concurrent retries both pass the check and both charge | Atomic claim (`SET NX`) *before* calling the gateway |
+| **Storing money as a float** | `0.1 + 0.2 != 0.3`; rounding errors accumulate into real losses | Integer minor units (cents) or exact `DECIMAL` |
+| **Trusting the client's amount** | Anyone can post `{"amount": 1}` for a $1,000 order | Recompute the total server-side from authoritative prices |
+| **No reconciliation** | A charge that succeeds at the gateway but fails to record locally is invisible until the customer complains | Daily gateway-vs-ledger comparison with an explicit repair path |
+| **`DECR` without restoring on rejection** | The counter drifts far negative, and returned stock never becomes buyable again | Check-and-decrement atomically in one Lua script |
+| **Relying on TTL expiry to release stock** | Redis deletes keys silently; it does not run your code | Sweeper over a reservation `ZSET`, with reconciliation as a backstop |
+| **Deleting or mutating ledger rows** | Financial history must be auditable and reconstructible | Append-only ledger; corrections are new compensating entries |
+| **Capturing at authorization time** | You take money before you can fulfil, so every failure becomes a refund | Authorize on order, capture on fulfilment |
+| **Non-idempotent refunds** | A retried refund pays the customer twice | Key refunds by `refund_id` and dedupe on it |
+| **Treating a payment as a two-state flag** | Real payments are pending, authorized, captured, failed, disputed, refunded | An explicit state machine with legal transitions only |
+
 ---
 
 ## Discussion Questions
@@ -512,4 +598,4 @@ Design a daily reconciliation system:
 ---
 
 **Previous**: [Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
-**Next**: [LLM Inference Serving Architecture](../13-llm-inference-serving/README.md)
+**Next**: [Security](../13-security/README.md)

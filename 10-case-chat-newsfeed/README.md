@@ -42,37 +42,37 @@ Per year: ~24 TB (text only)
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                Chat System Architecture                   │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐    │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌───────────────────────────────────────────────────┐    │
 │  │  Connection Layer (WebSocket Gateway)             │    │
-│  │  ┌──────┐  ┌──────┐  ┌──────┐                   │    │
-│  │  │ WS   │  │ WS   │  │ WS   │  (stateful)       │    │
-│  │  │Server│  │Server│  │Server│                   │    │
-│  │  └──┬───┘  └──┬───┘  └──┬───┘                   │    │
-│  │     └─────────┼─────────┘                       │    │
-│  └───────────────┼─────────────────────────────────┘    │
-│                  │                                       │
-│  ┌───────────────▼─────────────────────────────────┐    │
+│  │  ┌──────┐  ┌──────┐  ┌──────┐                     │    │
+│  │  │ WS   │  │ WS   │  │ WS   │  (stateful)         │    │
+│  │  │Server│  │Server│  │Server│                     │    │
+│  │  └──┬───┘  └──┬───┘  └──┬───┘                     │    │
+│  │     └─────────┼─────────┘                         │    │
+│  └───────────────┼───────────────────────────────────┘    │
+│                  │                                        │
+│  ┌───────────────▼───────────────────────────────────┐    │
 │  │  Chat Service                                     │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │    │
-│  │  │ Message  │  │ Presence │  │  Group   │     │    │
-│  │  │ Service  │  │ Service  │  │  Service │     │    │
-│  │  └──────────┘  └──────────┘  └──────────┘     │    │
-│  └───────────────┬─────────────────────────────────┘    │
-│                  │                                       │
-│  ┌───────────────▼─────────────────────────────────┐    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │    │
+│  │  │ Message  │  │ Presence │  │  Group   │         │    │
+│  │  │ Service  │  │ Service  │  │  Service │         │    │
+│  │  └──────────┘  └──────────┘  └──────────┘         │    │
+│  └───────────────┬───────────────────────────────────┘    │
+│                  │                                        │
+│  ┌───────────────▼───────────────────────────────────┐    │
 │  │  Data Layer                                       │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │    │
-│  │  │ Cassandra│  │  Redis   │  │  Kafka   │     │    │
-│  │  │(messages)│  │(presence,│  │(message  │     │    │
-│  │  │          │  │  sessions)│  │ events)  │     │    │
-│  │  └──────────┘  └──────────┘  └──────────┘     │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+│  │  ┌──────────┐  ┌───────────┐  ┌──────────┐        │    │
+│  │  │ Cassandra│  │  Redis    │  │  Kafka   │        │    │
+│  │  │(messages)│  │(presence, │  │(message  │        │    │
+│  │  │          │  │  sessions)│  │ events)  │        │    │
+│  │  └──────────┘  └───────────┘  └──────────┘        │    │
+│  └───────────────────────────────────────────────────┘    │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### WebSocket Gateway
@@ -132,12 +132,12 @@ The connection layer is the most critical component. Each user maintains a persi
 ### Presence System
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  Presence System                                  │
   │                                                   │
   │  User connects:                                   │
-  │  Redis SET presence:{user_id} EX 60              │
-  │  (expires after 60 seconds if no heartbeat)      │
+  │  Redis SET presence:{user_id} EX 60               │
+  │  (expires after 60 seconds if no heartbeat)       │
   │                                                   │
   │  Heartbeat:                                       │
   │  Every 30 seconds: Redis EXPIRE presence:{user} 60│
@@ -148,13 +148,13 @@ The connection layer is the most critical component. Each user maintains a persi
   │                                                   │
   │  Check presence:                                  │
   │  Redis GET presence:{user_id} → EXISTS = online   │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Read Receipts
 
 ```
-  Two states: Sent ✓, Delivered ✓✓, Read ✓✓ (blue)
+  Three states: Sent ✓, Delivered ✓✓, Read ✓✓ (blue)
 
   Alice sends message to Bob:
   1. Message sent: status = "sent"
@@ -185,21 +185,21 @@ When a user posts, their content must appear in all followers' feeds.
 
 ```
   Fan-out on Write (Push):
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  User posts tweet                                 │
   │  │                                                │
-  │  ├──▶ Follower 1's feed (write to their feed)    │
-  │  ├──▶ Follower 2's feed                          │
-  │  ├──▶ Follower 3's feed                          │
-  │  └──▶ Follower 10,000's feed                     │
+  │  ├──▶ Follower 1's feed (write to their feed)     │
+  │  ├──▶ Follower 2's feed                           │
+  │  ├──▶ Follower 3's feed                           │
+  │  └──▶ Follower 10,000's feed                      │
   │                                                   │
   │  ✓ Feed read is fast (pre-computed)               │
-  │  ✗ Write amplification (1 post → 10K writes)     │
-  │  ✗ Celebrity problem (1 post → 10M writes!)      │
-  └─────────────────────────────────────────────────┘
+  │  ✗ Write amplification (1 post → 10K writes)      │
+  │  ✗ Celebrity problem (1 post → 10M writes!)       │
+  └───────────────────────────────────────────────────┘
 
   Fan-out on Read (Pull):
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │  User opens feed                                  │
   │  │                                                │
   │  ├──▶ Check: Who does this user follow?           │
@@ -208,57 +208,57 @@ When a user posts, their content must appear in all followers' feeds.
   │  └──▶ Return feed                                 │
   │                                                   │
   │  ✓ No write amplification                         │
-  │  ✗ Feed read is slow (multiple DB queries)       │
-  │  ✗ High latency for users following many people  │
-  └─────────────────────────────────────────────────┘
+  │  ✗ Feed read is slow (multiple DB queries)        │
+  │  ✗ High latency for users following many people   │
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Hybrid Fan-Out (The Real Solution)
 
 ```
-  ┌─────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────┐
   │           Hybrid Fan-Out Strategy                 │
   │                                                   │
   │  Regular users ( <10K followers):                 │
-  │  → Push on write (fan-out to followers' feeds)   │
+  │  → Push on write (fan-out to followers' feeds)    │
   │                                                   │
-  │  Celebrity users ( >10K followers):              │
-  │  → Pull on read (fetch during feed generation)   │
+  │  Celebrity users ( >10K followers):               │
+  │  → Pull on read (fetch during feed generation)    │
   │                                                   │
   │  Feed generation:                                 │
-  │  1. Start with pre-computed feed (pushed posts)  │
-  │  2. Merge in real-time posts from celebrities    │
+  │  1. Start with pre-computed feed (pushed posts)   │
+  │  2. Merge in real-time posts from celebrities     │
   │  3. Sort by ranking algorithm                     │
   │  4. Return top N posts                            │
-  └─────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────┘
 ```
 
 ### Feed Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │              News Feed Architecture                       │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  User posts → Post Service → Fan-out Service             │
-│                              │                           │
-│                    ┌─────────┼─────────┐                │
-│                    │         │         │                │
-│                    ▼         ▼         ▼                │
-│              ┌─────────┐ ┌─────┐ ┌─────────┐          │
-│              │Feed Cache│ │Feed │ │Analytics│          │
-│              │(Redis)   │ │DB   │ │(Kafka)  │          │
-│              │per-user  │ │     │ │         │          │
-│              │sorted set│ │     │ │         │          │
-│              └─────────┘ └─────┘ └─────────┘          │
-│                                                          │
-│  Feed read:                                              │
-│  1. ZREVRANGE feed:{user_id} 0 19 (top 20 posts)       │
-│  2. For each post, hydrate with content/user info        │
-│  3. Apply ranking algorithm                              │
-│  4. Return to client                                     │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  User posts → Post Service → Fan-out Service              │
+│                              │                            │
+│                    ┌─────────┼─────────┐                  │
+│                    │         │         │                  │
+│                    ▼         ▼         ▼                  │
+│              ┌──────────┐ ┌─────┐ ┌─────────┐             │
+│              │Feed Cache│ │Feed │ │Analytics│             │
+│              │(Redis)   │ │DB   │ │(Kafka)  │             │
+│              │per-user  │ │     │ │         │             │
+│              │sorted set│ │     │ │         │             │
+│              └──────────┘ └─────┘ └─────────┘             │
+│                                                           │
+│  Feed read:                                               │
+│  1. ZREVRANGE feed:{user_id} 0 19 (top 20 posts)          │
+│  2. For each post, hydrate with content/user info         │
+│  3. Apply ranking algorithm                               │
+│  4. Return to client                                      │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Feed Storage in Redis
@@ -276,28 +276,76 @@ When a user posts, their content must appear in all followers' feeds.
 
   ZREVRANGE feed:alice 0 19  # Latest 20 posts
 
-  Cleanup: Remove posts older than 7 days
-  ZREMRANGEBYRANK feed:alice 0 -1  (with time-based filtering)
+  Cleanup — two correct options:
+
+  (a) By age: drop everything scored before the cutoff timestamp
+      ZREMRANGEBYSCORE feed:alice -inf 1689395200
+
+  (b) By size: keep only the newest 1000 entries
+      ZREMRANGEBYRANK feed:alice 0 -1001
+      (ranks are low→high score, so 0..-1001 is everything
+       EXCEPT the top 1000)
 ```
+
+> **Do not write `ZREMRANGEBYRANK feed:alice 0 -1`.** That range covers the
+> entire sorted set — it is equivalent to `DEL` and wipes the whole feed.
+> `-1` is the *last* element, not "leave one behind."
+
+Option (b) is usually the better default: it bounds memory per user regardless
+of how active the people they follow are. Age-based trimming leaves a heavy
+user's feed unbounded and a quiet user's feed empty.
 
 ### Ranking Algorithm
 
 ```
-  Simple engagement-based ranking:
+  Engagement, weighted by interaction cost:
 
-  score = (likes × 1.0) + (comments × 2.0) + (shares × 3.0) + recency_bonus
+  engagement = (likes × 1.0) + (comments × 2.0) + (shares × 3.0)
 
-  recency_bonus = max(0, 1.0 - (hours_since_post / 24))
-
-  Example:
-  Post A: 100 likes, 20 comments, 10 shares, posted 2 hours ago
-  score = 100×1 + 20×2 + 10×3 + (1 - 2/24) = 100 + 40 + 30 + 0.92 = 170.92
-
-  Post B: 500 likes, 5 comments, 0 shares, posted 20 hours ago
-  score = 500×1 + 5×2 + 0×3 + (1 - 20/24) = 500 + 10 + 0 + 0.17 = 510.17
-
-  Post B ranks higher (more engagement despite being older)
+  Post A: 100 likes, 20 comments, 10 shares → 100 + 40 + 30 = 170
+  Post B: 500 likes,  5 comments,  0 shares → 500 + 10 +  0 = 510
 ```
+
+Now apply time decay. **Recency must be a multiplier or a divisor, never an
+additive bonus** — a term worth at most 1.0 cannot influence scores in the
+hundreds:
+
+```
+  ┌─ The broken version ────────────────────────────────────┐
+  │  score = engagement + (1 - hours/24)                     │
+  │                                                          │
+  │  Post A (2h):  170 + 0.92 = 170.92                      │
+  │  Post B (20h): 510 + 0.17 = 510.17                      │
+  │                                                          │
+  │  B wins by 339. The recency term contributed 0.75 of     │
+  │  that. Deleting it entirely changes nothing — so it is   │
+  │  not actually ranking by recency at all.                 │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ Gravity decay (Hacker News style) ─────────────────────┐
+  │  score = engagement / (hours + 2)^1.8                    │
+  │                                                          │
+  │  Post A (2h):  170 / 4^1.8   = 170 / 12.1 = 14.0        │
+  │  Post B (20h): 510 / 22^1.8  = 510 / 274  =  1.9        │
+  │                                                          │
+  │  Post A wins. A fresh post with solid engagement beats   │
+  │  an older post with 3× the engagement — which is the     │
+  │  behaviour a feed actually wants.                        │
+  └──────────────────────────────────────────────────────────┘
+```
+
+**Tuning the exponent** controls how aggressively the feed churns:
+
+| Gravity | Half-life | Feels like |
+|---------|-----------|------------|
+| 1.2 | ~14 h | Slow — good content lingers for a day |
+| 1.8 | ~5 h | Balanced (HN's default) |
+| 2.5 | ~2 h | Fast churn — breaking news, live events |
+
+An alternative used widely in practice is Reddit's **logarithmic** approach:
+`score = log10(engagement) + timestamp/45000`. Because engagement is
+compressed logarithmically, the first 10 upvotes move a post as much as the
+next 100 — so age reliably overtakes raw volume.
 
 ---
 
@@ -310,17 +358,6 @@ When a user posts, their content must appear in all followers' feeds.
 | **Storage** | Cassandra (time-series) | Redis (sorted sets) + MySQL |
 | **Real-time** | WebSocket (persistent) | Polling or push notifications |
 | **Fan-out** | N/A (point-to-point) | Push + pull hybrid |
-
----
-
-## Key References
-
-| Resource | Type | Focus |
-|----------|------|-------|
-| System Design Interview (Ch. 4-5) | Book | Chat system, news feed |
-| WhatsApp Engineering Blog | Blog | Message delivery at scale |
-| Twitter Engineering Blog | Blog | Fan-out, timeline ranking |
-| "Building Microservices" (Ch. 5) | Book | Real-time communication |
 
 ---
 
@@ -338,6 +375,61 @@ When a user posts, their content must appear in all followers' feeds.
 2. How do you store and retrieve message history?
 3. How do you implement presence (online/offline)?
 4. How do you handle group chat fan-out?
+
+---
+
+## Common Mistakes
+
+| Mistake | Why It's Wrong | What to Do Instead |
+|---------|---------------|-------------------|
+| **Treating WebSocket servers as stateless** | The connection *is* the state — you can't route to Bob without knowing which server holds him | Connection registry (`user_id → server_id`) in Redis; route through it |
+| **Client-generated message IDs for ordering** | Device clocks are wrong, and users cheat | Server-assigned sequence per conversation (Snowflake or a per-chat counter) |
+| **Global ordering across all messages** | Needs total-order consensus at enormous cost, and nobody can perceive it | Order *within* a conversation only — that's all users notice |
+| **`ZREMRANGEBYRANK key 0 -1` to trim a feed** | That range is the entire sorted set — it deletes the feed | `ZREMRANGEBYRANK key 0 -1001` to keep 1000, or `ZREMRANGEBYSCORE` by timestamp |
+| **Fan-out on write for celebrities** | 100M followers means 100M writes for one post, and the queue never drains | Hybrid: push for normal accounts, pull for high-follower accounts at read time |
+| **Fan-out on read for everyone** | Following 500 accounts means 500 queries per feed load | Pre-compute for the common case; pull only the celebrity tail |
+| **Fanning out to inactive users** | Most of a large follower list hasn't opened the app in months | Push only to recently-active followers; the rest rebuild on next login |
+| **Additive recency in a ranking score** | A term bounded at 1.0 cannot move scores in the hundreds — recency silently does nothing | Multiply or divide: `engagement / (age + 2)^gravity` |
+| **Unbounded per-user feed lists** | Memory grows without limit for users who follow prolific accounts | Cap at ~1000 entries; page older content from the source of truth |
+| **Presence via a write on every heartbeat** | 50M users at one heartbeat per 30s is ~1.7M writes/sec of nearly worthless data | A TTL key refreshed on heartbeat; absence *is* offline |
+| **Broadcasting presence to every contact** | Presence changes fan out quadratically in dense graphs | Push only to contacts with an open chat window; others poll on demand |
+| **A read receipt per message** | Opening a chat with 50 unread messages emits 50 writes | One "read up to sequence N" watermark per conversation |
+
+---
+
+## Discussion Questions
+
+1. Alice sends three messages in quick succession. Bob receives #1 and #3 but #2 is delayed. What should Bob's client show, and where does that logic belong?
+
+   **Model answer**: Buffer #3 and display only #1 until #2 arrives — showing #3 first makes a conversation unreadable, and "fixing" the order afterwards makes messages jump around on screen. That requires a monotonic per-conversation sequence number assigned server-side, so the client can detect the gap. Server-assigned matters because device clocks are unreliable and clients can lie. Add a bounded timeout: if #2 hasn't arrived in a few seconds, show #3 with a gap indicator and reconcile via history fetch, because waiting forever on a message that was genuinely lost is worse than displaying out of order.
+
+2. A WebSocket server holding 100K connections crashes. Walk through what happens from the users' perspective, and what has to be in place for it to be survivable.
+
+   **Model answer**: All 100K connections drop simultaneously and every client reconnects at once — a thundering herd against the remaining servers. Required: (1) Clients reconnect with **jittered** exponential backoff, or they synchronize into a second outage. (2) The registry entries must expire via TTL, not explicit cleanup, since a crashed server deletes nothing. (3) Messages routed to the dead server during the gap must be durably queued, not held in memory, so they deliver on reconnect. (4) On reconnect the client sends its last-seen sequence and the server replays the gap. The system is survivable only if messages were persisted *before* being acknowledged — if the ack came first, those messages are simply gone.
+
+3. Justin Bieber posts. He has 100M followers. Compare fan-out on write, fan-out on read, and the hybrid — with numbers.
+
+   **Model answer**: **Write** is 100M feed insertions for one post; at ~50K writes/sec that is over half an hour of queue drain, and the feed is stale for most followers the entire time. **Read** makes his posts free to publish but forces every follower's feed load to query him — trivial for him, but if everyone were pulled, a user following 500 accounts issues 500 queries per load. **Hybrid** is what production systems do: push for accounts below a threshold (~10-100K followers), pull for those above. Feed generation reads the pre-computed list and merges in the handful of celebrities the user follows. The cost is a merge on every read, which is cheap because a user follows only a few such accounts. The threshold is an operational tuning knob, not a constant.
+
+4. Your group chat supports 100 members. Product asks for 100,000-member channels. What breaks?
+
+   **Model answer**: The delivery model. At 100 members, fan-out per message is trivial. At 100K, one message is 100K deliveries — and an active channel with 10 messages/second becomes 1M deliveries/second from a single room. Presence gets worse: showing who's online is a 100K-entry query per member per refresh. Read receipts become impossible to store per-message-per-user (10 messages × 100K members = 1M rows/second). What actually changes is the abstraction: large channels stop being "chat" and become **broadcast**. Members subscribe to a shared topic instead of each having a personal inbox; history is read from a shared log on scroll; presence becomes an approximate count; read receipts are dropped entirely or reduced to an unread badge. This is why WhatsApp caps group size and Slack/Discord treat channels differently from DMs — the same design does not stretch.
+
+5. Your feed ranking uses engagement signals. A post gets 10,000 likes in ten minutes from accounts created that week. What does this mean for the system beyond ranking?
+
+   **Model answer**: Engagement is an adversarial input, so treating it as ground truth makes the ranker an amplifier for whoever games it hardest. Practically: weight signals by source reputation (account age, history, follower authenticity), rate-limit engagement per account, and detect coordinated bursts — 10K likes in ten minutes from week-old accounts is a detectable pattern. Architecturally this means the ranking pipeline needs a **trust/abuse stage between engagement collection and score computation**, which most designs omit entirely. The system-design consequence is that ranking cannot be a pure function of counters; it needs a separate, slower-moving abuse signal, which changes the data flow.
+
+---
+
+## Key References
+
+| Resource | Type | Focus |
+|----------|------|-------|
+| System Design Interview (Ch. 4-5) | Book | Chat system, news feed |
+| WhatsApp Engineering Blog | Blog | Message delivery at scale |
+| Twitter Engineering Blog | Blog | Fan-out, timeline ranking |
+| Discord Engineering Blog | Blog | Large-channel broadcast, presence at scale |
+| "Building Microservices" (Ch. 5) | Book | Real-time communication |
 
 ---
 
