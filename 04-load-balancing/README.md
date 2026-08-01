@@ -19,16 +19,19 @@ A single server can handle ~1,000-10,000 concurrent connections. Beyond that, yo
 ```
   Without load balancing:           With load balancing:
 
-  ┌──────────┐                     ┌──────────┐
-  │  Client  │                     │  Client  │
-  └─────┬────┘                     └─────┬────┘
-        │                                │
-  ┌─────▼───────┐                     ┌─────▼─────┐
-  │  Server     │ ◄── SPOF           │    LB     │ ◄── Distributes
-  │ (overloaded)│                  └──┬───┬───┬┘     traffic
-  └─────────────┘                     ┌──▼─┐┌▼──┐┌▼──┐
-                                   │ S1 ││ S2 ││ S3 │
-                                   └────┘└────┘└────┘
+  ┌──────────────┐              ┌──────────────┐
+  │    Client    │              │    Client    │
+  └───────┬──────┘              └───────┬──────┘
+          │                             │
+  ┌───────▼──────┐              ┌───────▼──────┐
+  │    Server    │◀── SPOF      │      LB      │◀── distributes
+  │ (overloaded) │              └───┬───┬───┬──┘    traffic
+  └──────────────┘                  │   │   │
+                              ┌─────┘   │   └─────┐
+                              │         │         │
+                          ┌───▼──┐  ┌───▼──┐  ┌───▼──┐
+                          │  S1  │  │  S2  │  │  S3  │
+                          └──────┘  └──────┘  └──────┘
 ```
 
 ### Benefits
@@ -112,19 +115,25 @@ Hash the client IP to determine which server handles all their requests.
 Minimize reshuffling when servers are added or removed.
 
 ```
-  Hash ring with servers at positions:
+  Hash ring with servers at positions hash(server_id) mod 2^32:
 
-       ┌─────── S1 ───────┐
-      /                     \
-    S4                       S2
-      \                     /
-       └─────── S3 ───────┘
+              0 / 2^32
+                  ▲
+          ╭────── S1 ───────╮
+         ╱                   ╲
+        ╱                     ╲
+      S4            ⟳          S2
+        ╲                     ╱
+         ╲                   ╱
+          ╰────── S3 ───────╯
 
-  Request → hash(key) → clockwise to nearest server
+              clockwise ⟳
+
+  Request → hash(key) → walk clockwise → first server wins
 
   Adding S5 between S1 and S2:
-  - Only requests between S1 and S5 need to move
-  - All other requests stay with their server
+  - Only requests that fell between S1 and S5 move (they were on S2)
+  - Every other request stays exactly where it was
 
   ✓ Minimal disruption on scale events
   ✓ Even distribution with virtual nodes

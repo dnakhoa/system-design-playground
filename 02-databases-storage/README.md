@@ -179,20 +179,36 @@ Sharding splits data across multiple database instances. Each shard holds a subs
 When you add or remove a shard, only ~1/N keys need to move (vs all keys with modulo hashing).
 
 ```
-  Hash ring with 4 nodes:
+  Hash ring, 4 nodes. Positions are hash(node_id) mod 2^32.
 
-       ┌─────── A ───────┐
-      /                    \
-     D                      B
-      \                    /
-       └─────── C ───────┘
+              0 / 2^32
+                  ▲
+          ╭───── Node A ─────╮
+         ╱                    ╲
+        ╱    k1 ●              ╲
+   Node D           ⟳          Node B
+        ╲              ● k2    ╱
+         ╲                    ╱
+          ╰───── Node C ─────╯
 
-  Key k1 → travels clockwise from k1's position → lands on B
-  Key k2 → travels clockwise from k2's position → lands on C
+              clockwise ⟳
+
+  Each key walks CLOCKWISE to the first node it meets:
+    k1 sits between A and B  →  owned by Node B
+    k2 sits between B and C  →  owned by Node C
 
   Adding node E between A and B:
   - Only keys that were on B and fall between A and E move to E
-  - All other keys stay in place
+  - All other keys stay in place — that is the whole point
+
+  Contrast with `hash(key) % N`: changing N from 4 to 5 remaps roughly
+  4/5 of ALL keys. On a cache that means a near-total miss storm; on a
+  sharded database it means moving most of your data.
+
+  In practice each physical node is placed at many points on the ring
+  ("virtual nodes", typically 100-256). Without them, four nodes land at
+  four arbitrary positions and the arcs between them differ wildly in
+  size, so load is uneven no matter how good the hash is.
 ```
 
 ---

@@ -264,30 +264,36 @@ print(f"Decrypted: {decrypted}")
 ### Key Management with KMS
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    KMS Key Hierarchy                             │
-│                                                                  │
-│                    ┌─────────────────┐                           │
-│                    │   Master Key    │                           │
-│                    │ (HSM-protected) │                           │
-│                    └────────┬────────┘                           │
-│                             │                                    │
-│              ┌──────────────┼──────────────┐                     │
-│              │              │              │                     │
-│         ┌────┴────┐   ┌────┴────┐   ┌────┴────┐                  │
-│         │DEK Key  │  │DEK Key │   │DEK Key │                     │
-│         │(DB)     │  │(Files) │   │(Logs)  │                     │
-│         └─────────┘   └─────────┘   └─────────┘                  │
-│                                                                  │
-│   DEK = Data Encryption Key                                      │
-│   Master Key encrypts/decrypts DEKs                              │
-│   DEKs encrypt actual data                                       │
-│                                                                  │
-│   Key Rotation Schedule:                                         │
-│   - Master Key: 1-2 years                                        │
-│   - DEKs: 90 days (or per compliance requirement)                │
-│   - TLS certificates: 90 days (Let's Encrypt auto-renew)         │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                    KMS Key Hierarchy                              │
+│                                                                   │
+│                   ┌─────────────────┐                             │
+│                   │   Master Key    │                             │
+│                   │ (HSM-protected, │                             │
+│                   │  never exported)│                             │
+│                   └────────┬────────┘                             │
+│                            │ wraps / unwraps                      │
+│           ┌────────────────┼────────────────┐                     │
+│           │                │                │                     │
+│     ┌─────▼──────┐  ┌──────▼─────┐  ┌───────▼────┐                │
+│     │    DEK     │  │    DEK     │  │    DEK     │                │
+│     │  (database)│  │   (files)  │  │   (logs)   │                │
+│     └─────┬──────┘  └──────┬─────┘  └───────┬────┘                │
+│           │ encrypts       │                │                     │
+│           ▼                ▼                ▼                     │
+│      table rows        object blobs     log records               │
+│                                                                   │
+│   DEK = Data Encryption Key. The master key never touches your    │
+│   data — it only encrypts the DEKs, which are stored alongside    │
+│   the ciphertext in wrapped form. This is "envelope encryption",  │
+│   and it is why rotating the master key does not require          │
+│   re-encrypting terabytes: you re-wrap the DEKs only.             │
+│                                                                   │
+│   Key Rotation Schedule:                                          │
+│   - Master Key: 1-2 years                                         │
+│   - DEKs: 90 days (or per compliance requirement)                 │
+│   - TLS certificates: 90 days (Let's Encrypt auto-renew)          │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### TLS 1.3 Handshake (Simplified)
@@ -602,10 +608,10 @@ print(f"Current secret: {rotator.get_current_secret()[:20]}...")
 │                            │                                        │
 │         ┌──────────────────┼──────────────────┐                     │
 │         │                  │                  │                     │
-│    ┌────┴────┐       ┌────┴────┐        ┌────┴────┐                 │
-│    │ AuthN   │       │ AuthZ   │        │ PCI DSS │                 │
-│    │ Service │       │ Service │        │ Vault   │                 │
-│    └────┬────┘       └────┬────┘        └────┬────┘                 │
+│   ┌─────▼─────┐      ┌─────▼─────┐      ┌─────▼─────┐               │
+│   │   AuthN   │      │   AuthZ   │      │  PCI DSS  │               │
+│   │  Service  │      │  Service  │      │   Vault   │               │
+│   └─────┬─────┘      └─────┬─────┘      └─────┬─────┘               │
 │         │                  │                  │                     │
 │         └──────────────────┼──────────────────┘                     │
 │                            │                                        │

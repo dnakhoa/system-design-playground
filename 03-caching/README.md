@@ -52,24 +52,33 @@ Hit Ratio = Cache Hits / (Cache Hits + Cache Misses)
 The most common pattern. The application manages the cache explicitly.
 
 ```
-  Read path:
-  ┌────────┐     1. Check cache     ┌────────┐
-  │  App   │────────────────────────▶│ Cache  │
-  │        │◀── 2. Cache HIT ────────│(Redis) │
-  │        │                         └────────┘
-  │        │     3. Cache MISS
-  │        │───────────────────────────────────▶┌────────┐
-  │        │◀── 4. Return data ────────────────│   DB   │
-  │        │     5. Populate cache              └────────┘
-  │        │────────────────▶ Cache
-  └────────┘
+  READ PATH
 
-  Write path:
-  ┌────────┐     1. Write to DB     ┌────────┐
-  │  App   │────────────────────────▶│   DB   │
-  │        │     2. Invalidate cache └────────┘
-  │        │────────────────▶ Cache (DELETE key)
-  └────────┘
+  ┌─────────┐                              ┌─────────┐
+  │         │ ──① check cache────────────▶ │  Cache  │
+  │   App   │ ◀─② HIT: return value─────── │ (Redis) │
+  │         │                              └─────────┘
+  │         │
+  │         │ ──③ MISS: query DB─────────▶ ┌─────────┐
+  │         │ ◀─④ return rows──────────────│   DB    │
+  │         │                              └─────────┘
+  │         │ ──⑤ SET key (populate)─────▶ ┌─────────┐
+  │         │                              │  Cache  │
+  └─────────┘                              └─────────┘
+
+  WRITE PATH
+
+  ┌─────────┐                              ┌─────────┐
+  │         │ ──① write───────────────────▶│   DB    │
+  │   App   │                              └─────────┘
+  │         │ ──② DEL key (invalidate)────▶┌─────────┐
+  │         │                              │  Cache  │
+  └─────────┘                              └─────────┘
+
+  Note step ② deletes rather than updates. Writing the new value into
+  the cache looks tidier but races: two concurrent writers can leave the
+  cache holding the older of the two values. Deleting is safe because the
+  next reader repopulates from the database.
 ```
 
 | Pros | Cons |
@@ -107,17 +116,21 @@ Cache and database are updated simultaneously.
 Writes go to cache first, then asynchronously flushed to DB.
 
 ```
-  ┌────────┐     1. Write to cache  ┌────────┐
-  │  App   │────────────────────────▶│ Cache  │
-  └────────┘     (fast!)            └───┬────┘
-                                        │
-                                   2. Async flush
-                                   (batched, delayed)
-                                        │
-                                        ▼
-                                   ┌────────┐
-                                   │   DB   │
-                                   └────────┘
+  ┌─────────┐                              ┌─────────┐
+  │   App   │ ──① write (returns now)────▶ │  Cache  │
+  └─────────┘                              └────┬────┘
+                                                │
+                                         ② async flush
+                                        (batched, delayed)
+                                                │
+                                                ▼
+                                           ┌─────────┐
+                                           │   DB    │
+                                           └─────────┘
+
+  The write returns as soon as the cache accepts it, so latency is
+  cache-only. The gap between ① and ② is the exposure window: a cache
+  crash in that window loses every unflushed write.
 ```
 
 | Pros | Cons |
@@ -393,18 +406,28 @@ def update_user(user_id: int, name: str):
 When a popular cache key expires, 1000+ simultaneous requests all miss and hit the origin.
 
 ```
-  BEFORE:                         AFTER EXPIRY:
-  ┌──────────┐                    ┌──────────┐
-  │   Cache  │ ◄── All hit       │   Cache  │ ◄── All MISS
-  │  (warm)  │                    │ (expired)│
-  └──────────┘                    └────┬─────┘
-                                       │
-                              ┌────────┼────────┐
-                              │        │        │
-                              ▼        ▼        ▼
-                           ┌─────┐ ┌─────┐ ┌─────┐
-                           │ DB  │ │ DB  │ │ DB  │  ← 1000 requests hit DB!
-                           └─────┘ └─────┘ └─────┘
+  BEFORE EXPIRY                    AFTER EXPIRY
+
+  1000 req/s                       1000 req/s
+      │                                │
+      ▼                                ▼
+  ┌──────────┐                     ┌──────────┐
+  │  Cache   │                     │  Cache   │
+  │  (warm)  │ ── all HIT          │(expired) │ ── all MISS
+  └──────────┘                     └────┬─────┘
+                                        │
+                                  ┌─────┴─────┐
+                                  │ 1000 req  │
+                                  │ stampede  │
+                                  └─────┬─────┘
+                                        │
+                                        ▼
+                                   ┌──────────┐
+                                   │    DB    │ ← built for 200 req/s
+                                   └──────────┘
+
+  One key expiring converts a fully-cached workload into an unthrottled
+  flood. The database was sized for the MISS rate, not the request rate.
 ```
 
 ### Solutions

@@ -373,23 +373,26 @@ print(read_db.get_order("o1"))  # Fast read, no JOINs
 ```
 
 ```
-  ┌───────────────────────────────────────────────┐
-  │                                               │
-  │   Commands (Writes)      Queries (Reads)      │
-  │   ┌───────────┐         ┌───────────┐         │
-  │   │  Command  │         │  Query    │         │
-  │   │  Handler  │         │  Handler  │         │
-  │   └─────┬─────┘         └─────┬─────┘         │
-  │         │                      │              │
-  │         ▼                      ▼              │
-  │   ┌─────────────┐         ┌───────────┐       │
-  │   │  Write DB   │──sync──▶│  Read DB  │       │
-  │   │ (Normalized)│        │(Denormalized)│     │
-  │   └─────────────┘         └───────────┘       │
-  │                                               │
-  │   Write DB: Optimized for writes              │
-  │   Read DB: Optimized for reads (pre-joined)   │
-  └───────────────────────────────────────────────┘
+  ┌───────────────────────────────────────────────────────┐
+  │                                                       │
+  │    Commands (writes)            Queries (reads)       │
+  │                                                       │
+  │   ┌────────────────┐         ┌────────────────┐       │
+  │   │    Command     │         │     Query      │       │
+  │   │    Handler     │         │    Handler     │       │
+  │   └───────┬────────┘         └───────┬────────┘       │
+  │           │                          │                │
+  │           ▼                          ▼                │
+  │   ┌────────────────┐         ┌────────────────┐       │
+  │   │    Write DB    │ ──sync─▶│    Read DB     │       │
+  │   │  (normalized)  │         │ (denormalized) │       │
+  │   └────────────────┘         └────────────────┘       │
+  │                                                       │
+  │   Optimized for                 Optimized for         │
+  │   correctness and               fast reads —          │
+  │   transactions                  pre-joined, no        │
+  │                                 JOINs at query time   │
+  └───────────────────────────────────────────────────────┘
 
   ✓ Independent scaling of reads and writes
   ✓ Optimized data models for each use case
@@ -576,32 +579,37 @@ Uber processes millions of events per second across ride matching, pricing, driv
 ### Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                Uber Event-Driven Architecture                │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Event Sources:                                              │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐                 │
-│  │Rider   │ │Driver  │ │Payment │ │GPS     │                 │
-│  │App     │ │App     │ │Service │ │Tracker │                 │
-│  └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘                 │
-│      │          │          │          │                      │
-│      └──────────┼──────────┼──────────┘                      │
-│                 │          │                                 │
-│         ┌───────▼──────────▼───────┐                         │
-│         │    Kafka Cluster          │                        │
-│         │    (millions of events/s) │                        │
-│         └───────────┬───────────────┘                        │
-│                     │                                        │
-│    ┌────────────────┼────────────────┐                       │
-│    │                │                │                       │
-│    ▼                ▼                ▼                       │
-│ ┌───────┐      ┌────────┐        ┌────────┐                  │
-│ │Pricing│      │Matching│      │Analytics│                   │
-│ │Engine │      │Engine  │        │Pipeline│                  │
-│ └───────┘      └────────┘        └────────┘                  │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                Uber Event-Driven Architecture                 │
+├───────────────────────────────────────────────────────────────┤
+│                                                               │
+│  EVENT SOURCES                                                │
+│                                                               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │  Rider   │  │  Driver  │  │ Payment  │  │   GPS    │       │
+│  │   App    │  │   App    │  │ Service  │  │ Tracker  │       │
+│  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘       │
+│        │             │             │             │            │
+│        └─────────────┴──────┬──────┴─────────────┘            │
+│                             │                                 │
+│              ┌──────────────▼──────────────┐                  │
+│              │        Kafka Cluster        │                  │
+│              │  millions of events/second  │                  │
+│              │  partitioned by ride_id     │                  │
+│              └──────────────┬──────────────┘                  │
+│                             │                                 │
+│        ┌────────────────────┼────────────────────┐            │
+│        │                    │                    │            │
+│  ┌─────▼──────┐      ┌──────▼─────┐      ┌───────▼────┐       │
+│  │  Pricing   │      │  Matching  │      │ Analytics  │       │
+│  │   Engine   │      │   Engine   │      │  Pipeline  │       │
+│  └────────────┘      └────────────┘      └────────────┘       │
+│                                                               │
+│  Consumers are independent: Analytics falling behind does     │
+│  not slow Matching, because each consumer group tracks its    │
+│  own offsets.                                                 │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions

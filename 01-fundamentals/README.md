@@ -21,13 +21,13 @@ System design is the process of defining the architecture, components, modules, 
 3. **How** do we build it? (architecture and trade-offs)
 
 ```
-   Requirements                  Architecture                Trade-offs
-  ┌───────────────┐              ┌─────────────┐            ┌─────────────┐
-  │ Functional    │  ──────►   │ Services    │   ──────►  │ Cost vs     │
-  │ Non-functional│            │ Data stores │            │ Performance │
-  │ Constraints   │           │ Interfaces  │            │ Simplicity  │
-  └───────────────┘              └─────────────┘            │ vs Flexibility│
-                                                          └─────────────┘
+    Requirements              Architecture              Trade-offs
+  ┌────────────────┐       ┌────────────────┐       ┌──────────────────┐
+  │ Functional     │       │ Services       │       │ Cost vs          │
+  │ Non-functional │ ────▶ │ Data stores    │ ────▶ │   performance    │
+  │ Constraints    │       │ Interfaces     │       │ Simplicity vs    │
+  │                │       │ Data flows     │       │   flexibility    │
+  └────────────────┘       └────────────────┘       └──────────────────┘
 ```
 
 The hardest part is not drawing boxes and arrows — it's making **explicit trade-offs** and defending them.
@@ -231,26 +231,30 @@ Expected hit ratio ≈ 80%, which cuts DB reads from 3,800 to ~760 QPS.
 This framework works for **any** system design problem, from URL shorteners to LLM inference platforms.
 
 ```
- Step 1          Step 2          Step 3          Step 4
-┌──────────┐   ┌──────────┐   ┌───────────┐   ┌──────────┐
-│ Clarify  │   │ Estimate │   │ Define    │   │ Design   │
-│ Require- │──▶│ Capacity │──▶│ API       │──▶│ Data     │
-│ ments    │   │ (QPS,    │   │ (REST     │   │ Model    │
-│          │   │  Storage)│   │ endpoints)│  │ (tables, │
-│ 2-3 min  │   │ 3-5 min  │   │ 2-3 min   │   │  schema) │
-│          │   │          │   │           │   │ 3-5 min  │
-└──────────┘   └──────────┘   └───────────┘   └────┬─────┘
-                                                   │
- Step 9          Step 8          Step 7          Step 6│ Step 5
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────▼───┐
-│ Handle   │   │ Address  │   │ Discuss  │   │ Sketch     │
-│ Follow-  │◀──│ Bottle-  │◀──│ Trade-   │◀──│ High-Level │
-│ ups      │   │ necks    │   │ offs     │   │ Design     │
-│ 2-3 min  │   │ 3 min    │   │ 2 min    │   │ 5 min      │
-└──────────┘   └──────────┘   └──────────┘   └────────────┘
-                                    ▲
-                          Step 6: deep dive on 2-3
-                          components (10-15 min)
+ ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+ │ 1. Clarify      │   │ 2. Estimate     │   │ 3. Define API   │
+ │    requirements │──▶│    capacity     │──▶│                 │
+ │                 │   │  QPS, storage,  │   │  3-5 endpoints  │
+ │                 │   │  bandwidth      │   │                 │
+ │    2-3 min      │   │    3-5 min      │   │    2-3 min      │
+ └─────────────────┘   └─────────────────┘   └────────┬────────┘
+                                                      │
+ ┌─────────────────┐   ┌─────────────────┐   ┌────────▼────────┐
+ │ 6. Deep dive    │   │ 5. Sketch       │   │ 4. Design data  │
+ │    on 2-3       │◀──│    high-level   │◀──│    model        │
+ │    components   │   │    design       │   │                 │
+ │                 │   │                 │   │  tables, schema │
+ │   10-15 min     │   │    5 min        │   │    3-5 min      │
+ └────────┬────────┘   └─────────────────┘   └─────────────────┘
+          │
+ ┌────────▼────────┐   ┌─────────────────┐   ┌─────────────────┐
+ │ 7. Discuss      │   │ 8. Address      │   │ 9. Handle       │
+ │    trade-offs   │──▶│    bottlenecks  │──▶│    follow-ups   │
+ │                 │   │                 │   │                 │
+ │  "X because Y,  │   │  "what breaks   │   │                 │
+ │   trade-off Z"  │   │   at 10x?"      │   │                 │
+ │    2 min        │   │    3 min        │   │    2-3 min      │
+ └─────────────────┘   └─────────────────┘   └─────────────────┘
 
   Budget check: 3+5+3+5+5+15+2+3+3 ≈ 44 min — one 45-minute interview.
 ```
@@ -474,28 +478,32 @@ urls table:
 
 ```
                     ┌──────────────┐
-                    │   Client     │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
+                    │    Client    │
+                    └───────┬──────┘
+                            │
+                    ┌───────▼──────┐
                     │ Load Balancer│
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-        ┌─────▼─────┐ ┌───▼────┐ ┌────▼─────┐
-        │ API Server│ │ API    │ │ API      │
-        │     1     │ │Server 2│ │ Server 3 │
-        └─────┬─────┘ └───┬────┘ └────┬─────┘
-              │            │            │
-              └────────────┼────────────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-        ┌─────▼─────┐ ┌───▼────┐ ┌────▼──────┐
-        │   Redis   │ │ MySQL  │ │ Kafka     │
-        │  (cache)  │ │  (DB)  │ │(analytics)│
-        └───────────┘ └────────┘ └───────────┘
+                    └───────┬──────┘
+                            │
+            ┌───────────────┼───────────────┐
+            │               │               │
+     ┌──────▼─────┐  ┌──────▼─────┐  ┌──────▼─────┐
+     │ API Server │  │ API Server │  │ API Server │
+     │     1      │  │     2      │  │     3      │
+     └──────┬─────┘  └──────┬─────┘  └──────┬─────┘
+            │               │               │
+            └───────────────┼───────────────┘
+                            │
+            ┌───────────────┼───────────────┐
+            │               │               │
+     ┌──────▼─────┐  ┌──────▼─────┐  ┌──────▼─────┐
+     │   Redis    │  │   MySQL    │  │   Kafka    │
+     │  (cache)   │  │    (DB)    │  │(analytics) │
+     └────────────┘  └────────────┘  └────────────┘
+
+  Reads:  LB → API → Redis (80% hit) → MySQL on miss
+  Writes: LB → API → MySQL, then invalidate Redis
+  Clicks: fire-and-forget to Kafka, never on the redirect path
 ```
 
 ### Step 6: Deep Dive — ID Generation

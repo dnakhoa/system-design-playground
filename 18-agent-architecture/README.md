@@ -239,12 +239,16 @@ Agent runs can be long (minutes to hours). They must survive crashes.
 ```
   Append-only log of completed steps:
 
-  ┌──────────────────────────────────────────────────────┐
-  │  Journal (JSONL):                                    │
-  │  {"step": "research", "input": "topic", "result": "...", "ts": "..."} │
-  │  {"step": "analyze", "input": "...", "result": "...", "ts": "..."}    │
-  │  {"step": "write", "input": "...", "result": "...", "ts": "..."}      │
-  └──────────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────┐
+  │  journal.jsonl — one line appended per completed step       │
+  │                                                             │
+  │  {"step":"research","input":"topic","result":"…","ts":"…"}  │
+  │  {"step":"analyze", "input":"…",    "result":"…","ts":"…"}  │
+  │  {"step":"write",   "input":"…",    "result":"…","ts":"…"}  │
+  │                                                             │
+  │  Append-only: a step is written AFTER it succeeds, so a     │
+  │  crash mid-step leaves no entry and the step re-runs.       │
+  └─────────────────────────────────────────────────────────────┘
 
   On restart:
   1. Load journal

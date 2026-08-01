@@ -318,6 +318,22 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | ReAct | 2022 | Agent planning |
 | RAG Survey | 2023 | RAG taxonomy |
 
+## Contributing
+
+Corrections and additions are welcome. Before opening a pull request, run:
+
+```bash
+python3 tools/lint.py
+```
+
+It checks three things that are easy to break and hard to spot in review:
+
+| Check | Catches |
+|-------|---------|
+| Python blocks parse | Typos that make an example non-runnable |
+| Diagram geometry | Box borders that drift out of alignment — invisible while editing, obvious once rendered |
+| Relative links | Broken cross-module references, especially after renumbering |
+
 ## License
 
 This educational resource is provided for learning purposes. Feel free to use, modify, and share.

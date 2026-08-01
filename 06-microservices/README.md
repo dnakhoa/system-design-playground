@@ -602,17 +602,17 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 │  │  - Load balancing                                │        │
 │  └──────────────────────────────────────────────────┘        │
 │                         │                                    │
-│  ┌──────────────────────┼──────────────────────┐             │
-│  │                      │                      │             │
-│  ▼                      ▼                      ▼             │
-│ ┌────────────┐          ┌───────┐              ┌──────┐      │
-│ │User        │          │Catalog│             │Streaming│    │
-│ │Service     │     │Service│             │Service  │         │
-│ │            │          │       │              │      │      │
-│ │-Auth       │          │-Movies│             │-Playback│    │
-│ │-Profile    │     │-Shows │             │-CDN     │         │
-│ │-Preferences│    │-Genres│             │-Quality │          │
-│ └────────────┘          └───────┘              └──────┘      │
+│      ┌──────────────────┼──────────────────┐                 │
+│      │                  │                  │                 │
+│      ▼                  ▼                  ▼                 │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │    User    │  │   Catalog    │  │  Streaming   │          │
+│  │  Service   │  │   Service    │  │   Service    │          │
+│  │            │  │              │  │              │          │
+│  │ - Auth     │  │ - Movies     │  │ - Playback   │          │
+│  │ - Profile  │  │ - Shows      │  │ - CDN        │          │
+│  │ - Prefs    │  │ - Genres     │  │ - Quality    │          │
+│  └────────────┘  └──────────────┘  └──────────────┘          │
 │                                                              │
 │  ┌───────────────────────────────────────────────────┐       │
 │  │  Data Stores                                      │       │
