@@ -2,6 +2,16 @@
 
 > **Choose the right data layer for your system.** The database choice is often the hardest decision in system design — it's expensive to change later and affects everything from query patterns to scaling strategy.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 01 | System Design Fundamentals | [../01-fundamentals/](../01-fundamentals/) |
+| **Module 02** | **Databases and Storage** | **(current)** |
+| Module 03 | Caching Strategies | [../03-caching/](../03-caching/) |
+
+---
+
 ## Learning Objectives
 
 - Choose between SQL and NoSQL with a clear decision framework
@@ -9,6 +19,23 @@
 - Reason about ACID vs BASE trade-offs
 - Evaluate NewSQL options for modern applications
 - Design data models that scale
+
+---
+
+## Table of Contents
+
+1. [SQL vs NoSQL: The Decision Matrix](#sql-vs-nosql-the-decision-matrix)
+2. [Indexing Strategies](#indexing-strategies)
+3. [Sharding Strategies](#sharding-strategies)
+4. [Replication Strategies](#replication-strategies)
+5. [ACID vs BASE](#acid-vs-base)
+6. [NewSQL: When You Need Both](#newsql-when-you-need-both)
+7. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
+8. [Data Modeling Patterns](#data-modeling-patterns)
+9. [Key References](#key-references)
+10. [Practice Exercise](#practice-exercise)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -482,5 +509,62 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 
 ---
 
-**Previous**: [System Design Fundamentals](../01-fundamentals/README.md)
-**Next**: [Caching Strategies](../03-caching/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Goes deeper on the consensus algorithms and leader election that make single-leader replication (and Raft-per-range systems like CockroachDB) actually work |
+| [Module 06: Microservices Architecture](../06-microservices/README.md) | The Saga pattern is how you get transactional guarantees once sharding or service boundaries put data behind more than one database |
+| [Module 10: Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md) | Applies this module's Cassandra and denormalization advice to a real fan-out and feed-ranking design |
+| [Module 12: Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md) | Turns the ACID-for-payments guidance here into a concrete ledger design with gateway reconciliation |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│             Databases and Storage — Key Takeaways              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. SQL vs NoSQL is a query-pattern decision, not an age       │
+│     contest — decide on transactions and joins, not on what    │
+│     feels modern                                               │
+│  2. Exhaust vertical scaling and read replicas before you shard│
+│     — resharding later is a migration project, not a config    │
+│     flag                                                       │
+│  3. Pick shard keys for cardinality and access pattern, not    │
+│     convenience — `created_at` sends every new write to one    │
+│     shard forever                                              │
+│  4. Consistent hashing earns its complexity the day you add or │
+│     remove a node — plain modulo hashing remaps almost         │
+│     everything                                                 │
+│  5. CockroachDB and Spanner are not multi-leader — they're many│
+│     single-leader Raft groups, one per range, and the          │
+│     distinction matters when you design around them            │
+│  6. ACID's "C" and CAP's "C" are different words spelled the   │
+│     same — say "integrity constraints" or "linearizable"       │
+│     instead and skip the confusion                             │
+│  7. Composite indexes read left-to-right — equality columns    │
+│     first, range columns last, or the index quietly stops      │
+│     helping                                                    │
+│  8. Instagram's stack isn't one database, it's five, each      │
+│     earning its place — polyglot persistence is a deliberate   │
+│     operational trade, not a mess                              │
+│  9. Denormalize for reads once joins get expensive, but budget │
+│     for the write amplification and staleness it buys you      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 01: System Design Fundamentals](../01-fundamentals/README.md)
+
+**Next:** [Module 03: Caching Strategies](../03-caching/README.md)
+
+---
+
+*Module 02 of 19 in the System Design Playground*

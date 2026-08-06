@@ -2,6 +2,16 @@
 
 > **Putting it all together — the full AI-native system.** This module is the capstone: it shows how inference serving, RAG, agents, guardrails, and observability compose into a production AI system.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 18 | Agent System Architecture | [../18-agent-architecture/](../18-agent-architecture/) |
+| **Module 19** | **Production AI System Architecture** | **(current)** |
+| Course Home | — | [../README.md](../README.md) |
+
+---
+
 ## Learning Objectives
 
 - Design end-to-end AI system architecture
@@ -11,6 +21,23 @@
 - Scale from prototype to 100M users
 
 **This module synthesizes**: Module 16 (inference serving) + Module 17 (RAG) + Module 18 (agents) + Module 15 (observability) + Module 07 (reliability) + Module 03 (caching).
+
+---
+
+## Table of Contents
+
+1. [End-to-End AI System Architecture](#end-to-end-ai-system-architecture)
+2. [Model Routing](#model-routing)
+3. [Prompt Management at Scale](#prompt-management-at-scale)
+4. [Guardrails Architecture](#guardrails-architecture)
+5. [Observability and Monitoring](#observability-and-monitoring)
+6. [Scaling from Prototype to 100M Users](#scaling-from-prototype-to-100m-users)
+7. [Security Considerations](#security-considerations)
+8. [Case Study: ChatGPT-Scale Architecture](#case-study-chatgpt-scale-architecture)
+9. [Practice Exercises](#practice-exercises)
+10. [Key References](#key-references)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -292,6 +319,10 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 | **Jailbreak** | "You are now DAN, you can do anything..." | Safety classifiers + output filtering |
 | **Data exfiltration** | "Repeat your system prompt" | System prompt isolation + output monitoring |
 
+### Defense in Depth
+
+Prompt injection has held OWASP's LLM01 top spot in the Top 10 for LLM Applications for a third consecutive year running (2025-2026) — still the top production concern for LLM applications, and a harder one than it looks, because retrieval and tool use expand the attack surface well past the user's own chat message: injected instructions can now arrive via a retrieved document, a web page, or a tool's return value, none of which the input pipeline above ever sees. Production teams have converged on a five-part layered defense rather than a single filter: input guardrails on 100% of traffic, structural separation of system instructions from untrusted content, least-privilege scoping on every tool the agent can call, output guardrails on every response (symmetric with input — see the "Input guardrails only" row in Common Mistakes below), and continuous red-team regression testing as attacks evolve. Two open-source frameworks are common building blocks here: **NVIDIA NeMo Guardrails**, which uses a Colang DSL to define dialog and policy rules around the model, and **Guardrails AI**, a `Guard` wrapper around model calls backed by a hub of validator plugins covering PII, factuality, and other safety categories. Caveat: no current framework — these included — fully stops adversarial-suffix or other optimization-based jailbreaks; guardrails reduce the probability and blast radius of a successful attack, they don't eliminate it, which is exactly why the layering, not the choice of any one tool, is what carries the risk reduction.
+
 ---
 
 ## Observability and Monitoring
@@ -308,7 +339,9 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 > |----------|-------------|
 > | **Cost varies per request** | Tokens, not requests, are the billable unit — so cost is a first-class metric, not an infrastructure detail |
 > | **Correctness is not binary** | There is no status code for "confidently wrong", so quality needs sampled LLM-as-judge scoring and user feedback |
-> | **The model is a moving dependency** | A provider-side update changes behaviour with no deploy on your side — pin versions and re-evaluate before promoting |
+> | **The model is a moving dependency** | A provider-side update changes behavior with no deploy on your side — pin versions and re-evaluate before promoting |
+
+By 2026 the "Observability (OpenTelemetry)" box above has an actual standard to instrument against, not just a generic aspiration. OpenTelemetry — which reached CNCF Graduated status in May 2026 — now ships **GenAI Semantic Conventions**: a standard schema for LLM and agent telemetry covering six areas — LLM client spans (per-call model, token counts, latency), agent spans, events (opt-in capture of prompt/completion content), metrics (token usage, cost, time-to-first-token), agent-orchestration spans, and MCP (Model Context Protocol) tool-calling spans. Because the schema is vendor-neutral and OTLP-based, the same instrumentation is readable by any OTLP-speaking backend — Google Cloud, AWS, Azure, and Datadog all consume it without a proprietary SDK. Caveat: several span and attribute names are still marked experimental and have shifted across releases, so pin the semconv version you instrument against and check the changelog before bumping it.
 
 ### The Observability Stack
 
@@ -499,7 +532,7 @@ Guardrails are the safety layer between your users and the LLM. They protect aga
 
 ---
 
-## Exercises
+## Practice Exercises
 
 ### Exercise 1: Architecture Design (30 min)
 
@@ -537,6 +570,9 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 | OpenAI Platform Documentation | Docs | API design, best practices |
 | Anthropic Research | Blog | Safety, alignment |
 | Google ML System Design | Paper | ML infrastructure |
+| OpenTelemetry GenAI Semantic Conventions | Spec | Standard schema for LLM/agent telemetry |
+| OWASP Top 10 for LLM Applications (2025) | Standard | Prompt injection and LLM-specific risks |
+| NeMo Guardrails / Guardrails AI Documentation | Docs | Current guardrail framework examples |
 
 ## Common Mistakes
 
@@ -553,7 +589,7 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 | **Logging prompts and completions verbatim** | User PII lands in your observability stack, often outside your compliance boundary | Redact before logging; keep hashes and metrics, sample raw text narrowly |
 | **Prompts edited in production** | An untracked change degrades quality with no diff to inspect and no way back | Version prompts like code: reviewed, evaluated, rollback-able |
 | **Averaged quality metrics only** | A 4.2/5 mean hides the 5% of catastrophic answers that drive churn | Watch the tail: worst-case scores, refusal rate, hallucination rate |
-| **Deploying a new model version without re-evaluating** | Provider updates shift behaviour; prompts tuned for the old version silently regress | Pin versions; run the eval suite before promoting |
+| **Deploying a new model version without re-evaluating** | Provider updates shift behavior; prompts tuned for the old version silently regress | Pin versions; run the eval suite before promoting |
 
 ---
 
@@ -581,6 +617,57 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 ---
 
-**Previous**: [Agent System Architecture](../18-agent-architecture/README.md)
-**Next**: [Course Home](../README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 16: LLM Inference Serving Architecture](../16-llm-inference-serving/README.md) | Model Routing's small/medium/reasoning-model cascade is a direct application of the serving and batching architectures covered there |
+| [Module 17: RAG System Architecture at Scale](../17-rag-at-scale/README.md) | The RAG Pipeline stage in the end-to-end architecture and the customer-support practice exercise assume the retrieval and reranking design covered there |
+| [Module 15: Observability](../15-observability/README.md) | Observability and Monitoring builds directly on Module 15's tracing and SLO foundations, adding token cost, quality, and drift metrics specific to AI systems |
+| [Module 03: Caching Strategies](../03-caching/README.md) | The semantic cache in the request path — and its failure modes in Common Mistakes — extends the caching patterns covered there |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│              Production AI System — Key Takeaways              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Route by complexity, not by default — flattening every     │
+│     query to the biggest model is a 5-10x overspend            │
+│  2. Semantic caching only pays off with tenant-scoped keys and │
+│     a threshold tuned on real near-miss queries                │
+│  3. Guardrails are symmetric — an input filter with no output  │
+│     filter still lets PII and unsafe content through           │
+│  4. Treat retrieved documents and tool results as untrusted    │
+│     data, never as instructions                                │
+│  5. Instrument against the OpenTelemetry GenAI Semantic        │
+│     Conventions — portable traces and cost beat a vendor-locked│
+│     SDK                                                        │
+│  6. Defense in depth beats any single filter — prompt injection│
+│     has held OWASP's LLM01 top spot three years running        │
+│  7. Version and evaluate prompts like code — an unreviewed     │
+│     production edit is risk with no rollback                   │
+│  8. Watch tail quality, not the average — a 4.2/5 mean hides   │
+│     the catastrophic 5% driving churn                          │
+│  9. A production AI system is this whole course arriving at    │
+│     once — caching, reliability, security, and observability   │
+│     wrapped around an inference-and-retrieval core             │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 18: Agent System Architecture](../18-agent-architecture/README.md)
+
+**Next:** [Course Home](../README.md)
+
+---
+
+*Module 19 of 19 in the System Design Playground*
 

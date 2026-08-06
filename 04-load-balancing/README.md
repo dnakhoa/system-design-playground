@@ -2,6 +2,16 @@
 
 > **Distribute traffic intelligently and keep systems healthy.** A load balancer is the front door of your system — it determines which server handles each request, and its design affects latency, availability, and fault tolerance.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 03 | Caching Strategies | [../03-caching/](../03-caching/) |
+| **Module 04** | **Load Balancing and Networking** | **(current)** |
+| Module 05 | Asynchronous Systems and Message Queues | [../05-async-systems/](../05-async-systems/) |
+
+---
+
 ## Learning Objectives
 
 - Understand load balancing algorithms and when to use each
@@ -9,6 +19,24 @@
 - Design rate limiting with appropriate algorithms
 - Implement health checks and failover
 - Understand API gateway patterns
+
+---
+
+## Table of Contents
+
+1. [Why Load Balancing Matters](#why-load-balancing-matters)
+2. [Load Balancing Algorithms](#load-balancing-algorithms)
+3. [L4 vs L7 Load Balancing](#l4-vs-l7-load-balancing)
+4. [DNS-Based Load Balancing](#dns-based-load-balancing)
+5. [Rate Limiting](#rate-limiting)
+6. [Health Checks](#health-checks)
+7. [API Gateway Pattern](#api-gateway-pattern)
+8. [Service Mesh](#service-mesh)
+9. [Case Study: Cloudflare at Scale](#case-study-cloudflare-at-scale)
+10. [Key References](#key-references)
+11. [Practice Exercise](#practice-exercise)
+12. [Common Mistakes](#common-mistakes)
+13. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -850,5 +878,62 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 
 ---
 
-**Previous**: [Caching Strategies](../03-caching/README.md)
-**Next**: [Asynchronous Systems and Message Queues](../05-async-systems/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 09: Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md) | Implements this module's token bucket and distributed Redis rate limiting algorithms inside a full end-to-end system design |
+| [Module 13: Security](../13-security/README.md) | Rate limiting and TLS termination double as security controls, and the Cloudflare case study's WAF and DDoS mitigation extend this module's networking layer |
+| [Module 06: Microservices Architecture](../06-microservices/README.md) | Service mesh and API gateway patterns here become the inter-service communication and service discovery backbone of a microservices system |
+| [Module 14: API Design](../14-api-design/README.md) | The API gateway pattern covered here is the same front door Module 14 details for routing, versioning, and rate-limit policy |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                 Load Balancing — Key Takeaways                 │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Round robin balances request *count*, not load — switch to │
+│     least-connections once traffic isn't uniform (long-lived   │
+│     connections, WebSockets)                                   │
+│  2. Consistent hashing's entire point is minimizing reshuffling│
+│     when nodes change — if servers rarely scale up or down,    │
+│     plain hashing is simpler and works fine                    │
+│  3. L4 is fast because it refuses to look at your traffic; L7  │
+│     is smart because it does — pick based on whether routing   │
+│     needs to see inside the request                            │
+│  4. DNS is not a failover mechanism — TTLs are a suggestion    │
+│     that clients and resolvers routinely ignore                │
+│  5. Atomicity bugs in a rate limiter are worse than having no  │
+│     rate limiter — `INCR` then `EXPIRE` as separate round trips│
+│     turns a crash into a permanent ban                         │
+│  6. Token bucket answers "how bursty can traffic be"; leaky    │
+│     bucket answers "how smooth must output be" — they solve    │
+│     different problems, not the same one                       │
+│  7. A health check that only opens a TCP port doesn't know the │
+│     app is deadlocked — check what the app actually depends on │
+│  8. Conflating liveness with readiness turns one dependency    │
+│     outage into a total outage, because every instance yanks   │
+│     itself from the pool at the same moment                    │
+│  9. Rate limit everything, always return `X-RateLimit-*` and   │
+│     `Retry-After`, and keep servers stateless — sticky sessions│
+│     are a scaling plan that dies with the one server you stuck │
+│     someone to                                                 │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 03: Caching Strategies](../03-caching/README.md)
+
+**Next:** [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md)
+
+---
+
+*Module 04 of 19 in the System Design Playground*

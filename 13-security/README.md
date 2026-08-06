@@ -6,6 +6,16 @@ Security in system design is about protecting data, services, and users from thr
 
 ---
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 12 | Design Case — Payment System and E-commerce | [../12-case-payment-ecommerce/](../12-case-payment-ecommerce/) |
+| **Module 13** | **Security** | **(current)** |
+| Module 14 | API Design | [../14-api-design/](../14-api-design/) |
+
+---
+
 ## Learning Objectives
 
 By the end of this module, you will be able to:
@@ -22,7 +32,7 @@ By the end of this module, you will be able to:
 
 ## Table of Contents
 
-1. [Authentication & Authorization](#1-authentication--authorization)
+1. [Authentication & Authorization](#1-authentication--authorization) — including [Password Storage](#password-storage)
 2. [Encryption](#2-encryption)
 3. [OWASP Top 10](#3-owasp-top-10)
 4. [API Security](#4-api-security)
@@ -70,6 +80,96 @@ By the end of this module, you will be able to:
 | **OAuth 2.0** | Third-party access, delegated auth | Varies | Access: short, Refresh: long | High |
 | **Session Cookies** | Traditional web apps | No (server state) | Until expiry/logout | Low |
 | **mTLS** | Service mesh, high-security APIs | N/A (cert-based) | Certificate validity | High |
+
+### Password Storage
+
+Before any of the mechanisms above matter, you have to store the credential
+that bootstraps them. This is the single most commonly botched piece of
+application security, and the failure mode is catastrophic and delayed: a
+database leaks today, and the passwords are cracked at leisure, offline,
+for years afterward.
+
+**The rule: never store a password you can read.** Not encrypted — encrypted
+implies a key that decrypts it, and whoever took your database probably took
+your key too. Store a *slow, salted hash* and compare hashes at login.
+
+```
+  WRONG                          STILL WRONG                  RIGHT
+  ─────                          ───────────                  ─────
+  store "hunter2"                store SHA256("hunter2")      store
+                                                              argon2id(
+  Leak = instant total loss      SHA-256 is designed to be      "hunter2",
+                                 FAST. A commodity GPU tries    salt,
+                                 billions/sec against a         cost params
+                                 precomputed rainbow table.   )
+                                 Unsalted = identical
+                                 passwords hash identically.  Leak = attacker
+                                                              must spend real
+                                                              money per
+                                                              password.
+```
+
+General-purpose hashes (MD5, SHA-1, SHA-256) are the wrong tool here for
+exactly the reason they are the right tool elsewhere: they are fast. Password
+hashing wants a function that is *deliberately expensive* and tunable, so you
+can raise the cost as hardware improves.
+
+| Algorithm | Verdict | Notes |
+|-----------|---------|-------|
+| **Argon2id** | Preferred | Memory-hard — resists GPU and ASIC cracking. OWASP's first recommendation |
+| **scrypt** | Good | Also memory-hard; a reasonable choice where Argon2 isn't available |
+| **bcrypt** | Acceptable | Long-serving and battle-tested, but only CPU-hard. Note its 72-byte input truncation |
+| **PBKDF2** | Use only if required | FIPS-compliant, but not memory-hard — needs a very high iteration count |
+| **SHA-256 / MD5 / SHA-1** | Never | Fast by design; unsalted variants fall to rainbow tables instantly |
+
+Three details that are easy to miss:
+
+- **The salt is per-user, random, and not a secret.** It is stored alongside
+  the hash. Its only job is to make two identical passwords hash differently,
+  which defeats precomputed rainbow tables. Every mainstream library
+  generates and embeds it for you — do not invent your own scheme.
+- **Compare in constant time.** A naive `==` on hash strings returns faster
+  on an early-mismatch, which leaks information over enough samples. Use the
+  library's verify function, not a string comparison.
+- **Cost parameters are a living setting.** A work factor chosen in 2018 is
+  cheap to crack now. Record the parameters with each hash so you can
+  transparently re-hash on next successful login as you raise them.
+
+```python
+# The entire correct implementation, using a maintained library.
+# Note that there is no separate salt argument and no manual comparison:
+# the library generates the salt, embeds it plus the cost parameters in
+# the output string, and verifies in constant time.
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError
+
+ph = PasswordHasher()  # OWASP-aligned defaults; tune for your hardware
+
+
+def register(password: str) -> str:
+    """Return the value to store. Never store the password itself."""
+    return ph.hash(password)
+
+
+def login(stored_hash: str, password: str) -> tuple[bool, str | None]:
+    """Return (authenticated, new_hash_to_persist_or_None)."""
+    try:
+        ph.verify(stored_hash, password)
+    except (VerifyMismatchError, VerificationError):
+        return False, None
+    # Cost parameters were raised since this hash was written — upgrade it
+    # now, while we legitimately hold the plaintext.
+    if ph.check_needs_rehash(stored_hash):
+        return True, ph.hash(password)
+    return True, None
+```
+
+> **Do not hand-roll this.** Every line you write here is a line that can
+> silently disable the protection — a reused salt, a truncated input, a
+> timing leak. Use the platform's password-hashing library and spend your
+> attention on rate limiting the login endpoint (see Common Mistakes) and on
+> supporting a second factor, which protects users whose passwords were
+> already leaked somewhere else.
 
 ### OAuth 2.0 Flow
 
@@ -804,6 +904,9 @@ class SecureFileService:
 | **No rate limiting on auth endpoints** | Brute force attacks succeed | Rate limit login, password reset, API key creation |
 | **Encrypting only in transit** | Data at rest is vulnerable | Encrypt sensitive data at rest too |
 | **No secret rotation** | Compromised secrets stay valid forever | Rotate secrets periodically (90 days) |
+| **Hashing passwords with SHA-256** | It's fast by design — a GPU tries billions of guesses per second against a stolen table | Use Argon2id (or bcrypt/scrypt); the slowness is the security property |
+| **Encrypting passwords instead of hashing them** | Encryption is reversible, and the attacker who took your database usually took the key too | Store a one-way salted hash; you never need to read a password back |
+| **Comparing hashes with `==`** | Early-mismatch return leaks timing information across enough attempts | Use the library's constant-time verify function |
 
 ---
 
@@ -884,9 +987,48 @@ class SecureFileService:
 
 ## Related Modules
 
-- **Module 04: Load Balancing** — Security considerations for distributed load balancers (SSL termination, health check security)
-- **Module 07: Reliability** — Security as a component of system reliability (DDoS mitigation, failover strategies)
-- **[Module 18: Production AI](../19-production-ai-system/README.md)** — Securing ML pipelines, model access control, and data privacy in production AI systems
+| Module | Connection |
+|--------|-----------|
+| [Module 04: Load Balancing](../04-load-balancing/README.md) | Security considerations for distributed load balancers (SSL termination, health check security) |
+| [Module 07: Reliability](../07-reliability/README.md) | Security as a component of system reliability (DDoS mitigation, failover strategies) |
+| [Module 19: Production AI](../19-production-ai-system/README.md) | Securing ML pipelines, model access control, and data privacy in production AI systems |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    Security — Key Takeaways                    │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Authentication proves identity; authorization decides what │
+│     an authenticated identity can do — never conflate the two  │
+│  2. Store passwords as slow, salted hashes (Argon2id) — never  │
+│     encrypted, and never with a fast hash like SHA-256; the    │
+│     slowness is the entire security property                   │
+│  3. Prefer short-lived, signed tokens (JWT with a real expiry) │
+│     over long-lived API keys wherever the client can support   │
+│     the handshake                                              │
+│  4. Encrypt at rest AND in transit — one without the other     │
+│     leaves an obvious gap                                      │
+│  5. Envelope encryption (DEK wrapped by a KMS-held key) beats a│
+│     single hardcoded encryption key for anything that needs    │
+│     rotation                                                   │
+│  6. Validate and sanitize every external input — OWASP's Top 10│
+│     exists because the same mistakes recur across decades of   │
+│     applications                                               │
+│  7. Rate limit and scope API keys per client, not just globally│
+│     — one noisy or compromised client shouldn't degrade        │
+│     everyone else                                              │
+│  8. Never store secrets in code or config files — use a        │
+│     dedicated secrets manager with rotation, not environment   │
+│     variables as a permanent home                              │
+│  9. Treat security as a process with ongoing audits, not a     │
+│     checklist you complete once and forget                     │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
 
 ---
 

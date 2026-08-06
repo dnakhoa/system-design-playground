@@ -2,12 +2,36 @@
 
 > **Storage-intensive systems.** These systems test your ability to handle large files, efficient storage, content delivery, and media processing pipelines.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 10 | Design Case — Chat System and News Feed | [../10-case-chat-newsfeed/](../10-case-chat-newsfeed/) |
+| **Module 11** | **Design Case — Distributed File Storage and Video Streaming** | **(current)** |
+| Module 12 | Design Case — Payment System and E-commerce | [../12-case-payment-ecommerce/](../12-case-payment-ecommerce/) |
+
+---
+
 ## Learning Objectives
 
 - Design a distributed file storage system (Dropbox/Google Drive)
 - Design a video streaming platform (YouTube/Netflix)
 - Implement chunking, deduplication, and sync protocols
 - Design transcoding pipelines and adaptive bitrate streaming
+
+---
+
+## Table of Contents
+
+1. [Part 1: Distributed File Storage (Dropbox/Google Drive)](#part-1-distributed-file-storage-dropboxgoogle-drive)
+2. [Part 2: Video Streaming (YouTube/Netflix)](#part-2-video-streaming-youtubenetflix)
+3. [Design Comparison](#design-comparison)
+4. [Deep Dive: Dropbox Sync Protocol](#deep-dive-dropbox-sync-protocol)
+5. [Deep Dive: Video Streaming Details](#deep-dive-video-streaming-details)
+6. [Practice Exercises](#practice-exercises)
+7. [Common Mistakes](#common-mistakes)
+8. [Discussion Questions](#discussion-questions)
+9. [Key References](#key-references)
 
 ---
 
@@ -388,7 +412,7 @@ Only changed chunks are transferred, not the entire file.
 
 ---
 
-## Exercises
+## Practice Exercises
 
 ### Exercise 1: File Storage Design (25 min)
 
@@ -485,5 +509,57 @@ Design a conflict resolution strategy. What happens when both come online? How d
 
 ---
 
-**Previous**: [Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md)
-**Next**: [Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 02: Databases and Storage](../02-databases-storage/README.md) | Metadata services and chunk-storage durability build on the storage engine and replication trade-offs covered there |
+| [Module 03: Caching Strategies](../03-caching/README.md) | The CDN's origin-shield-plus-edge-cache design is a direct application of cache hierarchies and hit-ratio reasoning |
+| [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md) | The Kafka-backed notification service that pushes sync events to devices is a concrete message-queue use case |
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Paxos-based metadata consensus and the strong-within-device/eventual-across-devices model draw on the consistency models covered there |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│            File Storage & Streaming — Key Takeaways            │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Chunk everything — fixed-size blocks, not whole files, are │
+│     what make resumable uploads, delta sync, and dedup possible│
+│     at the same time                                           │
+│  2. Hash the chunk, not the file — whole-file hashes break the │
+│     moment one byte changes, so content-addressable storage has│
+│     to live at the chunk level                                 │
+│  3. Metadata and blob data want different homes — small and    │
+│     transactional versus large and immutable — don't force them│
+│     into the same store                                        │
+│  4. Never let "last write wins" silently discard a user's work │
+│     — conflict copies or CRDT/OT merges, no exceptions         │
+│  5. Viewer count is not origin request count — a CDN turns 800K│
+│     concurrent viewers of one video into a handful of origin   │
+│     fetches                                                    │
+│  6. Ship a bitrate ladder, not a single quality — let the      │
+│     player adapt to real bandwidth instead of guessing once at │
+│     upload time                                                │
+│  7. Transcode in parallel segments — a serial per-file pipeline│
+│     means one slow 4K upload backs up the queue for everyone   │
+│  8. At streaming scale, egress bandwidth is often the line item│
+│     that blows the budget — model it before you model compute  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 10: Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md)
+
+**Next:** [Module 12: Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md)
+
+---
+
+*Module 11 of 19 in the System Design Playground*

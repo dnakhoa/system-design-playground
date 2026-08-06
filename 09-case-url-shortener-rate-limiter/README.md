@@ -2,12 +2,34 @@
 
 > **The canonical warm-up problems.** These two systems are the most common interview questions because they test fundamental skills: ID generation, read-heavy optimization, distributed counting, and algorithm choice.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 08 | Distributed Systems Deep Dive | [../08-distributed-systems/](../08-distributed-systems/) |
+| **Module 09** | **Design Case — URL Shortener and Rate Limiter** | **(current)** |
+| Module 10 | Design Case — Chat System and News Feed | [../10-case-chat-newsfeed/](../10-case-chat-newsfeed/) |
+
+---
+
 ## Learning Objectives
 
 - Design a URL shortener end-to-end using the 9-step framework
 - Implement rate limiting with appropriate algorithm choice
 - Handle distributed ID generation at scale
 - Design for read-heavy workloads
+
+---
+
+## Table of Contents
+
+1. [Part 1: URL Shortener](#part-1-url-shortener)
+2. [Part 2: Rate Limiter](#part-2-rate-limiter)
+3. [Design Comparison: URL Shortener vs Rate Limiter](#design-comparison-url-shortener-vs-rate-limiter)
+4. [Practice Exercise](#practice-exercise)
+5. [Common Mistakes](#common-mistakes)
+6. [Discussion Questions](#discussion-questions)
+7. [Key References](#key-references)
 
 ---
 
@@ -413,7 +435,7 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
 5. Your token bucket allows a burst of 10 with a 100/minute refill. A client sends 10 requests instantly, then 1 request every 600ms forever. Are they within their limit? Is that what you wanted?
 
-   **Model answer**: Yes, they are compliant — and yes, that is the intended behaviour, which is the point of the question. Refill is 100/60 ≈ 1.67 tokens/second, so one request per 600ms consumes exactly the refill rate and sustains indefinitely. The initial burst of 10 is the bucket capacity, granted once. Sustained throughput is 100/minute as specified. If you *don't* want the burst — say each request triggers expensive work — token bucket is the wrong algorithm; use a leaky bucket, which shapes output to a constant rate and queues rather than admitting spikes. The general lesson: "100 requests per minute" is underspecified until you say what burst behaviour you accept.
+   **Model answer**: Yes, they are compliant — and yes, that is the intended behavior, which is the point of the question. Refill is 100/60 ≈ 1.67 tokens/second, so one request per 600ms consumes exactly the refill rate and sustains indefinitely. The initial burst of 10 is the bucket capacity, granted once. Sustained throughput is 100/minute as specified. If you *don't* want the burst — say each request triggers expensive work — token bucket is the wrong algorithm; use a leaky bucket, which shapes output to a constant rate and queues rather than admitting spikes. The general lesson: "100 requests per minute" is underspecified until you say what burst behavior you accept.
 
 ---
 
@@ -428,5 +450,64 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
 ---
 
-**Previous**: [Distributed Systems Deep Dive](../08-distributed-systems/README.md)
-**Next**: [Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 02: Databases and Storage](../02-databases-storage/README.md) | The `urls` table's indexing choices and MySQL-vs-PostgreSQL dialect differences directly apply this module's schema design principles |
+| [Module 03: Caching Strategies](../03-caching/README.md) | The redirect read path (L1/L2 cache hierarchy, TTLs, hot-key mitigation) is a worked example of this module's caching patterns |
+| [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md) | Click analytics publish to Kafka and process asynchronously so the redirect path never blocks on the write |
+| [Module 07: Reliability Engineering](../07-reliability/README.md) | The fail-open-vs-fail-closed decision for a Redis outage and the 99.99%-vs-99.9% availability split both apply this module's playbook for graceful degradation |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│          URL Shortener & Rate Limiter — Key Takeaways          │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Pick a base62 alphabet, write it down, and never touch it  │
+│     again — every existing short link depends on that exact    │
+│     ordering                                                   │
+│  2. Sequential IDs are cheap to generate and trivial to        │
+│     enumerate — run the counter through a secret bijection     │
+│     before it becomes a public code                            │
+│  3. URL mappings are immutable, so caching is nearly free — an │
+│     in-process L1 cache and a long CDN TTL absorb most traffic │
+│     before Redis ever sees it                                  │
+│  4. Consistent hashing shards keys, not load — one viral link  │
+│     still saturates a single cache node no matter how many     │
+│     shards exist                                               │
+│  5. Keep the redirect synchronous and everything else — clicks,│
+│     analytics, aggregation — off that path entirely; a 301     │
+│     should never wait on a Kafka publish                       │
+│  6. "100 requests per minute" isn't a full spec until you state│
+│     the burst you'll tolerate — token bucket and leaky bucket  │
+│     give very different answers                                │
+│  7. Fixed windows double your real limit at the boundary —     │
+│     sliding window or token bucket, not a bigger fixed window, │
+│     is the fix                                                 │
+│  8. Sharing one Redis cluster between the cache and the rate   │
+│     limiter means one outage, two failure modes — decide fail- │
+│     open vs. fail-closed per endpoint, not globally            │
+│  9. Read-heavy and write-heavy halves of one system can carry  │
+│     different availability targets — replicate and cache the   │
+│     reads, keep the coordinated writes regional, and the split │
+│     pays for itself                                            │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md)
+
+**Next:** [Module 10: Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md)
+
+---
+
+*Module 09 of 19 in the System Design Playground*

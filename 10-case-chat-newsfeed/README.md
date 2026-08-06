@@ -2,12 +2,34 @@
 
 > **Real-time communication at scale.** These systems test your ability to handle persistent connections, message ordering, fan-out patterns, and ranking algorithms.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 09 | Design Case — URL Shortener and Rate Limiter | [../09-case-url-shortener-rate-limiter/](../09-case-url-shortener-rate-limiter/) |
+| **Module 10** | **Design Case — Chat System and News Feed** | **(current)** |
+| Module 11 | Design Case — Distributed File Storage and Video Streaming | [../11-case-storage-streaming/](../11-case-storage-streaming/) |
+
+---
+
 ## Learning Objectives
 
 - Design a chat system with WebSocket connections
 - Implement fan-out strategies for news feeds
 - Handle the celebrity problem in social media
 - Design real-time presence and read receipts
+
+---
+
+## Table of Contents
+
+1. [Part 1: Chat System (WhatsApp/Telegram)](#part-1-chat-system-whatsapptelegram)
+2. [Part 2: News Feed (Twitter/Instagram)](#part-2-news-feed-twitterinstagram)
+3. [Design Comparison](#design-comparison)
+4. [Practice Exercise](#practice-exercise)
+5. [Common Mistakes](#common-mistakes)
+6. [Discussion Questions](#discussion-questions)
+7. [Key References](#key-references)
 
 ---
 
@@ -330,7 +352,7 @@ hundreds:
   │                                                          │
   │  Post A wins. A fresh post with solid engagement beats   │
   │  an older post with 3× the engagement — which is the     │
-  │  behaviour a feed actually wants.                        │
+  │  behavior a feed actually wants.                        │
   └──────────────────────────────────────────────────────────┘
 ```
 
@@ -433,5 +455,59 @@ next 100 — so age reliably overtakes raw volume.
 
 ---
 
-**Previous**: [Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md)
-**Next**: [Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 03: Caching Strategies](../03-caching/README.md) | Redis sorted sets and TTL keys are the caching primitives behind this module's feed storage and presence system |
+| [Module 04: Load Balancing and Networking](../04-load-balancing/README.md) | The WebSocket connection registry is a stateful load-balancing problem — routing to the server that holds the connection |
+| [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md) | Kafka event streams and offline-message queues are the async decoupling patterns this module leans on |
+| [Module 07: Reliability Engineering](../07-reliability/README.md) | The WebSocket-crash discussion question here is a direct case study in thundering herd and durable delivery |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│            Chat System & News Feed — Key Takeaways             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. The WebSocket connection is the state — route through a    │
+│     registry, because no server can reach a user it doesn't    │
+│     know about                                                 │
+│  2. Order messages within a conversation, never globally —     │
+│     that's the only ordering guarantee anyone actually notices │
+│  3. Never trust a client's clock for message order — assign    │
+│     sequence numbers server-side, or users will find a way to  │
+│     cheat it                                                   │
+│  4. `ZREMRANGEBYRANK key 0 -1` isn't a trim, it's a `DEL` —    │
+│     know your Redis ranges before you run them in production   │
+│  5. Fan-out on write dies at celebrity scale, fan-out on read  │
+│     dies at normal scale — hybrid is the only design that      │
+│     survives both                                              │
+│  6. Recency belongs in a multiplier or divisor, never an addend│
+│     — a term capped at 1.0 cannot move a score in the hundreds │
+│  7. Presence is a TTL key refreshed on heartbeat, not a write  │
+│     per heartbeat — silence should mean offline                │
+│  8. Engagement is an adversarial signal, not ground truth —    │
+│     rank on raw counters and you've built a bot amplifier      │
+│  9. Design for the crash, not just the happy path — a dead     │
+│     WebSocket server means a thundering herd of reconnects,    │
+│     survivable only with jittered backoff and durable pre-ack  │
+│     storage                                                    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 09: Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md)
+
+**Next:** [Module 11: Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
+
+---
+
+*Module 10 of 19 in the System Design Playground*

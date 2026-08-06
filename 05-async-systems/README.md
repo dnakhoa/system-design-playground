@@ -2,6 +2,16 @@
 
 > **Decouple services and handle work asynchronously.** Not everything needs a synchronous response. Async systems improve resilience, throughput, and user experience by offloading work to background processors.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 04 | Load Balancing and Networking | [../04-load-balancing/](../04-load-balancing/) |
+| **Module 05** | **Asynchronous Systems and Message Queues** | **(current)** |
+| Module 06 | Microservices Architecture | [../06-microservices/](../06-microservices/) |
+
+---
+
 ## Learning Objectives
 
 - Understand sync vs async communication patterns
@@ -9,6 +19,25 @@
 - Implement event sourcing and CQRS patterns
 - Handle delivery guarantees (at-least-once, exactly-once)
 - Design dead letter queues for error handling
+
+---
+
+## Table of Contents
+
+1. [Sync vs Async Communication](#sync-vs-async-communication)
+2. [Message Queue Patterns](#message-queue-patterns)
+3. [Message Queue Comparison](#message-queue-comparison)
+4. [Kafka Deep Dive](#kafka-deep-dive)
+5. [Event-Driven Architecture](#event-driven-architecture)
+6. [Event Sourcing](#event-sourcing)
+7. [CQRS (Command Query Responsibility Segregation)](#cqrs-command-query-responsibility-segregation)
+8. [Delivery Guarantees](#delivery-guarantees)
+9. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
+10. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
+11. [Key References](#key-references)
+12. [Practice Exercise](#practice-exercise)
+13. [Common Mistakes](#common-mistakes)
+14. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -684,5 +713,55 @@ When a user places an order:
 
 ---
 
-**Previous**: [Load Balancing and Networking](../04-load-balancing/README.md)
-**Next**: [Microservices Architecture](../06-microservices/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 07: Reliability Engineering](../07-reliability/README.md) | Exponential backoff, circuit breakers, and retry budgets are the reliability primitives that make the DLQ and delivery-guarantee patterns here actually survive production |
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Exactly-once processing and per-partition ordering both lean on the same consensus and ordering guarantees covered there in depth |
+| [Module 12: Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/README.md) | Walks through the exact charge-inventory-notify pipeline used in this module's practice exercise, with a full idempotency implementation for payment events |
+| [Module 14: API Design](../14-api-design/README.md) | Stripe's Idempotency-Key header is the request/response mirror of the idempotent-consumer pattern used here for at-least-once message processing |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                 Async Systems — Key Takeaways                  │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. "Exactly-once delivery" doesn't exist over a network —     │
+│     design for at-least-once plus idempotent consumers, always │
+│  2. Ack after processing, not before — acking early is how     │
+│     messages get lost, not how they get processed twice        │
+│  3. Partition by the entity whose order matters (`ride_id`,    │
+│     `account_id`) — a random or hot key either scrambles       │
+│     ordering or bottlenecks one consumer                       │
+│  4. Every retry loop needs a DLQ at the far end — unbounded    │
+│     retries just block the partition forever                   │
+│  5. Split transient failures from permanent ones before you    │
+│     retry — a malformed payload will fail the 1,000th attempt  │
+│     exactly like the first                                     │
+│  6. Async is for side effects, not for what the user is waiting│
+│     on — "queued" is not the same promise as "done"            │
+│  7. Event-carried state transfer beats event notification once │
+│     consumers start calling back for details — that call-back  │
+│     recreates the coupling the queue was supposed to remove    │
+│  8. Snapshot event-sourced aggregates — without one, replay    │
+│     time grows with the account's entire history               │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 04: Load Balancing and Networking](../04-load-balancing/README.md)
+
+**Next:** [Module 06: Microservices Architecture](../06-microservices/README.md)
+
+---
+
+*Module 05 of 19 in the System Design Playground*

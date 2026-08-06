@@ -2,6 +2,16 @@
 
 > **The mental models every system designer needs.** Before you can design a chat system or an LLM inference pipeline, you need a shared vocabulary for reasoning about requirements, trade-offs, and architecture.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Course Home | — | [../README.md](../README.md) |
+| **Module 01** | **System Design Fundamentals** | **(current)** |
+| Module 02 | Databases and Storage | [../02-databases-storage/](../02-databases-storage/) |
+
+---
+
 ## Learning Objectives
 
 - Understand what system design is and why it matters
@@ -9,6 +19,23 @@
 - Apply the 9-step framework to any design problem
 - Reason about the CAP theorem and consistency models
 - Choose between scalability strategies
+
+---
+
+## Table of Contents
+
+1. [What Is System Design?](#what-is-system-design)
+2. [Key System Properties](#key-system-properties)
+3. [Back-of-the-Envelope Estimation](#back-of-the-envelope-estimation)
+4. [The 9-Step Framework](#the-9-step-framework)
+5. [CAP Theorem](#cap-theorem)
+6. [Consistency Models](#consistency-models)
+7. [Case Study: Designing a URL Shortener](#case-study-designing-a-url-shortener)
+8. [Trade-off Thinking](#trade-off-thinking)
+9. [Key References](#key-references)
+10. [Practice Exercise](#practice-exercise)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -359,40 +386,81 @@ Be ready for:
 
 ## CAP Theorem
 
-In a distributed system, you can only guarantee **two** of three properties:
+CAP is usually taught as "pick two of three: Consistency, Availability,
+Partition tolerance." That phrasing is memorable and it is wrong in a way
+that will cost you an interview answer. **Partition tolerance is not a
+property you choose.** Packets get dropped, switches fail, and links
+saturate whether or not your design accounts for it. The only thing you
+choose is what your system does *when a partition is already happening*.
+
+So the honest statement of the theorem is:
+
+> **During a network partition, a distributed system must sacrifice either
+> consistency or availability. It cannot preserve both.**
 
 ```
-                    Consistency (C)
-                         ▲
-                        / \
-                       /   \
-          pick C + P  /     \  pick C + A
-            = CP     /       \    = CA
-       (ZooKeeper)  /         \  (single-node
-                   /           \   Postgres)
-                  /             \
-                 ▼───────────────▼
-   Availability (A)               Partition tolerance (P)
-                  \             /
-                   pick A + P
-                     = AP
-                  (Cassandra, DNS)
+  NO PARTITION (the normal case)          PARTITION IN PROGRESS
+  ──────────────────────────────          ─────────────────────
 
-  Each EDGE is a viable system; the CENTER (all three) is unreachable.
+     ┌─────┐        ┌─────┐                  ┌─────┐   ╳   ┌─────┐
+     │  A  │◀──────▶│  B  │                  │  A  │   ╳   │  B  │
+     └─────┘        └─────┘                  └─────┘   ╳   └─────┘
+                                                       ╳
+   Both consistent AND available.          A cannot reach B. A write to A
+   CAP imposes no trade-off here.          cannot be confirmed by B. Now
+                                           you must choose:
+
+                                    CP: refuse the write. Stay correct,
+                                        become unavailable.
+                                    AP: accept the write. Stay up,
+                                        diverge from B until healed.
 ```
 
-| System Type | Guarantee | Real Example |
-|------------|-----------|--------------|
-| **CP** | Consistent + Partition-tolerant | ZooKeeper, HBase, MongoDB (default) |
-| **AP** | Available + Partition-tolerant | Cassandra, DynamoDB, DNS |
-| **CA** | Consistent + Available (no partitions) | Single-node PostgreSQL |
+| Choice | During a partition | Real Examples |
+|--------|--------------------|---------------|
+| **CP** | Reject requests it cannot confirm — callers see errors or timeouts | ZooKeeper, etcd, HBase, Spanner |
+| **AP** | Accept requests on both sides, reconcile after the partition heals | Cassandra, DynamoDB, Riak, DNS |
 
-**In practice, you always need P** (network partitions happen), so the real choice is:
+**Why there is no "CA" system.** Every textbook triangle labels one edge
+"CA" and puts single-node PostgreSQL there. But a single-node database is
+not a distributed system — it has no partition to tolerate because it has
+no network between replicas. "CA" is not a third design option; it is the
+label for *not being distributed*. The moment you add a replica across a
+network, you are choosing CP or AP whether you decided to or not.
 
-- **CP**: Sacrifice availability during partitions (reject requests)
-- **AP**: Sacrifice consistency during partitions (serve stale data)
+### PACELC: the half of the trade-off CAP omits
 
-**Real-world example**: When a Cassandra node goes down, other nodes continue serving (AP). When a ZooKeeper node goes down, the cluster may reject writes until quorum is restored (CP).
+CAP only describes behavior during partitions — which, in a healthy
+datacenter, is a rare state. PACELC (Abadi, 2012) extends it to cover the
+other 99.9% of the time:
+
+```
+  if (Partition):  choose Availability  or  Consistency     ← CAP's case
+  Else:            choose Latency       or  Consistency     ← the common case
+```
+
+This second clause is the one that actually shapes your daily p99. Keeping
+replicas strongly consistent means a write waits for acknowledgements from
+other nodes — possibly in another region. That is latency you pay on every
+single request, partition or not.
+
+| System | Partition behavior | Normal-operation behavior | PACELC |
+|--------|--------------------|---------------------------|--------|
+| Cassandra (default) | Stays available, diverges | Returns fast, may serve stale | **PA/EL** |
+| DynamoDB (eventually consistent reads) | Stays available | Returns fast, may serve stale | **PA/EL** |
+| Spanner | Refuses writes without quorum | Waits for consensus + TrueTime | **PC/EC** |
+| MongoDB (default) | Primary steps down, writes pause | Reads from primary, consistent | **PC/EC** |
+
+> **What this buys you in an interview.** "It's CP" describes one rare
+> failure mode. "It's PC/EC, so we pay cross-region consensus latency on
+> every write — that's why the p99 write is 40ms and not 4ms" describes the
+> system your users actually experience. Reach for the second one.
+
+**Concrete example**: when a Cassandra node becomes unreachable, the
+remaining nodes keep accepting reads and writes and reconcile later (AP).
+When a ZooKeeper node is partitioned away from the majority, the minority
+side stops serving writes entirely until quorum is restored (CP) — that
+refusal is the feature, not a bug.
 
 ---
 
@@ -415,7 +483,7 @@ Serializable   able        Consistency    Writes    Consistency
                 ordered
 
   Strict serializability = serializability + real-time order.
-  It is linearizability generalised from single objects to transactions,
+  It is linearizability generalized from single objects to transactions,
   so it is STRICTLY STRONGER than linearizability — not weaker.
 ```
 
@@ -432,7 +500,7 @@ Serializable   able        Consistency    Writes    Consistency
 > serial order; linearizability is about the *real-time* order of single-object
 > operations. Neither implies the other. Strict serializability is what you get
 > when you demand both — which is why it is the most expensive and why systems
-> like Spanner need synchronised clocks (TrueTime) to offer it.
+> like Spanner need synchronized clocks (TrueTime) to offer it.
 
 ---
 
@@ -613,6 +681,8 @@ Never say "I'd use a relational database." Say:
 | **Saying "I'd use MySQL" without justification** | Every choice has trade-offs | Say "I'd use X because Y, but the trade-off is Z" |
 | **Forgetting about availability** | 99.9% vs 99.99% changes everything | Ask: "What availability do we need?" |
 | **Over-engineering at small scale** | Adds complexity without benefit | Design for 10x current, not 1000x |
+| **Reciting CAP as "pick two of three"** | Partition tolerance isn't optional, and "CA" just means "not distributed" | Say what happens *during* a partition, then use PACELC for normal operation |
+| **Quoting an availability number with no scope** | "99.99%" of what — the whole request path, or one service? Serial dependencies multiply | State the scope, then multiply the components on the critical path |
 
 ---
 
@@ -640,5 +710,56 @@ Never say "I'd use a relational database." Say:
 
 ---
 
-**Previous**: [Course Home](../README.md)
-**Next**: [Databases and Storage](../02-databases-storage/README.md) — choosing the right data layer for your system.
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 09: Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md) | Takes the URL shortener used as this module's running example and case study through a full end-to-end design, including rate limiting |
+| [Module 07: Reliability Engineering](../07-reliability/README.md) | Deepens the availability, fault tolerance, and durability concepts from Key System Properties into SLOs, error budgets, and disaster recovery |
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Builds on the CAP theorem and consistency models introduced here with consensus algorithms, logical clocks, and distributed transactions |
+| [Module 03: Caching Strategies](../03-caching/README.md) | Expands the cache-sizing math from Back-of-the-Envelope Estimation into full caching patterns and invalidation strategies |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                   System Design Fundamentals                   │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Clarify requirements before you draw a single box — solving│
+│     the wrong problem is the most expensive mistake in the room│
+│  2. The read:write ratio is the one number that decides your   │
+│     caching, replication, and sharding strategy — estimate it  │
+│     first                                                      │
+│  3. Size caches by distinct keys, not request volume — a URL   │
+│     hit a million times still occupies one cache entry         │
+│  4. Storage estimates die from forgetting the payload, not the │
+│     key — the short code is never the expensive part of the row│
+│  5. Nines don't add, they multiply — serial components make    │
+│     availability worse, parallel redundancy makes it better    │
+│  6. Durability is a function of replica count AND repair speed,│
+│     not replica count alone — faster repair can buy you more   │
+│     than another replica                                       │
+│  7. Networks partition, full stop — the real CAP choice in     │
+│     production is CP vs. AP, not "can we have all three"       │
+│  8. Pick the weakest consistency model your product can        │
+│     tolerate — every notch of extra strength has a cost        │
+│  9. State the trade-off out loud — "I'd use X because Y, but   │
+│     the cost is Z" beats "I'd use X" every time                │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Course Home](../README.md)
+
+**Next:** [Module 02: Databases and Storage](../02-databases-storage/README.md)
+
+---
+
+*Module 01 of 19 in the System Design Playground*

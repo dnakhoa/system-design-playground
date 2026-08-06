@@ -2,6 +2,16 @@
 
 > **Design for team scale and deployment independence.** Microservices let teams own their services end-to-end, deploy independently, and scale separately — but they introduce distributed systems complexity.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 05 | Asynchronous Systems and Message Queues | [../05-async-systems/](../05-async-systems/) |
+| **Module 06** | **Microservices Architecture** | **(current)** |
+| Module 07 | Reliability Engineering | [../07-reliability/](../07-reliability/) |
+
+---
+
 ## Learning Objectives
 
 - Decide between monolith and microservices
@@ -9,6 +19,23 @@
 - Implement distributed transactions with the saga pattern
 - Design service discovery and API versioning
 - Understand observability in microservices
+
+---
+
+## Table of Contents
+
+1. [Monolith vs Microservices](#monolith-vs-microservices)
+2. [Domain-Driven Decomposition](#domain-driven-decomposition)
+3. [Inter-Service Communication](#inter-service-communication)
+4. [Saga Pattern](#saga-pattern)
+5. [Service Discovery](#service-discovery)
+6. [API Versioning](#api-versioning)
+7. [Observability in Microservices](#observability-in-microservices)
+8. [Case Study: Netflix Microservices](#case-study-netflix-microservices)
+9. [Key References](#key-references)
+10. [Practice Exercise](#practice-exercise)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -696,5 +723,55 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 
 ---
 
-**Previous**: [Asynchronous Systems and Message Queues](../05-async-systems/README.md)
-**Next**: [Reliability Engineering](../07-reliability/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/) | The saga pattern and service discovery here are concrete applications of the distributed transaction and consensus problems this module covers in depth |
+| [Module 12: Design Case — Payment System and E-commerce](../12-case-payment-ecommerce/) | The bounded-context and saga examples here (catalog, ordering, inventory, payment) design the same e-commerce domain this case study builds end-to-end |
+| [Module 14: API Design](../14-api-design/) | REST vs. gRPC communication and API versioning are introduced here for inter-service use, then covered in full depth for public-facing APIs |
+| [Module 15: Observability](../15-observability/) | The Observability in Microservices section is explicitly the overview; this module covers metric cardinality, tracing, and SLO burn-rate alerting in depth |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                 Microservices — Key Takeaways                  │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Start with a monolith — split when the pain of coupling    │
+│     outweighs the pain of distribution, not before             │
+│  2. A shared database between services is just a monolith      │
+│     wearing a microservices costume                            │
+│  3. There's no 2PC — sagas trade atomicity for availability,   │
+│     and every compensation must be idempotent                  │
+│  4. Choreography stays loosely coupled but gets hard to trace; │
+│     orchestration is easy to trace but becomes a single point  │
+│     of failure — choose on purpose                             │
+│  5. Service discovery is the unglamorous plumbing that makes   │
+│     "just call the other service" possible at scale            │
+│  6. Every synchronous hop multiplies unavailability — five     │
+│     99.9% services chained together give you 99.5%             │
+│  7. Version additively and publish a real sunset window —      │
+│     breaking `/v1` silently breaks clients you don't control   │
+│  8. Without distributed tracing, "it's slow" is a guess, not a │
+│     diagnosis                                                  │
+│  9. Each new service is a new network call, a new failure mode,│
+│     and a new thing somebody has to get paged for              │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md)
+
+**Next:** [Module 07: Reliability Engineering](../07-reliability/README.md)
+
+---
+
+*Module 06 of 19 in the System Design Playground*

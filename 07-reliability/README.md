@@ -2,6 +2,16 @@
 
 > **Build systems that survive failures.** In distributed systems, failure is not an edge case — it's the default. Reliability engineering is about designing for failure, not preventing it.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 06 | Microservices Architecture | [../06-microservices/](../06-microservices/) |
+| **Module 07** | **Reliability Engineering** | **(current)** |
+| Module 08 | Distributed Systems Deep Dive | [../08-distributed-systems/](../08-distributed-systems/) |
+
+---
+
 ## Learning Objectives
 
 - Understand failure modes and their frequency
@@ -9,6 +19,23 @@
 - Design disaster recovery strategies (RPO, RTO)
 - Define and measure SLOs, SLAs, and error budgets
 - Apply chaos engineering principles
+
+---
+
+## Table of Contents
+
+1. [Failure Is the Default](#failure-is-the-default)
+2. [Circuit Breaker Pattern](#circuit-breaker-pattern)
+3. [Retry Strategies](#retry-strategies)
+4. [Timeout Design](#timeout-design)
+5. [Disaster Recovery](#disaster-recovery)
+6. [SLOs, SLAs, and Error Budgets](#slos-slas-and-error-budgets)
+7. [Chaos Engineering](#chaos-engineering)
+8. [Case Study: Google's Reliability Engineering](#case-study-googles-reliability-engineering)
+9. [Key References](#key-references)
+10. [Practice Exercise](#practice-exercise)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -780,5 +807,54 @@ Google's SRE practices are the gold standard for reliability engineering.
 
 ---
 
-**Previous**: [Microservices Architecture](../06-microservices/README.md)
-**Next**: [Distributed Systems Deep Dive](../08-distributed-systems/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 02: Databases and Storage](../02-databases-storage/README.md) | RPO/RTO targets and disaster recovery depend on the replication and backup strategies covered there |
+| [Module 04: Load Balancing and Networking](../04-load-balancing/README.md) | Liveness/readiness health checks and multi-region failover routing are implemented at the load balancing layer |
+| [Module 05: Asynchronous Systems and Message Queues](../05-async-systems/README.md) | Retry, backoff, and dead-letter handling here are the same patterns that make message queues reliable |
+| [Module 15: Observability](../15-observability/README.md) | SLOs and error budgets defined here become concrete burn-rate alerts in Module 15, Section 6 |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│            Reliability Engineering — Key Takeaways             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Failure is the default, not the exception — design for it  │
+│     instead of hoping to prevent it                            │
+│  2. Retries without jitter just re-synchronize the thundering  │
+│     herd you were trying to avoid                              │
+│  3. Retrying without a circuit breaker piles load onto a       │
+│     dependency exactly when it can least take it               │
+│  4. Timeouts must shrink at every hop downstream — an inverted │
+│     timeout burns capacity on responses nobody reads           │
+│  5. Every network call gets an explicit timeout, no exceptions,│
+│     or one hung dependency takes the whole pool with it        │
+│  6. An untested backup is a hypothesis, not a recovery plan —  │
+│     run restore drills and measure them against your RTO       │
+│  7. A 100% SLO leaves no error budget and freezes shipping —   │
+│     pick a target users actually notice                        │
+│  8. Chaos experiments need a hypothesis and a bounded blast    │
+│     radius, or they're just outages you caused on purpose      │
+│  9. Split liveness from readiness, or one dependency hiccup    │
+│     makes every instance look dead at once                     │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 06: Microservices Architecture](../06-microservices/README.md)
+
+**Next:** [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md)
+
+---
+
+*Module 07 of 19 in the System Design Playground*

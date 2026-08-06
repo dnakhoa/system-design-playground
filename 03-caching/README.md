@@ -2,6 +2,16 @@
 
 > **The fastest way to improve system performance.** Caching reduces latency from 100ms to 1ms and can cut database load by 90%+. But cache invalidation is one of the two hard problems in computer science.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 02 | Databases and Storage | [../02-databases-storage/](../02-databases-storage/) |
+| **Module 03** | **Caching Strategies** | **(current)** |
+| Module 04 | Load Balancing and Networking | [../04-load-balancing/](../04-load-balancing/) |
+
+---
+
 ## Learning Objectives
 
 - Understand cache-aside, write-through, write-back, and write-around patterns
@@ -9,6 +19,25 @@
 - Implement CDN caching with proper cache headers
 - Prevent cache stampede and thundering herd problems
 - Know when NOT to cache
+
+---
+
+## Table of Contents
+
+1. [Why Caching Matters](#why-caching-matters)
+2. [Cache Patterns](#cache-patterns)
+3. [Pattern Comparison](#pattern-comparison)
+4. [Redis Architecture](#redis-architecture)
+5. [CDN Caching](#cdn-caching)
+6. [Cache Invalidation Strategies](#cache-invalidation-strategies)
+7. [Cache Stampede (Thundering Herd)](#cache-stampede-thundering-herd)
+8. [Hot Keys](#hot-keys)
+9. [When NOT to Cache](#when-not-to-cache)
+10. [Case Study: Netflix Caching Architecture](#case-study-netflix-caching-architecture)
+11. [Key References](#key-references)
+12. [Practice Exercise](#practice-exercise)
+13. [Common Mistakes](#common-mistakes)
+14. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -796,5 +825,62 @@ Netflix serves 230M+ subscribers with a sophisticated multi-layer caching strate
 
 ---
 
-**Previous**: [Databases and Storage](../02-databases-storage/README.md)
-**Next**: [Load Balancing and Networking](../04-load-balancing/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 09: Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md) | Works through the hot-key problem (L1 cache, key replication) and a Redis-outage fail-open/fail-closed decision in a concrete system |
+| [Module 10: Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md) | The celebrity fan-out problem is this module's hot-key problem by another name, fixed with the same pre-computation-and-cache approach |
+| [Module 11: Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md) | Extends CDN Caching into origin shields and edge hit-ratio math for video — the engineering behind this module's Netflix case study |
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Logical clocks and consensus generalize the write-ordering race this module patches locally with a version column |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│               Caching Strategies — Key Takeaways               │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Cache the hot 20% of data, not everything — a low hit ratio│
+│     just adds memory cost and invalidation complexity for      │
+│     nothing                                                    │
+│  2. Delete on write, don't overwrite the cache — two racing    │
+│     writers can otherwise leave stale data cached indefinitely │
+│  3. Never cache data that must be exactly right — banking      │
+│     balances and inventory counts don't get to be stale        │
+│  4. Sharding does not fix a hot key — the traffic is           │
+│     concentrated on one key no matter how many shards exist, so│
+│     fix it with an L1 cache, replication, or the CDN instead   │
+│  5. A single popular key expiring can flood a database sized   │
+│     for the miss rate, not the request rate — guard it with    │
+│     locking, coalescing, or early expiration before it happens,│
+│     not after                                                  │
+│  6. Write-back trades durability for speed — only use it where │
+│     losing the last few seconds of writes is genuinely         │
+│     acceptable                                                 │
+│  7. `INCR` is the only race-free way to read the version you   │
+│     just wrote — a separate `GET` can always lose to someone   │
+│     else's increment                                           │
+│  8. A coalescing cache must hand every follower the leader's   │
+│     actual value, errors included — a bare `Event.wait()`      │
+│     return value is not a result                               │
+│  9. Design the degraded mode before the outage, not during it —│
+│     Netflix falls back to generic recommendations rather than  │
+│     going dark when its cache fails                            │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 02: Databases and Storage](../02-databases-storage/README.md)
+
+**Next:** [Module 04: Load Balancing and Networking](../04-load-balancing/README.md)
+
+---
+
+*Module 03 of 19 in the System Design Playground*

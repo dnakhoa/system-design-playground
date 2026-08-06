@@ -2,12 +2,36 @@
 
 > **High-stakes transactional systems.** Payment systems demand strong consistency, idempotency, and audit trails. E-commerce adds inventory management, flash sales, and complex order lifecycles.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 11 | Design Case — Distributed File Storage and Video Streaming | [../11-case-storage-streaming/](../11-case-storage-streaming/) |
+| **Module 12** | **Design Case — Payment System and E-commerce** | **(current)** |
+| Module 13 | Security | [../13-security/](../13-security/) |
+
+---
+
 ## Learning Objectives
 
 - Design a payment system with idempotency and exactly-once processing
 - Implement inventory management with race condition prevention
 - Design flash sale architectures that handle traffic spikes
 - Handle order lifecycle state machines
+
+---
+
+## Table of Contents
+
+1. [Part 1: Payment System](#part-1-payment-system)
+2. [Part 2: E-commerce System](#part-2-e-commerce-system)
+3. [Design Comparison](#design-comparison)
+4. [Deep Dive: Payment System Details](#deep-dive-payment-system-details)
+5. [Deep Dive: E-commerce Details](#deep-dive-e-commerce-details)
+6. [Practice Exercises](#practice-exercises)
+7. [Common Mistakes](#common-mistakes)
+8. [Discussion Questions](#discussion-questions)
+9. [Key References](#key-references)
 
 ---
 
@@ -499,7 +523,7 @@ in-process cleverness removes the need for it.
 
 ---
 
-## Exercises
+## Practice Exercises
 
 ### Exercise 1: Payment System Design (30 min)
 
@@ -597,5 +621,59 @@ Design a daily reconciliation system:
 
 ---
 
-**Previous**: [Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
-**Next**: [Security](../13-security/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Idempotency and exactly-once processing are distributed-transaction problems; this module covers the consensus and transaction theory behind the payment patterns here |
+| [Module 03: Caching Strategies](../03-caching/README.md) | Redis underpins idempotency claims, inventory counters, cart storage, and the flash-sale hot key — this module covers the Redis patterns and hot-key pitfalls in depth |
+| [Module 02: Databases and Storage](../02-databases-storage/README.md) | Inventory's pessimistic and optimistic locking (`SELECT ... FOR UPDATE`, version columns) are ACID transaction techniques covered there |
+| [Module 07: Reliability Engineering](../07-reliability/README.md) | Payment gateway outages and daily reconciliation are retry-strategy and disaster-recovery problems this module addresses directly |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│          Payment System & E-commerce — Key Takeaways           │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Mint idempotency keys on the client, never the server — a  │
+│     server-generated key on retry defeats the entire mechanism │
+│  2. Claim before you charge: atomic `SET NX` on the idempotency│
+│     key, not check-then-set, or concurrent retries both slip   │
+│     through and double-charge                                  │
+│  3. Store money as integer cents, never floats — rounding      │
+│     errors compound into real losses                           │
+│  4. Never trust a client-supplied amount — recompute the total │
+│     server-side from authoritative prices, always              │
+│  5. Reconciliation is not optional — it's the only backstop for│
+│     a charge that succeeded at the gateway but never made it   │
+│     into your ledger                                           │
+│  6. A `DECR` without a restore path drifts arbitrarily negative│
+│     — check-and-decrement atomically in one script, or returned│
+│     stock never becomes sellable again                         │
+│  7. Redis TTL expiry is silent — it will not run your code, so │
+│     inventory release needs an active sweeper, not a hope that │
+│     something is listening                                     │
+│  8. Authorize at order time, capture at fulfillment — capture  │
+│     too early and every downstream failure becomes a refund    │
+│  9. Payments and orders are state machines, not booleans — real│
+│     lifecycles have many states, and only some transitions are │
+│     legal                                                      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 11: Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md)
+
+**Next:** [Module 13: Security](../13-security/README.md)
+
+---
+
+*Module 12 of 19 in the System Design Playground*

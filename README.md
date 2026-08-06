@@ -4,45 +4,106 @@
 [![Modules](https://img.shields.io/badge/modules-19-blue.svg)]()
 [![Theory](https://img.shields.io/badge/type-theory%20%2B%20design-orange.svg)]()
 
-> **The most comprehensive open-source system design course** — 19 modules covering distributed systems fundamentals, classic design cases, core infrastructure, and LLM AI system architecture. Theory-first with diagrams, trade-off tables, real-world case studies, and hands-on exercises.
+A free, self-paced course in 19 written modules. It starts at "what is a QPS
+estimate" and ends at "how would you architect an LLM agent platform for a
+hundred million users" — and it explains the reasoning at every step, not just
+the conclusions.
 
-## What You'll Learn
+**New here? [Start with Module 01](01-fundamentals/README.md).** It takes about
+two hours and teaches the framework every later module assumes.
 
-This course takes you from system design fundamentals to designing production LLM AI systems:
+---
 
-| Phase | Topics | Modules |
-|-------|--------|---------|
-| **Foundations** | Scalability, databases, caching, load balancing | 01-04 |
-| **Intermediate** | Async systems, microservices, reliability, distributed systems | 05-08 |
-| **Design Cases** | URL shortener, chat, payments, file storage, video streaming | 09-12 |
-| **Core Infrastructure** | Security, API design, observability | 13-15 |
-| **LLM AI Systems** | Inference serving, RAG at scale, agents, production AI | 16-19 |
+## What you'll be able to do
 
-## Why This Course?
+Not "what topics are covered" — what you should actually be able to do when
+you're finished:
 
-| Feature | Traditional SD Courses | **This Course** |
-|---------|----------------------|-----------------|
-| LLM system design | ❌ | ✅ Modules 16-19 |
-| RAG architecture at scale | ❌ | ✅ Module 17 |
-| Agent system architecture | ❌ | ✅ Module 18 |
-| Production AI observability | ❌ | ✅ Module 19 |
-| Classic fundamentals | ✅ | ✅ Modules 01-08 |
-| Security and API design | Partial | ✅ Modules 13-14 |
-| Observability in depth | Partial | ✅ Module 15 |
-| Real-world case studies | Partial | ✅ Every module |
-| Hands-on exercises | Partial | ✅ Every module |
-| ASCII diagrams | Rare | ✅ Every module |
-| **Total coverage** | 10-12 modules | **19 modules** |
+- Take a vague prompt like *"design Twitter"* and turn it into a concrete,
+  defensible architecture in 45 minutes, using a repeatable 9-step framework.
+- Do back-of-the-envelope math out loud — QPS, storage, bandwidth, cost — and
+  explain which number drives the design.
+- Say *why* you picked Postgres over Cassandra, write-through over
+  write-behind, gRPC over REST, in terms of the trade-off you accepted rather
+  than the technology you like.
+- Recognize the failure modes before they happen: cache stampedes, hot keys,
+  retry storms, split brain, unbounded metric cardinality.
+- Design an LLM system that survives contact with production — inference
+  serving, retrieval, agents, guardrails, and the observability to run them.
 
-## Who This Course Is For
+**Prerequisites:** you can read code and you know roughly what a database and
+an HTTP request are. No distributed systems background needed.
 
-- **Software engineers** preparing for system design interviews
-- **ML engineers** building production AI systems
-- **Architects** designing scalable distributed systems
-- **Students** learning system design from scratch
-- **Teams** needing a shared reference for design patterns
+## What this is, and what it isn't
 
-**Prerequisites:** Basic programming knowledge. No distributed systems background required — we start from fundamentals.
+Being clear about this up front will save you time:
+
+| This course **is** | This course **is not** |
+|---|---|
+| Written modules you read and think about | Video lectures |
+| Architecture, trade-offs, and reasoning | A coding bootcamp — the code is illustrative, not a project you build |
+| Runnable, checked Python snippets that show a mechanism | A framework tutorial (no Spring, no Django) |
+| Interview-oriented *and* practice-oriented | Interview-question memorisation |
+| Opinionated, with the reasoning shown so you can disagree | Neutral encyclopedia coverage |
+
+The code blocks exist to make an idea concrete — a token bucket, a saga, a
+circuit breaker in ~30 lines. They're checked for syntax by the linter, but
+they are teaching aids, not libraries to deploy.
+
+## Who it's for
+
+- **Engineers preparing for system design interviews** — Path A below.
+- **ML/AI engineers** who can build a model but haven't had to run one at
+  scale — Path B below.
+- **Backend engineers** who want the theory behind patterns they already use.
+- **Teams** who want a shared vocabulary for design reviews.
+
+---
+
+## How to actually learn this
+
+Reading a system design course front to back and retaining nothing is the
+default outcome. A few things that make the difference:
+
+**1. Answer before you read on.** Every module has a Case Study. When you hit
+it, stop and spend two minutes sketching your own answer first. Being wrong
+and then reading the right answer sticks; reading the right answer first
+doesn't.
+
+**2. The exercises are the course.** Each module ends with a Practice Exercise
+and Discussion Questions. They're where the learning happens — the prose is
+setup. Many exercises include a model answer; write yours down *before*
+you look.
+
+**3. Read the Common Mistakes table twice.** Once when you get to it, and
+again a week later. It's a distilled list of the specific things people get
+wrong under pressure, which makes it the highest-value-per-word section in
+every module.
+
+**4. Say it out loud.** System design is assessed verbally, in interviews and
+in design reviews alike. Explaining a diagram to an empty room — or a
+colleague — surfaces the parts you only *think* you understand.
+
+**5. Don't skip the estimation math.** It feels like busywork and it is the
+single most common thing candidates fumble. Do it by hand until 100M/month →
+~38 QPS is instant.
+
+### What every module looks like
+
+Every module follows the same shape, so you can navigate one you've never
+opened:
+
+| Section | What it's for |
+|---|---|
+| **Learning Objectives** | Check these first — if you can already do all of them, skim |
+| **Table of Contents** | Jump straight to a topic when you're using this as a reference |
+| Core sections | Concepts, ASCII diagrams, trade-off tables, short code examples |
+| **Case Study** | A real system (Netflix, Stripe, Uber, Dapper) applying the concepts |
+| **Practice Exercise** | A design problem, usually with a model answer |
+| **Common Mistakes** | Mistake → why it's wrong → what to do instead |
+| **Discussion Questions** | Open-ended prompts for interview practice |
+| **Related Modules** | How this connects to the rest of the course |
+| **Summary** | Key takeaways, worth re-reading before an interview |
 
 ---
 
@@ -50,7 +111,7 @@ This course takes you from system design fundamentals to designing production LL
 
 Choose your path based on your goals:
 
-### Path A: System Design Interview Prep (~16 hours)
+### Path A: System Design Interview Prep (~12 hours)
 
 Focus on the most commonly asked topics:
 
@@ -87,26 +148,32 @@ Module 16 (Inference Serving) → Module 17 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path C: Full Curriculum (~38 hours)
+### Path C: Full Curriculum (~41 hours)
 
 Work through all 19 modules in order. Each builds on the previous.
 
 ### Path D: Fill Your Gaps
 
+Modules are written to be readable on their own. If you have a specific hole,
+go straight at it:
+
 | Your Gap | Go to |
 |----------|-------|
-| Can't estimate QPS/storage | Module 01 (Fundamentals) |
-| Don't know when to use SQL vs NoSQL | Module 02 (Databases) |
-| Cache invalidation keeps breaking | Module 03 (Caching) |
-| Need to design a chat system | Module 10 (Chat/News Feed) |
-| Auth, encryption, or OWASP gaps | Module 13 (Security) |
-| APIs keep breaking clients | Module 14 (API Design) |
-| Outages take hours to diagnose | Module 15 (Observability) |
-| Alerts are noisy and everyone ignores them | Module 15 (Observability) |
-| Need to serve LLMs at scale | Module 16 (Inference Serving) |
-| Building a RAG system | Module 17 (RAG at Scale) |
-| Building autonomous agents | Module 18 (Agent Architecture) |
-| Don't know how to monitor AI systems | Module 19 (Production AI) |
+| Can't estimate QPS/storage | [Module 01 — Fundamentals](01-fundamentals/README.md) |
+| Confused by CAP, or by "eventual consistency" | [Module 01 — Fundamentals](01-fundamentals/README.md) |
+| Don't know when to use SQL vs NoSQL | [Module 02 — Databases](02-databases-storage/README.md) |
+| Cache invalidation keeps breaking | [Module 03 — Caching](03-caching/README.md) |
+| One key is melting one cache node | [Module 03 — Caching](03-caching/README.md) |
+| Retries make outages worse, not better | [Module 07 — Reliability](07-reliability/README.md) |
+| Need to design a chat system | [Module 10 — Chat/News Feed](10-case-chat-newsfeed/README.md) |
+| Auth, encryption, password storage, or OWASP gaps | [Module 13 — Security](13-security/README.md) |
+| APIs keep breaking clients | [Module 14 — API Design](14-api-design/README.md) |
+| Outages take hours to diagnose | [Module 15 — Observability](15-observability/README.md) |
+| Alerts are noisy and everyone ignores them | [Module 15 — Observability](15-observability/README.md) |
+| Need to serve LLMs at scale | [Module 16 — Inference Serving](16-llm-inference-serving/README.md) |
+| Building a RAG system | [Module 17 — RAG at Scale](17-rag-at-scale/README.md) |
+| Building autonomous agents | [Module 18 — Agent Architecture](18-agent-architecture/README.md) |
+| Don't know how to monitor AI systems | [Module 19 — Production AI](19-production-ai-system/README.md) |
 
 ---
 
@@ -117,9 +184,9 @@ Work through all 19 modules in order. Each builds on the previous.
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [01](01-fundamentals/README.md) | [System Design Fundamentals](01-fundamentals/README.md) | 9-step framework, CAP theorem, estimation | ⭐ Beginner | ~2h |
-| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, sharding, replication, ACID | ⭐ Beginner | ~2h |
-| [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, cache stampede | ⭐⭐ Intermediate | ~2h |
-| [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, API gateway | ⭐⭐ Intermediate | ~2h |
+| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, sharding, replication, ACID | ⭐ Beginner | ~1.5h |
+| [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, cache stampede | ⭐⭐ Intermediate | ~2.5h |
+| [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, API gateway | ⭐⭐ Intermediate | ~2.5h |
 
 ### Phase 2: Intermediate (Modules 05-08)
 
@@ -127,34 +194,34 @@ Work through all 19 modules in order. Each builds on the previous.
 |--------|-------|-------------|------------|------|
 | [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, event-driven, CQRS, delivery guarantees | ⭐⭐ Intermediate | ~2h |
 | [06](06-microservices/README.md) | [Microservices](06-microservices/README.md) | DDD, saga pattern, service mesh, observability | ⭐⭐ Intermediate | ~2h |
-| [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, chaos engineering, SLOs | ⭐⭐ Intermediate | ~2h |
-| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2h |
+| [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, chaos engineering, SLOs | ⭐⭐ Intermediate | ~2.5h |
+| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2.5h |
 
 ### Phase 3: Design Cases (Modules 09-12)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [09](09-case-url-shortener-rate-limiter/README.md) | [URL Shortener & Rate Limiter](09-case-url-shortener-rate-limiter/README.md) | ID generation, token bucket, distributed counting | ⭐⭐ Intermediate | ~2h |
-| [10](10-case-chat-newsfeed/README.md) | [Chat System & News Feed](10-case-chat-newsfeed/README.md) | WebSocket, fan-out, presence, ranking | ⭐⭐ Intermediate | ~2h |
-| [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~2h |
+| [09](09-case-url-shortener-rate-limiter/README.md) | [URL Shortener & Rate Limiter](09-case-url-shortener-rate-limiter/README.md) | ID generation, token bucket, distributed counting | ⭐⭐ Intermediate | ~1.5h |
+| [10](10-case-chat-newsfeed/README.md) | [Chat System & News Feed](10-case-chat-newsfeed/README.md) | WebSocket, fan-out, presence, ranking | ⭐⭐ Intermediate | ~1.5h |
+| [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~1.5h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 
 ### Phase 4: Core Infrastructure (Modules 13-15)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [13](13-security/README.md) | [Security](13-security/README.md) | Auth, encryption, OWASP, prompt injection | ⭐⭐ Intermediate | ~2h |
-| [14](14-api-design/README.md) | [API Design](14-api-design/README.md) | REST, gRPC, GraphQL, versioning, pagination | ⭐⭐ Intermediate | ~2h |
-| [15](15-observability/README.md) | [Observability](15-observability/README.md) | Metrics, tracing, cardinality, burn-rate alerting | ⭐⭐ Intermediate | ~2h |
+| [13](13-security/README.md) | [Security](13-security/README.md) | Auth, encryption, OWASP, prompt injection | ⭐⭐ Intermediate | ~2.5h |
+| [14](14-api-design/README.md) | [API Design](14-api-design/README.md) | REST, gRPC, GraphQL, versioning, pagination | ⭐⭐ Intermediate | ~2.5h |
+| [15](15-observability/README.md) | [Observability](15-observability/README.md) | Metrics, tracing, cardinality, burn-rate alerting | ⭐⭐ Intermediate | ~4h |
 
 ### Phase 5: LLM AI Systems (Modules 16-19)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [15](16-llm-inference-serving/README.md) | [LLM Inference Serving](16-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
-| [16](17-rag-at-scale/README.md) | [RAG at Scale](17-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
-| [17](18-agent-architecture/README.md) | [Agent Architecture](18-agent-architecture/README.md) | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
-| [18](19-production-ai-system/README.md) | [Production AI System](19-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
+| [16](16-llm-inference-serving/README.md) | [LLM Inference Serving](16-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
+| [17](17-rag-at-scale/README.md) | [RAG at Scale](17-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
+| [18](18-agent-architecture/README.md) | [Agent Architecture](18-agent-architecture/README.md) | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
+| [19](19-production-ai-system/README.md) | [Production AI System](19-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
 
 ---
 
@@ -176,27 +243,36 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 ---
 
-## How to Use This Course
+## Preparing for an interview specifically
 
-### For Self-Study
-1. Start with Module 01 — even if you're experienced, review the fundamentals
-2. Follow the sequence — each module builds on previous concepts
-3. Read the case studies — they show how theory applies to real systems
-4. **Do the exercises** — they test your understanding better than reading
-5. Answer the discussion questions — they test your understanding
+The general study advice above still applies, but interviews reward a few
+things that self-study doesn't naturally build:
 
-### For Interview Prep
-1. Complete Phase 1 (Foundations) for the basics
-2. Work through Phase 3 (Design Cases) for common interview questions
-3. Review Phase 5 (LLM AI Systems) for AI/ML system design questions
-4. Practice the 9-step framework from Module 01
-5. Time yourself: 45 minutes per design problem
+1. **Run the clock.** Set a 45-minute timer and design out loud, on a
+   whiteboard or blank doc, with no reference material. The constraint is the
+   point — you're practicing the 9-step framework under the pressure it was
+   designed for.
+2. **Practise the first five minutes hardest.** Requirements clarification and
+   estimation are the part candidates rush and interviewers weight heavily.
+   Get those to the point of boredom.
+3. **Rehearse the trade-off sentence.** "I'd choose X because Y, and the cost
+   is Z." If you can't finish that sentence for a component, you don't
+   understand it yet.
+4. **Do Phase 3 twice.** The four design cases (Modules 09–12) map onto most
+   commonly asked questions. Second pass, do them from memory first.
+5. **Expect the follow-up.** Interviewers push on scale ("now 100×") and
+   failure ("now that region is gone"). The Discussion Questions in each
+   module are written in that voice on purpose.
 
-### For Teams
-1. Use as training material for new team members
-2. Reference architecture decisions in design docs
-3. Share the LLM modules (16-19) with AI/ML teams
-4. Establish common vocabulary and patterns
+## Using this with a team
+
+- Onboarding: assign Phases 1–2 as a reading track for new backend hires.
+- Design reviews: the Glossary below is a ready-made shared vocabulary — much
+  of the friction in a review is two people using "consistency" differently.
+- Reference: link a specific module section from an architecture decision
+  record instead of re-explaining the trade-off each time.
+- AI teams: Modules 15–19 stand alone reasonably well for an ML group that
+  already has backend fundamentals.
 
 ---
 
@@ -206,7 +282,8 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 | Term | Definition |
 |------|-----------|
-| **CAP Theorem** | A distributed system can guarantee only 2 of 3: Consistency, Availability, Partition tolerance |
+| **CAP Theorem** | During a network partition, a distributed system must give up either consistency or availability. Partition tolerance is not optional — "pick 2 of 3" is the common misstatement |
+| **PACELC** | CAP plus the normal case: if Partitioned, choose A or C; Else, choose Latency or Consistency |
 | **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
 | **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
 | **CQRS** | Command Query Responsibility Segregation — separate write and read models |
@@ -239,6 +316,8 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | Term | Definition |
 |------|-----------|
 | **ABAC** | Attribute-Based Access Control — policy decisions from subject/resource/environment attributes |
+| **Argon2id** | Memory-hard password hashing function; OWASP's first recommendation for storing passwords |
+| **Salt** | Per-user random value stored with a password hash so identical passwords hash differently |
 | **DEK / KMS** | Data Encryption Key / Key Management Service — envelope encryption hierarchy |
 | **JWT** | JSON Web Token — signed, self-contained bearer token (RFC 7519) |
 | **mTLS** | Mutual TLS — both client and server authenticate with certificates |
@@ -268,13 +347,18 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 | Term | Definition |
 |------|-----------|
+| **A2A (Agent2Agent Protocol)** | Linux Foundation standard for cross-framework agent-to-agent task delegation and peer discovery |
 | **Continuous Batching** | Sequences join and leave the GPU batch as they finish — raises utilization to 80-95% |
 | **Contextual Chunking** | Prepending LLM-generated context to each chunk before embedding |
 | **Cross-encoder** | Scores a query and document together — slow but precise; used for reranking |
+| **Disaggregated Prefill/Decode** | Separate GPU pools for prompt processing vs. token generation, linked by KV-cache transfer |
+| **GenAI Semantic Conventions** | OpenTelemetry's standard schema for LLM and agent spans, events, and metrics |
 | **Guardrails** | Input/output safety layer: injection detection, PII redaction, content filtering |
 | **Hybrid Search** | Combining dense (vector) and sparse (BM25) retrieval |
 | **KV Cache** | Cached Key/Value tensors from prior tokens — the memory bottleneck in LLM serving |
+| **Late Chunking** | Embedding the full document first, then splitting into per-chunk vectors — no extra tokens |
 | **Lost in the Middle** | LLMs recall information at the start and end of long contexts better than the middle |
+| **MCP (Model Context Protocol)** | Standard for how an agent discovers and calls external tools, data, and prompts |
 | **Model Routing** | Sending each query to the cheapest model that can answer it |
 | **PagedAttention** | KV cache paging (vLLM) that cuts allocation waste from 60-80% to under 4% |
 | **Prompt Injection** | Attacker input that overrides system instructions (direct or via retrieved documents) |
@@ -287,12 +371,20 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | **Semantic Cache** | Cache keyed by query embedding similarity rather than exact string match |
 | **Speculative Decoding** | Small draft model proposes tokens, large model verifies — 2-3x speedup, no quality loss |
 | **Tensor Parallelism** | Splitting each layer's weights across GPUs (low latency, high communication) |
+| **Trajectory-Aware Evaluation** | Scoring an agent's tool calls, steps, and recovery behavior — not just its final answer |
 
 ---
 
 ## References
 
+Each module has its own Key References section pointing at the primary sources
+for that topic. The list below is the general reading behind the course.
+
 ### Essential Books
+
+If you read only one, read *Designing Data-Intensive Applications* — it is the
+depth this course points toward.
+
 | Book | Author | Focus |
 |------|--------|-------|
 | Designing Data-Intensive Applications | Martin Kleppmann | Distributed systems depth |
@@ -312,6 +404,9 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 | Reference | Year | Topic |
 |-----------|------|-------|
 | Dapper (Google) | 2010 | Distributed tracing foundations |
+| PACELC (Abadi) | 2012 | Consistency/latency trade-off beyond CAP |
+| CAP Twelve Years Later (Brewer) | 2012 | Why "pick two of three" is a misreading |
+| OWASP Password Storage Cheat Sheet | Living | Argon2id parameters and rationale |
 | W3C Trace Context | 2021 | Interoperable trace propagation |
 | PagedAttention (vLLM) | 2023 | KV cache optimization |
 | Speculative Decoding | 2022 | Inference acceleration |
@@ -326,20 +421,28 @@ Corrections and additions are welcome. Before opening a pull request, run:
 python3 tools/lint.py
 ```
 
-It checks three things that are easy to break and hard to spot in review:
+It checks four things that are easy to break and hard to spot in review:
 
 | Check | Catches |
 |-------|---------|
 | Python blocks parse | Typos that make an example non-runnable |
 | Diagram geometry | Box borders that drift out of alignment — invisible while editing, obvious once rendered |
 | Relative links | Broken cross-module references, especially after renumbering |
+| Anchor fragments | Table-of-contents and `#heading` links that point at nothing |
+
+Corrections to technical claims are especially welcome — please include a
+primary source (paper, spec, or vendor docs) rather than a blog summary.
 
 ## License
 
-This educational resource is provided for learning purposes. Feel free to use, modify, and share.
-
-**Keywords:** system design, system design course, distributed systems, LLM system design, AI architecture, system design interview, microservices, caching, load balancing, observability, distributed tracing, OpenTelemetry, SLO alerting, API design, security, RAG architecture, agent systems, vLLM, inference serving
+[MIT](LICENSE) — use, modify, and share freely, including in commercial training material. Attribution is appreciated but not required.
 
 ---
 
-**Happy Learning!**
+## Ready?
+
+[**Start with Module 01: System Design Fundamentals →**](01-fundamentals/README.md)
+
+Take your time, do the exercises, and argue with the trade-off tables. Good luck.
+
+<sub>**Keywords:** system design, system design course, distributed systems, LLM system design, AI architecture, system design interview, microservices, caching, load balancing, observability, distributed tracing, OpenTelemetry, SLO alerting, API design, security, RAG architecture, agent systems, vLLM, inference serving</sub>

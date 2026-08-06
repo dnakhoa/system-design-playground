@@ -2,6 +2,16 @@
 
 > **The hard problems in distributed computing.** When you split a system across multiple machines, you inherit fundamental challenges: consensus, ordering, consistency, and failure detection. These problems have well-studied solutions.
 
+## Navigation
+
+| Module | Title | Link |
+|--------|-------|------|
+| Module 07 | Reliability Engineering | [../07-reliability/](../07-reliability/) |
+| **Module 08** | **Distributed Systems Deep Dive** | **(current)** |
+| Module 09 | Design Case — URL Shortener and Rate Limiter | [../09-case-url-shortener-rate-limiter/](../09-case-url-shortener-rate-limiter/) |
+
+---
+
 ## Learning Objectives
 
 - Understand consensus algorithms (Raft, Paxos)
@@ -9,6 +19,22 @@
 - Reason about logical clocks and event ordering
 - Implement distributed transactions (2PC, sagas)
 - Use CRDTs for conflict-free replication
+
+---
+
+## Table of Contents
+
+1. [The Eight Fallacies of Distributed Systems](#the-eight-fallacies-of-distributed-systems)
+2. [Consensus Algorithms](#consensus-algorithms)
+3. [Leader Election](#leader-election)
+4. [Logical Clocks](#logical-clocks)
+5. [Distributed Transactions](#distributed-transactions)
+6. [CRDTs (Conflict-Free Replicated Data Types)](#crdts-conflict-free-replicated-data-types)
+7. [Case Study: ZooKeeper / etcd](#case-study-zookeeper--etcd)
+8. [Key References](#key-references)
+9. [Practice Exercise](#practice-exercise)
+10. [Common Mistakes](#common-mistakes)
+11. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -733,5 +759,56 @@ Coordination services that provide distributed primitives.
 
 ---
 
-**Previous**: [Reliability Engineering](../07-reliability/README.md)
-**Next**: [Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md)
+## Related Modules
+
+| Module | Connection |
+|--------|-----------|
+| [Module 02: Databases and Storage](../02-databases-storage/README.md) | Replication and partitioning there depend on the consensus and leader-election mechanics this module covers in depth |
+| [Module 06: Microservices Architecture](../06-microservices/README.md) | Covers the Saga pattern in full (choreography and orchestration) as the practical alternative to the 2PC trade-offs introduced here |
+| [Module 10: Design Case — Chat System and News Feed](../10-case-chat-newsfeed/README.md) | Its message-ordering design — per-conversation order instead of global consensus — directly applies the ordering trade-offs covered here |
+| [Module 11: Design Case — Distributed File Storage and Video Streaming](../11-case-storage-streaming/README.md) | Uses Paxos for metadata consistency and CRDT/OT merge strategies for conflict resolution — both covered in depth here |
+
+---
+
+## Summary
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│              Distributed Systems — Key Takeaways               │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. The network WILL fail — design for partitions and delays,  │
+│     not just clean crashes                                     │
+│  2. Prefer odd-sized clusters (3, 5, 7) — an even-sized cluster│
+│     costs more without tolerating any more failures            │
+│  3. A lock without a fencing token is just a suggestion — a    │
+│     paused holder can wake up still believing it owns the lock │
+│  4. Lamport clocks prove "happened before," never "concurrent" │
+│     — reach for vector clocks when you actually need to detect │
+│     conflicts                                                  │
+│  5. Wall-clock timestamps lie — clock drift and NTP jumps turn │
+│     "last write wins" into a coin flip dressed up as a decision│
+│  6. 2PC blocks and its coordinator is a single point of failure│
+│     — that's why sagas and TCC trade strong consistency for    │
+│     availability                                               │
+│  7. CRDTs merge safely only because each replica writes to its │
+│     own slot — share a slot and `max()` quietly erases real    │
+│     work                                                       │
+│  8. Don't build your own consensus algorithm — etcd, ZooKeeper,│
+│     and Consul exist because Raft and Paxos are notoriously    │
+│     easy to get subtly wrong                                   │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Navigation
+
+**Previous:** [Module 07: Reliability Engineering](../07-reliability/README.md)
+
+**Next:** [Module 09: Design Case — URL Shortener and Rate Limiter](../09-case-url-shortener-rate-limiter/README.md)
+
+---
+
+*Module 08 of 19 in the System Design Playground*
