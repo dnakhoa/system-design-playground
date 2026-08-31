@@ -63,39 +63,32 @@ Per year: ~24 TB (text only)
 
 ### Architecture
 
+```mermaid
+flowchart TD
+    subgraph CONN["Connection layer — stateful"]
+        WS1["WS server"]
+        WS2["WS server"]
+        WS3["WS server"]
+    end
+    subgraph SVC["Chat service"]
+        MSG["Message<br/>service"]
+        PRES["Presence<br/>service"]
+        GRP["Group<br/>service"]
+    end
+    subgraph DATA["Data layer"]
+        CAS["Cassandra<br/>messages"]
+        RED["Redis<br/>presence, sessions"]
+        KAF["Kafka<br/>message events"]
+    end
+    WS1 --> SVC
+    WS2 --> SVC
+    WS3 --> SVC
+    SVC --> DATA
 ```
-┌───────────────────────────────────────────────────────────┐
-│                Chat System Architecture                   │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  Connection Layer (WebSocket Gateway)             │    │
-│  │  ┌──────┐  ┌──────┐  ┌──────┐                     │    │
-│  │  │ WS   │  │ WS   │  │ WS   │  (stateful)         │    │
-│  │  │Server│  │Server│  │Server│                     │    │
-│  │  └──┬───┘  └──┬───┘  └──┬───┘                     │    │
-│  │     └─────────┼─────────┘                         │    │
-│  └───────────────┼───────────────────────────────────┘    │
-│                  │                                        │
-│  ┌───────────────▼───────────────────────────────────┐    │
-│  │  Chat Service                                     │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │    │
-│  │  │ Message  │  │ Presence │  │  Group   │         │    │
-│  │  │ Service  │  │ Service  │  │  Service │         │    │
-│  │  └──────────┘  └──────────┘  └──────────┘         │    │
-│  └───────────────┬───────────────────────────────────┘    │
-│                  │                                        │
-│  ┌───────────────▼───────────────────────────────────┐    │
-│  │  Data Layer                                       │    │
-│  │  ┌──────────┐  ┌───────────┐  ┌──────────┐        │    │
-│  │  │ Cassandra│  │  Redis    │  │  Kafka   │        │    │
-│  │  │(messages)│  │(presence, │  │(message  │        │    │
-│  │  │          │  │  sessions)│  │ events)  │        │    │
-│  │  └──────────┘  └───────────┘  └──────────┘        │    │
-│  └───────────────────────────────────────────────────┘    │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
-```
+
+The connection layer is the only stateful tier, and that is the whole design
+problem: a WebSocket pins a user to one server, so every other component has to
+be able to find *which* server, which is what the presence store is for.
 
 ### WebSocket Gateway
 
@@ -510,4 +503,4 @@ next 100 — so age reliably overtakes raw volume.
 
 ---
 
-*Module 10 of 19 in the System Design Playground*
+*Module 10 of 22 in the System Design Playground*

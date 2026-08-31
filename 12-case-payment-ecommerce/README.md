@@ -154,38 +154,17 @@ Daily reconciliation ensures all systems agree on transaction state.
 
 ### Order Lifecycle
 
-```
-  ┌────────────────────────────────────────────────────┐
-  │              Order State Machine                   │
-  │                                                    │
-  │  ┌──────────┐  payment  ┌──────────┐               │
-  │  │  PENDING │──────────▶│  PAID    │               │
-  │  └──────────┘           └────┬─────┘               │
-  │       │                      │                     │
-  │  cancel│               fulfill│                    │
-  │       ▼                      ▼                     │
-  │  ┌──────────┐          ┌───────────┐               │
-  │  │CANCELLED │          │ FULFILLING│               │
-  │  └──────────┘          └────┬──────┘               │
-  │                              │                     │
-  │                        ship│                       │
-  │                              ▼                     │
-  │                         ┌──────────┐               │
-  │                         │ SHIPPED  │               │
-  │                         └────┬─────┘               │
-  │                              │                     │
-  │                        deliver│                    │
-  │                              ▼                     │
-  │                         ┌──────────┐               │
-  │                         │ DELIVERED│               │
-  │                         └────┬─────┘               │
-  │                              │                     │
-  │                        refund│                     │
-  │                              ▼                     │
-  │                         ┌──────────┐               │
-  │                         │ REFUNDED │               │
-  │                         └──────────┘               │
-  └────────────────────────────────────────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> PAID: payment
+    PENDING --> CANCELLED: cancel
+    PAID --> FULFILLING: fulfill
+    FULFILLING --> SHIPPED: ship
+    SHIPPED --> DELIVERED: deliver
+    DELIVERED --> REFUNDED: refund
+    CANCELLED --> [*]
+    REFUNDED --> [*]
 ```
 
 ### Inventory Management
@@ -313,34 +292,21 @@ this does not.
 
 ### Payment State Machine
 
+```mermaid
+stateDiagram-v2
+    [*] --> CREATED
+    CREATED --> AUTHORIZED: authorize
+    CREATED --> CANCELLED: cancel
+    AUTHORIZED --> CAPTURED: capture
+    CAPTURED --> REFUNDED: refund
+    CANCELLED --> [*]
+    REFUNDED --> [*]
 ```
-┌───────────────────────────────────────────────────────────┐
-│              Payment State Machine                        │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌──────────┐  authorize  ┌──────────────┐                │
-│  │ CREATED  │────────────▶│ AUTHORIZED   │                │
-│  └──────────┘             └──────┬───────┘                │
-│       │                          │                        │
-│  cancel│                    capture│                      │
-│       ▼                          ▼                        │
-│  ┌──────────┐             ┌──────────────┐                │
-│  │CANCELLED │             │  CAPTURED    │                │
-│  └──────────┘             └──────┬───────┘                │
-│                                   │                       │
-│                              refund│                      │
-│                                   ▼                       │
-│                            ┌──────────────┐               │
-│                            │  REFUNDED    │               │
-│                            └──────────────┘               │
-│                                                           │
-│  Two-phase approach:                                      │
-│  1. Authorize: Hold funds on card (no money moved)        │
-│  2. Capture: Actually transfer money                      │
-│  This allows order confirmation before charging           │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
-```
+
+**Why two phases.** *Authorize* holds funds on the card without moving money;
+*capture* actually transfers it. Splitting them lets you confirm the order —
+and verify inventory — before charging anyone, and an authorization that is
+never captured simply expires.
 
 ### Idempotency Implementation
 
@@ -676,4 +642,4 @@ Design a daily reconciliation system:
 
 ---
 
-*Module 12 of 19 in the System Design Playground*
+*Module 12 of 22 in the System Design Playground*

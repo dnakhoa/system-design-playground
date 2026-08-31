@@ -568,9 +568,10 @@ def call_service_b(request, deadline: Deadline):
 
 ## SLOs, SLAs, and Error Budgets
 
-> These definitions are the foundation for alerting. **[Module 15,
-> Section 6](../15-observability/README.md#6-slo-based-alerting)** turns an error
-> budget into a concrete paging policy using multi-window burn-rate alerts.
+> These definitions are the foundation for alerting. **[Module 16,
+> Section 2](../16-incident-response/README.md#2-alerting-that-deserves-a-page)**
+> turns an error budget into a concrete paging policy using multi-window
+> burn-rate alerts.
 
 ### Definitions
 
@@ -857,4 +858,4 @@ Google's SRE practices are the gold standard for reliability engineering.
 
 ---
 
-*Module 07 of 19 in the System Design Playground*
+*Module 07 of 22 in the System Design Playground*

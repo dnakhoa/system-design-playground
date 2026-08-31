@@ -567,4 +567,4 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 
 ---
 
-*Module 02 of 19 in the System Design Playground*
+*Module 02 of 22 in the System Design Playground*
