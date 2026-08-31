@@ -1,4 +1,4 @@
-# Module 19: Production AI System Architecture
+# Module 22: Production AI System Architecture
 
 > **Putting it all together — the full AI-native system.** This module is the capstone: it shows how inference serving, RAG, agents, guardrails, and observability compose into a production AI system.
 
@@ -6,8 +6,8 @@
 
 | Module | Title | Link |
 |--------|-------|------|
-| Module 18 | Agent System Architecture | [../18-agent-architecture/](../18-agent-architecture/) |
-| **Module 19** | **Production AI System Architecture** | **(current)** |
+| Module 21 | AI Evaluation and Quality | [../21-ai-evaluation/](../21-ai-evaluation/) |
+| **Module 22** | **Production AI System Architecture** | **(current)** |
 | Course Home | — | [../README.md](../README.md) |
 
 ---
@@ -20,7 +20,7 @@
 - Design observability and monitoring for AI systems
 - Scale from prototype to 100M users
 
-**This module synthesizes**: Module 16 (inference serving) + Module 17 (RAG) + Module 18 (agents) + Module 15 (observability) + Module 07 (reliability) + Module 03 (caching).
+**This module synthesizes**: Module 18 (inference serving) + Module 19 (RAG) + Module 20 (agents) + Module 15 (observability) + Module 07 (reliability) + Module 03 (caching).
 
 ---
 
@@ -43,70 +43,39 @@
 
 ## End-to-End AI System Architecture
 
+```mermaid
+flowchart TD
+    C["Client<br/>web / mobile / API"] --> GW["API Gateway — Module 04<br/>auth, rate limiting, validation"]
+    GW --> IN["Input guardrails<br/>validation, PII detection,<br/>injection screening"]
+    IN --> SC{"Semantic cache<br/>Module 03"}
+    SC -->|"hit"| OUT
+    SC -->|"miss"| RT["Model router<br/>classify complexity,<br/>balance cost vs quality"]
+    RT --> RAG["RAG pipeline — Module 19<br/>retrieve → rerank → augment"]
+    RAG --> M1["Small model<br/>fast, cheap"]
+    RAG --> M2["Large model<br/>accurate"]
+    RAG --> M3["Reasoning model<br/>deep, slow"]
+    M1 --> OUT["Output guardrails<br/>grounding check, PII,<br/>content filter"]
+    M2 --> OUT
+    M3 --> OUT
+    OUT --> C
+
+    OBS["Observability — Modules 15 and 21<br/>tracing, cost, quality, drift"]
+    GW -.-> OBS
+    RT -.-> OBS
+    RAG -.-> OBS
+    OUT -.-> OBS
 ```
-┌───────────────────────────────────────────────────────────┐
-│              Production AI System Architecture            │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  Client (Web/Mobile/API)                                  │
-│  │                                                        │
-│  ▼                                                        │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  API Gateway (Module 04)                          │    │
-│  │  - Authentication (JWT, OAuth)                    │    │
-│  │  - Rate limiting (per-user, per-tier)             │    │
-│  │  - Request validation                             │    │
-│  └───────────────────────────────────────────────────┘    │
-│                         │                                 │
-│                         ▼                                 │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  Semantic Cache (Module 03)                       │    │
-│  │  - Embed query → check cache → hit? return cached │    │
-│  │  - Miss? → continue to model router               │    │
-│  └───────────────────────────────────────────────────┘    │
-│                         │                                 │
-│                         ▼                                 │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  Model Router (this module)                       │    │
-│  │  - Classify query complexity                      │    │
-│  │  - Route to appropriate model                     │    │
-│  │  - Balance cost vs quality                        │    │
-│  └───────────────────────────────────────────────────┘    │
-│                         │                                 │
-│         ┌───────────────┼───────────────┐                 │
-│         ▼               ▼               ▼                 │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐           │
-│  │ Small Model│  │ Large Model│  │ Reasoning  │           │
-│  │ (7B, fast) │  │ (70B,      │  │ Model      │           │
-│  │            │  │  accurate) │  │ (o3, deep) │           │
-│  └────────────┘  └────────────┘  └────────────┘           │
-│         │               │               │                 │
-│         └───────────────┼───────────────┘                 │
-│                         │                                 │
-│                         ▼                                 │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  RAG Pipeline (Module 16)                         │    │
-│  │  - Query → Retrieve → Rerank → Augment            │    │
-│  └───────────────────────────────────────────────────┘    │
-│                         │                                 │
-│                         ▼                                 │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  Guardrails Pipeline (this module)                │    │
-│  │  Input: Validation → PII Detection → Injection    │    │
-│  │  Output: Hallucination → PII → Content Filter     │    │
-│  └───────────────────────────────────────────────────┘    │
-│                         │                                 │
-│                         ▼                                 │
-│  ┌───────────────────────────────────────────────────┐    │
-│  │  Observability (this module)                      │    │
-│  │  - Tracing (OpenTelemetry)                        │    │
-│  │  - Cost tracking                                  │    │
-│  │  - Quality monitoring                             │    │
-│  │  - Drift detection                                │    │
-│  └───────────────────────────────────────────────────┘    │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
-```
+
+Two things about the ordering are worth stating explicitly, because they are
+easy to draw backwards:
+
+- **Input guardrails run before the cache, not after the model.** Screening a
+  prompt injection *after* paying for generation wastes the generation, and a
+  poisoned prompt should never reach the cache key in the first place.
+- **Retrieval runs before generation.** The retrieved context is part of the
+  prompt. A "RAG stage" drawn after the model is a different architecture — an
+  agent calling a search tool — and should be drawn as a loop if that is what
+  you mean.
 
 ---
 
@@ -621,8 +590,8 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 | Module | Connection |
 |--------|-----------|
-| [Module 16: LLM Inference Serving Architecture](../16-llm-inference-serving/README.md) | Model Routing's small/medium/reasoning-model cascade is a direct application of the serving and batching architectures covered there |
-| [Module 17: RAG System Architecture at Scale](../17-rag-at-scale/README.md) | The RAG Pipeline stage in the end-to-end architecture and the customer-support practice exercise assume the retrieval and reranking design covered there |
+| [Module 18: LLM Inference Serving Architecture](../18-llm-inference-serving/README.md) | Model Routing's small/medium/reasoning-model cascade is a direct application of the serving and batching architectures covered there |
+| [Module 19: RAG System Architecture at Scale](../19-rag-at-scale/README.md) | The RAG Pipeline stage in the end-to-end architecture and the customer-support practice exercise assume the retrieval and reranking design covered there |
 | [Module 15: Observability](../15-observability/README.md) | Observability and Monitoring builds directly on Module 15's tracing and SLO foundations, adding token cost, quality, and drift metrics specific to AI systems |
 | [Module 03: Caching Strategies](../03-caching/README.md) | The semantic cache in the request path — and its failure modes in Common Mistakes — extends the caching patterns covered there |
 
@@ -663,11 +632,11 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 ## Navigation
 
-**Previous:** [Module 18: Agent System Architecture](../18-agent-architecture/README.md)
+**Previous:** [Module 21: AI Evaluation and Quality](../21-ai-evaluation/README.md)
 
 **Next:** [Course Home](../README.md)
 
 ---
 
-*Module 19 of 19 in the System Design Playground*
+*Module 22 of 22 in the System Design Playground*
 

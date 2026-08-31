@@ -8,13 +8,17 @@ distributed system you cannot inspect is a system you cannot operate — and by
 the time you have twenty services, "it's slow" is not a bug report, it's a
 research project.
 
+This module is about **seeing**: the telemetry you emit and how to query it.
+Module 16 is about **responding**: turning that telemetry into pages, runbooks,
+and a postmortem.
+
 ## Navigation
 
 | Module | Title | Link |
 |--------|-------|------|
 | Module 14 | API Design | [../14-api-design/](../14-api-design/) |
 | **Module 15** | **Observability** | **(current)** |
-| Module 16 | LLM Inference Serving | [../16-llm-inference-serving/](../16-llm-inference-serving/) |
+| Module 16 | Incident Response and On-Call | [../16-incident-response/](../16-incident-response/) |
 
 ---
 
@@ -27,9 +31,8 @@ By the end of this module, you will be able to:
 3. **Explain** why percentiles cannot be averaged, and aggregate latency correctly across instances
 4. **Design** structured logging with trace correlation, sampling, and PII controls
 5. **Implement** distributed tracing with context propagation, and choose between head- and tail-based sampling
-6. **Build** SLO burn-rate alerts that page on symptoms rather than causes
-7. **Control** observability cost, which routinely reaches 10-30% of infrastructure spend
-8. **Debug** a latency regression using metrics, traces, and logs in the right order
+6. **Control** observability cost, which routinely reaches 10-30% of infrastructure spend
+7. **Decide** which pillar answers which question, so an investigation starts in the right place
 
 ---
 
@@ -40,15 +43,12 @@ By the end of this module, you will be able to:
 3. [Logs](#3-logs)
 4. [Distributed Tracing](#4-distributed-tracing)
 5. [Correlation: Making the Pillars One System](#5-correlation-making-the-pillars-one-system)
-6. [SLO-Based Alerting](#6-slo-based-alerting)
-7. [Dashboards and Runbooks](#7-dashboards-and-runbooks)
-8. [Cost Control](#8-cost-control)
-9. [Case Study: Google Dapper](#9-case-study-google-dapper)
-10. [Worked Incident: A p99 Regression](#10-worked-incident-a-p99-regression)
-11. [Practice Exercise](#11-practice-exercise)
-12. [Common Mistakes](#12-common-mistakes)
-13. [Discussion Questions](#13-discussion-questions)
-14. [Key References](#14-key-references)
+6. [Cost Control](#6-cost-control)
+7. [Case Study: Google Dapper](#7-case-study-google-dapper)
+8. [Practice Exercise](#8-practice-exercise)
+9. [Common Mistakes](#9-common-mistakes)
+10. [Discussion Questions](#10-discussion-questions)
+11. [Key References](#11-key-references)
 
 ---
 
@@ -774,285 +774,14 @@ are searching for a needle without first learning which haystack it is in.
 
 ---
 
-## 6. SLO-Based Alerting
-
-Most alerting is bad in a specific, diagnosable way: it pages on **causes**
-instead of **symptoms**, and it fires at fixed thresholds instead of on
-user-visible harm.
-
-### 6.1 Alert on Symptoms
-
-```
-  CAUSE-BASED (page-generating, mostly ignorable)
-
-    "CPU > 80% on web-07"        → Does anyone care? Auto-scaling may
-                                   already be handling it. Maybe that box
-                                   is doing legitimate work.
-    "Disk 85% full"              → On a log volume that rotates? Noise.
-    "Pod restarted"              → Kubernetes restarts pods. That's the job.
-    "Memory > 90%"               → JVM heap sits at 90% by design.
-
-  SYMPTOM-BASED (worth waking someone)
-
-    "Checkout success rate < 99% for 5 minutes"
-    "p99 latency > 2s, burning error budget 14x"
-    "Order queue depth growing for 15 minutes with no drain"
-
-  Symptoms describe what USERS experience. Causes belong on dashboards
-  and in runbooks — you look at them AFTER a symptom alert fires, to
-  find out why.
-```
-
-The test for any alert: **if this fires and nobody does anything, does a user
-notice?** If no, it should not page. Demote it to a ticket or a dashboard panel.
-
-### 6.2 Burn-Rate Alerts
-
-Module 07 introduced error budgets. Burn-rate alerting is what turns a budget
-into a paging policy that is neither too twitchy nor too slow.
-
-**Burn rate** = how fast you are consuming budget relative to the rate that
-would exactly exhaust it over the whole window. Burn rate 1 means you finish the
-30-day window with exactly zero budget left. Burn rate 14.4 means you exhaust
-30 days of budget in about 50 hours.
-
-```
-  30-day window = 720 hours
-
-  budget_fraction_consumed = burn_rate × hours_elapsed / 720
-  error_rate_threshold     = burn_rate × (1 − SLO)
-  time_to_exhaustion       = 720 / burn_rate   hours
-
-  For a 99.9% SLO (allowed error rate 0.1%):
-
-  ┌────────────┬───────┬──────────────┬───────────────┬──────────┐
-  │ Budget     │ In    │ Burn rate    │ Error rate    │ Action   │
-  │ consumed   │       │              │ that triggers │          │
-  ├────────────┼───────┼──────────────┼───────────────┼──────────┤
-  │ 2%         │ 1 h   │ 14.4×        │ 1.44%         │ PAGE     │
-  │ 5%         │ 6 h   │  6×          │ 0.60%         │ PAGE     │
-  │ 10%        │ 3 d   │  1×          │ 0.10%         │ TICKET   │
-  └────────────┴───────┴──────────────┴───────────────┴──────────┘
-
-  Check: 2% in 1h → burn = 0.02 × 720 / 1  = 14.4  ✓
-         5% in 6h → burn = 0.05 × 720 / 6  =  6    ✓
-        10% in 3d → burn = 0.10 × 720 / 72 =  1    ✓
-```
-
-**Why multiple windows?** A single window is wrong in one direction or the
-other. A 1-hour window alone is slow to fire on a small-but-steady leak. A
-5-minute window alone fires on every blip. Two burn rates cover both: the fast
-one catches acute outages, the slow one catches chronic degradation.
-
-**Why pair each long window with a short one?** Without it, an alert keeps
-firing long after the problem is resolved — the 1-hour average stays elevated
-for an hour after recovery. Requiring the short window (1/12 of the long one) to
-*also* be breaching means the alert clears promptly.
-
-```python
-"""Multi-window multi-burn-rate SLO alert evaluation."""
-
-from dataclasses import dataclass
-
-WINDOW_HOURS = 720  # 30-day SLO window
-
-
-@dataclass(frozen=True)
-class BurnRatePolicy:
-    name: str
-    budget_fraction: float   # e.g. 0.02 for "2% of budget"
-    long_window_hours: float
-    severity: str
-
-    @property
-    def burn_rate(self) -> float:
-        return self.budget_fraction * WINDOW_HOURS / self.long_window_hours
-
-    @property
-    def short_window_hours(self) -> float:
-        # One twelfth of the long window: long enough to be statistically
-        # meaningful, short enough that the alert resolves quickly.
-        return self.long_window_hours / 12
-
-    def error_rate_threshold(self, slo: float) -> float:
-        return self.burn_rate * (1 - slo)
-
-
-POLICIES = (
-    BurnRatePolicy("fast_burn",   0.02, 1,  "page"),
-    BurnRatePolicy("medium_burn", 0.05, 6,  "page"),
-    BurnRatePolicy("slow_burn",   0.10, 72, "ticket"),
-)
-
-
-def evaluate(slo: float, error_rate_over) -> list[str]:
-    """`error_rate_over(hours)` returns the observed error rate for a window.
-
-    Both the long AND short window must breach. The long window establishes
-    that the problem is real; the short window establishes that it is still
-    happening.
-    """
-    firing = []
-    for policy in POLICIES:
-        threshold = policy.error_rate_threshold(slo)
-        long_breach = error_rate_over(policy.long_window_hours) > threshold
-        short_breach = error_rate_over(policy.short_window_hours) > threshold
-
-        if long_breach and short_breach:
-            firing.append(
-                f"[{policy.severity.upper()}] {policy.name}: "
-                f"burn {policy.burn_rate:.1f}x "
-                f"(>{threshold:.2%} errors); "
-                f"budget gone in {WINDOW_HOURS / policy.burn_rate:.0f}h"
-            )
-    return firing
-
-
-# A sustained 2% error rate against a 99.9% SLO.
-def steady_two_percent(_hours: float) -> float:
-    return 0.02
-
-
-for alert in evaluate(0.999, steady_two_percent):
-    print(alert)
-# [PAGE] fast_burn: burn 14.4x (>1.44% errors); budget gone in 50h
-# [PAGE] medium_burn: burn 6.0x (>0.60% errors); budget gone in 120h
-# [TICKET] slow_burn: burn 1.0x (>0.10% errors); budget gone in 720h
-```
-
-Equivalent alerting rule in PromQL form:
-
-```promql
-# Fast burn: 14.4x over 1h AND still burning over the last 5m.
-(
-  (
-    sum(rate(http_requests_total{status_class="5xx"}[1h]))
-    / sum(rate(http_requests_total[1h]))
-  ) > (14.4 * 0.001)
-)
-and
-(
-  (
-    sum(rate(http_requests_total{status_class="5xx"}[5m]))
-    / sum(rate(http_requests_total[5m]))
-  ) > (14.4 * 0.001)
-)
-```
-
-### 6.3 Alert Fatigue Is a Reliability Problem
-
-An ignored alert is worse than no alert: it consumes attention and it teaches the
-team that alerts are noise. Treat the alert set as something you actively curate.
-
-| Symptom | Fix |
-|---------|-----|
-| More than ~2 pages per on-call shift | Raise thresholds, or fix what keeps firing |
-| Alerts routinely resolve themselves | The threshold is too tight, or the window too short |
-| A recurring alert with a known manual fix | Automate the fix, then delete the alert |
-| An alert nobody can act on | Delete it. Undeletable-but-unactionable means it belongs on a dashboard |
-| Alert with no runbook | Write one, or accept that the responder starts from zero at 3am |
-
-> **Every paging alert needs a runbook link in the payload.** Not in a wiki
-> someone has to find — in the alert itself. The responder is half-awake and
-> under time pressure; make the next step unambiguous.
-
----
-
-## 7. Dashboards and Runbooks
-
-### 7.1 A Dashboard Per Question, Not Per Metric
-
-The failure mode is the 60-panel dashboard that nobody reads because no panel
-answers a question anyone is asking.
-
-```
-  ┌─────────────────────────────────────────────────────────────┐
-  │  SERVICE: checkout          env: prod    version: 4.2.1     │
-  ├─────────────────────────────────────────────────────────────┤
-  │                                                             │
-  │  TOP ROW — "is it healthy?"  (the four golden signals)      │
-  │  ┌───────────┬───────────┬───────────┬───────────┐          │
-  │  │ Requests  │ Error     │ Latency   │ Saturation│          │
-  │  │ /sec      │ rate %    │ p50/95/99 │ (pool %)  │          │
-  │  └───────────┴───────────┴───────────┴───────────┘          │
-  │                                                             │
-  │  SECOND ROW — "how much budget is left?"                    │
-  │  ┌─────────────────────────┬─────────────────────────┐      │
-  │  │ SLO: 99.9%  ███████░░░  │ Burn rate (1h / 6h)     │      │
-  │  │ 68% budget remaining    │ 0.4x / 0.9x             │      │
-  │  └─────────────────────────┴─────────────────────────┘      │
-  │                                                             │
-  │  THIRD ROW — "where is it going wrong?"                     │
-  │  ┌─────────────────────────┬─────────────────────────┐      │
-  │  │ Errors by endpoint      │ Latency by dependency   │      │
-  │  │ (which route is broken) │ (which hop is slow)     │      │
-  │  └─────────────────────────┴─────────────────────────┘      │
-  │                                                             │
-  │  Deploy markers on every time axis ──┤ 14:03 v4.2.1         │
-  └─────────────────────────────────────────────────────────────┘
-```
-
-**Deploy annotations are the highest-value, lowest-effort thing on a dashboard.**
-Most incidents correlate with a change. A vertical line at each deploy turns
-"when did this start?" from an investigation into a glance.
-
-### 7.2 Rules That Keep Dashboards Useful
-
-| Rule | Reason |
-|------|--------|
-| Golden signals in the top row, always | The responder should not scroll to learn whether it's broken |
-| One screen, no scrolling, for the primary view | Anything below the fold is not read during an incident |
-| p50 **and** p99 on the same axis | p50 shows the typical user; the gap between them shows the tail |
-| Annotate deploys, config changes, feature flags | Change correlation is the fastest hypothesis generator |
-| Link straight to traces and logs | A dashboard that dead-ends forces the responder to start over |
-| Delete panels nobody looks at | Every unread panel dilutes attention on the ones that matter |
-
-### 7.3 Runbooks
-
-A runbook is not documentation; it is a decision procedure for someone with no
-context at 3am.
-
-```
-  RUNBOOK: checkout error rate high
-
-  1. IMPACT — how bad?
-     Dashboard: <link>. Check error rate and burn rate.
-     Under 1% with burn < 2x → ticket, not a page. Stop here.
-
-  2. CHANGE — did we do this?
-     Recent deploys: <link>. Feature flags: <link>.
-     If a deploy landed within 30 min → roll back FIRST, diagnose after.
-
-  3. LOCALIZE — where?
-     Traces filtered to errors: <link>.
-     Is one dependency responsible, or is it broad?
-
-  4. MITIGATE — options in order of preference:
-     a. Roll back the recent deploy
-     b. Disable the feature flag <name>
-     c. Shed load: enable degraded mode <link>
-     d. Scale up: <command>
-
-  5. ESCALATE — if not mitigated in 15 minutes:
-     Payments: @payments-oncall. Infra: @infra-oncall.
-
-  6. AFTER — file an incident, link the trace, schedule a review.
-```
-
-Note the ordering: **mitigate before diagnose.** Rolling back a suspicious
-deploy takes two minutes; understanding why it broke takes an hour. Users care
-about the first number.
-
----
-
-## 8. Cost Control
+## 6. Cost Control
 
 Observability commonly runs 10-30% of total infrastructure spend, and it grows
 super-linearly with traffic if nobody is watching. It is also the easiest budget
 to cut badly — teams disable the thing that would have explained the next
 outage.
 
-### 8.1 Where the Money Goes
+### 6.1 Where the Money Goes
 
 ```
   Typical breakdown at moderate scale:
@@ -1071,7 +800,7 @@ outage.
 That metrics point surprises people: scraping the same series more often is
 cheap; adding one high-cardinality label is not. Series count is the bill.
 
-### 8.2 Reduction Ladder
+### 6.2 Reduction Ladder
 
 Work top-down. The first three cost nothing in debugging power; the last is a
 real trade-off.
@@ -1095,7 +824,7 @@ series were never queried:
 count by (__name__) ({__name__=~".+"})
 ```
 
-### 8.3 What Never to Cut
+### 6.3 What Never to Cut
 
 Some data pays for itself the first time you need it:
 
@@ -1115,14 +844,14 @@ Some data pays for itself the first time you need it:
 
 ---
 
-## 9. Case Study: Google Dapper
+## 7. Case Study: Google Dapper
 
 Dapper is the system distributed tracing descends from — Zipkin, Jaeger, and
 OpenTelemetry all trace their lineage to the 2010 paper. It is worth studying
 because its constraints were unusually hostile and its answers are still the
 answers.
 
-### 9.1 The Constraints
+### 7.1 The Constraints
 
 | Requirement | Consequence |
 |-------------|-------------|
@@ -1131,7 +860,7 @@ answers.
 | **Negligible overhead** | Google would not accept a measurable latency cost on production serving paths. |
 | **No developer effort** | Requiring per-team instrumentation work guarantees uneven, incomplete coverage. |
 
-### 9.2 The Design Answers
+### 7.2 The Design Answers
 
 **1. Instrument the shared infrastructure, not the applications.** Google's
 services already shared RPC, threading, and control-flow libraries. Dapper
@@ -1166,7 +895,7 @@ and it is a surprisingly common way to build one.
 ID — the model in Section 4.1 is Dapper's, essentially unchanged fifteen years
 later.
 
-### 9.3 What Changed Since
+### 7.3 What Changed Since
 
 | Dapper (2010) | Today |
 |---------------|-------|
@@ -1180,124 +909,7 @@ The architecture was right. What improved is that you no longer have to build it
 
 ---
 
-## 10. Worked Incident: A p99 Regression
-
-Theory is easier to retain attached to a concrete investigation. Here is the
-order the pillars actually get used.
-
-**The page:**
-
-```
-  [PAGE] fast_burn: checkout SLO 99.9%, burn 14.4x (>1.44% errors)
-         Runbook: https://runbooks/checkout-error-rate
-```
-
-### Step 1 — Metrics: how bad, and since when?
-
-```
-  Error rate, checkout                     Deploy markers
-  3% ┤                    ╭──────────      │
-  2% ┤                    │                ┤ 14:03  v4.2.1
-  1% ┤                    │                ┤ 09:15  v4.2.0
-  0% ┼────────────────────╯
-     └──────────────────────────────
-      13:00   13:30   14:00   14:30
-
-  Onset: ~14:05. A deploy landed at 14:03.
-```
-
-Two minutes in and you have a prime suspect. **Per the runbook, this is already
-enough to roll back** — you do not need to understand the bug to stop the
-bleeding. Diagnosis continues in parallel.
-
-### Step 2 — Metrics: is it everything, or one thing?
-
-```
-  Errors by endpoint:              Errors by region:
-    /checkout      3.1%   ←          us-east-1   0.1%
-    /cart          0.1%              eu-west-1   9.4%   ←
-    /orders        0.1%              ap-south-1  0.1%
-
-  Narrow: one endpoint, one region. Not a global failure.
-```
-
-This immediately rules out whole categories of cause. A code path that broke for
-everyone would not be region-specific; a regional network fault would not be
-endpoint-specific. Something about `/checkout` interacts with something regional.
-
-### Step 3 — Traces: where is the time going?
-
-Filter to failed `/checkout` traces in `eu-west-1`, and compare against a
-successful trace from before the deploy:
-
-```
-  BEFORE (v4.2.0, 190ms)          AFTER (v4.2.1, 30s timeout)
-  ├─ auth.verify        12ms      ├─ auth.verify        12ms
-  ├─ cart.get           34ms      ├─ cart.get           34ms
-  ├─ inventory.reserve  61ms      ├─ inventory.reserve  61ms
-  ├─ payment.charge     78ms      ├─ payment.charge  ← 30s TIMEOUT
-  │  ├─ fraud.score     41ms      │  ├─ fraud.score     41ms
-  │  └─ stripe.POST     33ms      │  └─ (never started)
-  └─ notify.enqueue      5ms      └─ (never reached)
-
-  The failure is inside payment.charge, AFTER fraud.score returns
-  and BEFORE the Stripe call is issued.
-```
-
-Traces have localized it to a few lines of code. Notice what metrics could not
-have told you: the endpoint was slow, but not *which hop*, and not that the hop
-failed *between* two of its own children.
-
-### Step 4 — Logs: why?
-
-Filter logs by `trace_id` from one failed trace:
-
-```json
-{"event":"payment_charge_started","trace_id":"4bf9...","region":"eu-west-1"}
-{"event":"fraud_score_ok","trace_id":"4bf9...","score":0.02}
-{"event":"secret_fetch","trace_id":"4bf9...","key":"stripe_api_key",
- "backend":"vault-eu-west-1"}
-{"event":"secret_fetch_timeout","trace_id":"4bf9...","elapsed_ms":30000,
- "error_code":"deadline_exceeded","level":"ERROR"}
-```
-
-**Cause found.** v4.2.1 moved the Stripe API key from an environment variable to
-a per-request Vault fetch. The `eu-west-1` Vault replica was overloaded by the
-new request volume, so the fetch timed out — before the Stripe call could be
-made.
-
-### Step 5 — The fixes
-
-| Horizon | Fix |
-|---------|-----|
-| **Immediate** | Roll back v4.2.1 (already done at step 1) |
-| **Short term** | Cache the secret in-process with a TTL instead of fetching per request |
-| **Medium term** | Timeout on the secret fetch measured in *milliseconds*, not 30s — and a fallback to the last known-good value |
-| **Systemic** | The 30s timeout was inherited from a default nobody set deliberately. Audit timeout defaults across all clients (Module 07) |
-
-### What Made This Fast
-
-```
-  Metrics  → detected it, dated it, and narrowed it to endpoint + region
-  Traces   → localized it to one hop, and to a gap between two child spans
-  Logs     → explained it, via trace_id correlation
-
-  Total: minutes.
-
-  Without correlation, step 4 would have been "search eu-west-1 logs
-  around 14:05" — millions of lines, no way to isolate one request's
-  path through them.
-
-  Without traces, you would know /checkout was slow in one region and
-  would be reading the v4.2.1 diff hoping something jumped out.
-
-  Note also what the FIRST action was: roll back, at step 1, before
-  any of the diagnosis. Mitigation and diagnosis are separate tracks.
-```
-
----
-
-## 11. Practice Exercise
+## 8. Practice Exercise
 
 ### Design Observability for the Checkout Flow
 
@@ -1329,13 +941,10 @@ topic for order events.
 4. **Sampling.** Choose head- or tail-based and defend it at this volume. Give
    the sampling rate and state what you keep at 100%.
 
-5. **Alerts.** Write the burn-rate policy: windows, burn rates, error-rate
-   thresholds, and which page vs ticket. Show the arithmetic.
-
-6. **PII.** Card numbers pass through the payment service. Where do you enforce
+5. **PII.** Card numbers pass through the payment service. Where do you enforce
    redaction so a new call site cannot leak? Which pillar is riskiest and why?
 
-7. **Cost.** Estimate monthly volume for each pillar. If you came in 40% over
+6. **Cost.** Estimate monthly volume for each pillar. If you came in 40% over
    budget, list your cuts in order and name what debugging power each costs.
 
 **Follow-ups:**
@@ -1349,7 +958,7 @@ topic for order events.
 
 ---
 
-## 12. Common Mistakes
+## 9. Common Mistakes
 
 | Mistake | Why It's Wrong | What to Do Instead |
 |---------|---------------|-------------------|
@@ -1357,9 +966,6 @@ topic for order events.
 | **Summaries when you need fleet-wide quantiles** | Client-side quantiles cannot be merged, and the raw observations are already discarded | Histograms — bucket counts sum across instances |
 | **`user_id` (or any unbounded value) as a metric label** | Series count is the *product* of label cardinalities; one unbounded label takes the backend down | Bounded labels only. Unbounded dimensions go in traces and logs, which are built for them |
 | **One latency histogram for successes and failures** | During an outage, fast failures make p99 *improve* while users see only errors | Label duration by status class; alert on them separately |
-| **Alerting on causes** | CPU, memory, and pod restarts fire constantly without user impact, and train the team to ignore alerts | Page on symptoms; keep causes on dashboards and in runbooks |
-| **Fixed-threshold alerts** | "Error rate > 1%" is either too twitchy at low traffic or too slow at high traffic | Multi-window burn-rate alerts tied to the SLO |
-| **Single-window burn-rate alerts** | One window is either slow to detect acute failures or noisy on blips, and it keeps firing after recovery | Pair a long window with a short one; use both a fast and a slow burn rate |
 | **Unstructured log messages** | Counting by error type needs a regex, and the regex breaks when someone rewords the message | Stable event name plus structured fields |
 | **No `trace_id` on log lines** | Correlation degrades to "search the same time window and hope" — millions of lines during an incident | Propagate one trace ID into every log line and span; add exemplars to histograms |
 | **Redacting PII at call sites** | One forgotten call site is a compliance incident, and there are hundreds of them | Redact in the log formatter — one place to audit |
@@ -1367,14 +973,11 @@ topic for order events.
 | **Tracing on the critical path** | A blocking, unbuffered export turns a monitoring outage into a customer outage | Export asynchronously with a bounded buffer; drop spans before dropping requests |
 | **Dropping trace context at async boundaries** | Queues, thread pools, and callbacks lose thread-local context, yielding two disconnected traces | Inject/extract explicitly at every boundary; use span links for batches |
 | **Sampling inconsistently across services** | Service A keeps the request, B drops it, and you get traces with holes | Decide once at the edge, propagate the decision, honour it everywhere |
-| **Dashboards with 60 panels** | Nobody reads them, and the important signal is buried among the noise | Golden signals in the top row, one screen, no scrolling; delete unread panels |
-| **No deploy annotations** | "When did this start?" becomes an investigation instead of a glance | Mark deploys, config changes, and flag flips on every time axis |
-| **Paging alerts with no runbook** | The responder starts from zero, half-awake and under time pressure | Runbook link in the alert payload, with mitigation ordered before diagnosis |
 | **Cutting cost by shortening hot retention first** | You lose week-over-week comparison, which is how you spot slow regressions | Cut noise first: health-check logs, unused metrics, unqueried series |
 
 ---
 
-## 13. Discussion Questions
+## 10. Discussion Questions
 
 1. Your dashboard shows `avg(p99_latency)` across 50 instances at 800ms, and the team has spent a day chasing it. One instance is a canary taking 1% of traffic and is genuinely slow. What is the real fleet p99, roughly, and what should the dashboard have shown?
 
@@ -1384,28 +987,23 @@ topic for order events.
 
    **Model answer**: Do the arithmetic out loud: 400,000 × 2,000,000 = 8×10^11 series, at roughly 2KB each, which is far past what any TSDB survives — this doesn't degrade, it takes metrics down for everyone. But the request behind it is legitimate, so don't just refuse. The right home for per-user data is the pillar built for high cardinality: log a structured event per request with `user_id`, and query it there — which also answers richer questions ("which endpoints, what latency, which errors") that a counter never could. If they need it aggregated and fast, a nightly rollup into a database table gives per-user counts without touching the metrics system. The general principle: metrics are for bounded dimensions you aggregate across; logs and traces are for unbounded dimensions you filter by. This is the actual division of labour between the pillars, not an arbitrary limit.
 
-3. Your team gets 15 pages per on-call shift. Most resolve themselves within minutes. What is happening, and how do you fix it without going blind?
-
-   **Model answer**: This is alert fatigue, and it is a reliability problem rather than an annoyance — at 15 pages a shift, responders start acknowledging without reading, so the one real page gets missed. Self-resolving alerts diagnose the cause: thresholds are too tight or windows too short, so normal variance trips them. The fix, in order: (1) Audit every alert against "if this fires and nobody acts, does a user notice?" — everything failing that becomes a ticket or a dashboard panel. (2) Replace fixed thresholds with multi-window burn-rate alerts, which by construction only fire when the SLO is genuinely threatened. (3) Pair long windows with short ones so alerts clear on recovery instead of ringing for an hour afterwards. (4) Any alert with a known manual fix gets automated, then deleted. Crucially, this doesn't reduce coverage: SLO-based alerting still catches everything users experience. What disappears is the alerts about *causes* that had no user impact.
-
-4. During an incident an engineer opens the log search first and spends 20 minutes scrolling. What order should they have used, and why does starting with logs cost time?
+3. During an incident an engineer opens the log search first and spends 20 minutes scrolling. What order should they have used, and why does starting with logs cost time?
 
    **Model answer**: Metrics → traces → logs. Metrics tell you *whether* something is wrong, how bad, when it started, and which dimensions it's confined to — cheap, pre-aggregated queries that narrow the search space enormously (one endpoint, one region). Traces then localize it to a specific hop within a request. Only then do logs explain *why*, and by that point you have a `trace_id` to filter on, which turns millions of lines into a handful. Starting with logs means searching without knowing which haystack: no time bound beyond "recently", no service narrowed down, no identifier to filter by. It also biases toward whatever error happens to be loudest in the logs, which is frequently a pre-existing warning unrelated to this incident. The exception worth acknowledging: if you already know the failing request — a customer handed you a trace ID or an order number — you can skip straight to logs, because the narrowing is already done.
 
-5. You are 40% over your observability budget. Rank your cuts, and name the one cut you would refuse to make even under pressure.
+4. You are 40% over your observability budget. Rank your cuts, and name the one cut you would refuse to make even under pressure.
 
    **Model answer**: Cut in order of debugging-power-lost-per-dollar-saved. First, pure noise: health-check, readiness-probe, and static-asset logs, often 30-60% of log volume for zero information. Second, retention tiering: 7 days hot, 30 warm, a year cold in object storage — most of the cost is in indexing, and week-old logs are rarely queried interactively. Third, delete metrics and dashboards nobody queries; most backends can report unqueried series. Fourth, move high-cardinality metrics to logs or traces, which is both cheaper and a better fit. Fifth, sample successful request logs at 1-10% while keeping 100% of errors. These five usually clear 40% without meaningfully hurting an investigation. The cut to refuse: SLI metrics backing the SLOs, and error logs and failed traces. Errors are rare by volume — cutting them saves almost nothing — and they are the entire reason the system exists. I'd also refuse to drop `trace_id` from log lines, which is nearly free and is what makes correlation possible at all. The asymmetry is the argument: over-instrumenting wastes money linearly and visibly, while under-instrumenting costs one long outage discovered exactly when you can least afford it.
 
 ---
 
-## 14. Key References
+## 11. Key References
 
 ### Books
 
 | Resource | Focus |
 |----------|-------|
-| *Site Reliability Engineering* (Google), Ch. 6 "Monitoring Distributed Systems" | The four golden signals; symptom-based alerting |
-| *The Site Reliability Workbook* (Google), Ch. 5 "Alerting on SLOs" | Multi-window multi-burn-rate alerting — the source of Section 6.2 |
+| *Site Reliability Engineering* (Google), Ch. 6 "Monitoring Distributed Systems" | The four golden signals, and what each is for |
 | *Observability Engineering* (Majors, Fong-Jones, Miranda) | The high-cardinality wide-event argument, and the critique of the three-pillar model |
 | *Systems Performance* (Brendan Gregg) | The USE method; resource-level analysis |
 | *Distributed Systems Observability* (Cindy Sridharan) | Concise overview of the three pillars and their interaction |
@@ -1414,7 +1012,7 @@ topic for order events.
 
 | Resource | Focus |
 |----------|-------|
-| [Dapper (Google, 2010)](https://research.google/pubs/pub36356/) | The foundational distributed tracing paper — Section 9 |
+| [Dapper (Google, 2010)](https://research.google/pubs/pub36356/) | The foundational distributed tracing paper — Section 7 |
 | [W3C Trace Context](https://www.w3.org/TR/trace-context/) | The `traceparent`/`tracestate` propagation standard |
 | [OpenTelemetry Specification](https://opentelemetry.io/docs/specs/otel/) | Vendor-neutral API, SDK, and OTLP wire format |
 | [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/) | Standard attribute names — the fix for inconsistent resource attributes |
@@ -1436,10 +1034,11 @@ topic for order events.
 | Module | Connection |
 |--------|-----------|
 | [Module 06: Microservices](../06-microservices/README.md) | Introduces the three pillars; this module is the depth behind that section |
-| [Module 07: Reliability](../07-reliability/README.md) | Defines SLIs, SLOs, and error budgets — Section 6 turns them into alerts |
+| [Module 07: Reliability](../07-reliability/README.md) | Defines SLIs, SLOs, and error budgets — the quantities this module measures |
 | [Module 13: Security](../13-security/README.md) | Audit logging, PII handling, and why redaction belongs at the formatter |
 | [Module 14: API Design](../14-api-design/README.md) | Error taxonomies and `request_id` propagation feed the log pipeline |
-| [Module 19: Production AI](../19-production-ai-system/README.md) | Applies all of this to LLM systems, plus token cost and quality monitoring |
+| [Module 16: Incident Response](../16-incident-response/README.md) | Turns this telemetry into alerts, runbooks, and postmortems |
+| [Module 22: Production AI](../22-production-ai-system/README.md) | Applies all of this to LLM systems, plus token cost and quality monitoring |
 
 ---
 
@@ -1459,11 +1058,10 @@ topic for order events.
 │     is what you pay for                                      │
 │  5. Unbounded dimensions belong in traces and logs           │
 │  6. One trace_id in everything, or correlation is guesswork  │
-│  7. Page on symptoms and burn rates, not causes and          │
-│     fixed thresholds                                         │
-│  8. Observability must never sit on the critical path        │
-│  9. Every page needs a runbook; mitigate before diagnose     │
-│ 10. Cut noise before coverage — under-instrumenting costs    │
+│  7. Observability must never sit on the critical path        │
+│  8. Sample once at the edge and propagate the decision, or   │
+│     you get traces with holes in them                        │
+│  9. Cut noise before coverage — under-instrumenting costs    │
 │     one outage, discovered at the worst moment               │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
@@ -1475,8 +1073,8 @@ topic for order events.
 
 **Previous:** [Module 14: API Design](../14-api-design/README.md)
 
-**Next:** [Module 16: LLM Inference Serving Architecture](../16-llm-inference-serving/README.md)
+**Next:** [Module 16: Incident Response and On-Call](../16-incident-response/README.md)
 
 ---
 
-*Module 15 of 19 in the System Design Playground*
+*Module 15 of 22 in the System Design Playground*

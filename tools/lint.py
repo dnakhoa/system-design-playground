@@ -3,7 +3,7 @@
 
     python3 tools/lint.py
 
-Four checks, all of which have caught real defects in this course:
+Five checks, all of which have caught real defects in this course:
 
 1. Python code blocks parse. A missing dot once turned a whole example
    into a SyntaxError that sat in the course unnoticed.
@@ -14,6 +14,9 @@ Four checks, all of which have caught real defects in this course:
 4. Anchor fragments resolve. A Table of Contents entry or cross-module
    `#some-heading` link is invisible-while-editing in the same way the
    diagram geometry is — it only breaks when a reader clicks it.
+5. Mermaid blocks are well-formed. GitHub renders a broken Mermaid block
+   as a red error box, which looks worse than no diagram at all — and
+   the failure is invisible until the page is viewed on GitHub.
 
 Exits non-zero if anything fails, so it works as a CI step or a
 pre-commit hook.
@@ -229,6 +232,69 @@ def check_anchors():
     return count, failures
 
 
+# --- mermaid ---------------------------------------------------------
+
+MERMAID_TYPES = (
+    "flowchart", "graph", "stateDiagram-v2", "stateDiagram", "sequenceDiagram",
+    "classDiagram", "erDiagram", "journey", "gantt", "pie", "mindmap",
+    "timeline", "gitGraph", "quadrantChart", "sankey-beta", "block-beta",
+)
+
+
+def check_mermaid():
+    """Catch the errors that render as a red box on GitHub.
+
+    Not a parser — a parser would need mermaid itself. These are the
+    three mistakes that actually happen when hand-writing these blocks.
+    """
+    failures = []
+    blocks = 0
+    for md in sorted(ROOT.glob("*/README.md")) + [ROOT / "README.md"]:
+        lines = md.read_text().split("\n")
+        inside, start, is_mermaid = False, 0, False
+        for i, line in enumerate(lines):
+            if not line.lstrip().startswith("```"):
+                continue
+            if inside:
+                if is_mermaid:
+                    blocks += 1
+                    failures.extend(
+                        _mermaid_problems(md, lines[start:i], start))
+                inside = False
+            else:
+                inside = True
+                start = i + 1
+                is_mermaid = line.strip() == "```mermaid"
+    return blocks, failures
+
+
+def _mermaid_problems(md, body, offset):
+    problems = []
+    rel = md.relative_to(ROOT)
+    content = [l for l in body if l.strip()]
+    if not content:
+        return [f"{rel}:{offset + 1} empty mermaid block"]
+
+    header = content[0].strip()
+    if not header.startswith(MERMAID_TYPES):
+        problems.append(
+            f"{rel}:{offset + 1} unknown diagram type: {header[:40]!r}")
+
+    for n, line in enumerate(body):
+        ln = offset + n + 1
+        # Unbalanced label brackets/quotes are the usual hand-editing slip.
+        for open_c, close_c in (("[", "]"), ("(", ")"), ("{", "}")):
+            if line.count(open_c) != line.count(close_c):
+                problems.append(
+                    f"{rel}:{ln} unbalanced {open_c}{close_c} in mermaid line")
+        if line.count('"') % 2:
+            problems.append(f"{rel}:{ln} odd number of quotes in mermaid line")
+        # A bare `#` inside a label is a mermaid comment and eats the line.
+        if "%%" not in line and line.strip().startswith("#"):
+            problems.append(f"{rel}:{ln} mermaid comments use %%, not #")
+    return problems
+
+
 def main():
     ok = True
     for label, (count, failures), noun in (
@@ -236,6 +302,7 @@ def main():
         ("Diagrams", check_diagrams(), "diagrams"),
         ("Links", check_links(), "links"),
         ("Anchors", check_anchors(), "anchors"),
+        ("Mermaid", check_mermaid(), "blocks"),
     ):
         if failures:
             ok = False

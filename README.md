@@ -1,10 +1,10 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-19-blue.svg)]()
+[![Modules](https://img.shields.io/badge/modules-22-blue.svg)]()
 [![Theory](https://img.shields.io/badge/type-theory%20%2B%20design-orange.svg)]()
 
-A free, self-paced course in 19 written modules. It starts at "what is a QPS
+A free, self-paced course in 22 written modules. It starts at "what is a QPS
 estimate" and ends at "how would you architect an LLM agent platform for a
 hundred million users" — and it explains the reasoning at every step, not just
 the conclusions.
@@ -130,29 +130,47 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
 
-### Path B: Build LLM AI Systems (~12 hours)
+### Path B: ML Systems and Recommenders (~9 hours)
 
-Focus on LLM-specific architecture:
+For the ML system design interview, and for anyone whose system ranks things:
 
 ```
-Module 16 (Inference Serving) → Module 17 (RAG at Scale)
-    → Module 18 (Agent Architecture) → Module 19 (Production AI)
+Module 17 (ML System Design) → Module 03 (Caching) → Module 05 (Async)
+    → Module 15 (Observability) → Module 21 (Evaluation)
 ```
 
 | Priority | Module | Why |
 |----------|--------|-----|
-| **Must** | 16 | How to serve LLMs at scale (PagedAttention, batching) |
-| **Must** | 17 | RAG is the most common LLM pattern |
-| **Should** | 18 | Agents are the future of LLM applications |
-| **Should** | 19 | Putting it all together in production |
+| **Must** | 17 | Funnel architecture, feature stores, training/serving skew, offline vs online |
+| **Must** | 01 | Estimation and the framework; the ML version in Module 17 assumes it |
+| **Should** | 05 | Streaming pipelines behind real-time features and impression logs |
+| **Should** | 15 | Data health and prediction health need the telemetry from here |
+| Nice to have | 21 | Evaluation rigour transfers directly from LLM systems to ML ones |
+
+### Path C: Build LLM AI Systems (~14 hours)
+
+Focus on LLM-specific architecture:
+
+```
+Module 18 (Inference Serving) → Module 19 (RAG at Scale)
+    → Module 20 (Agents) → Module 21 (Evaluation) → Module 22 (Production AI)
+```
+
+| Priority | Module | Why |
+|----------|--------|-----|
+| **Must** | 18 | How to serve LLMs at scale (PagedAttention, batching) |
+| **Must** | 19 | RAG is the most common LLM pattern |
+| **Must** | 21 | Evals decide how fast you can improve anything else here |
+| **Should** | 20 | Agents, context engineering, and tool design |
+| **Should** | 22 | Putting it all together in production |
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path C: Full Curriculum (~41 hours)
+### Path D: Full Curriculum (~51 hours)
 
-Work through all 19 modules in order. Each builds on the previous.
+Work through all 22 modules in order. Each builds on the previous.
 
-### Path D: Fill Your Gaps
+### Path E: Fill Your Gaps
 
 Modules are written to be readable on their own. If you have a specific hole,
 go straight at it:
@@ -169,11 +187,18 @@ go straight at it:
 | Auth, encryption, password storage, or OWASP gaps | [Module 13 — Security](13-security/README.md) |
 | APIs keep breaking clients | [Module 14 — API Design](14-api-design/README.md) |
 | Outages take hours to diagnose | [Module 15 — Observability](15-observability/README.md) |
-| Alerts are noisy and everyone ignores them | [Module 15 — Observability](15-observability/README.md) |
-| Need to serve LLMs at scale | [Module 16 — Inference Serving](16-llm-inference-serving/README.md) |
-| Building a RAG system | [Module 17 — RAG at Scale](17-rag-at-scale/README.md) |
-| Building autonomous agents | [Module 18 — Agent Architecture](18-agent-architecture/README.md) |
-| Don't know how to monitor AI systems | [Module 19 — Production AI](19-production-ai-system/README.md) |
+| Alerts are noisy and everyone ignores them | [Module 16 — Incident Response](16-incident-response/README.md) |
+| On-call is burning the team out | [Module 16 — Incident Response](16-incident-response/README.md) |
+| Postmortems produce documents, not change | [Module 16 — Incident Response](16-incident-response/README.md) |
+| Need to design a recommender or search ranking | [Module 17 — ML System Design](17-ml-system-design/README.md) |
+| Offline model wins never show up online | [Module 17 — ML System Design](17-ml-system-design/README.md) |
+| Can't tell whether a prompt change helped | [Module 21 — AI Evaluation](21-ai-evaluation/README.md) |
+| The model "hallucinates" and you can't measure it | [Module 21 — AI Evaluation](21-ai-evaluation/README.md) |
+| Agent context fills up and quality degrades | [Module 20 — Agent Architecture](20-agent-architecture/README.md) |
+| Need to serve LLMs at scale | [Module 18 — Inference Serving](18-llm-inference-serving/README.md) |
+| Building a RAG system | [Module 19 — RAG at Scale](19-rag-at-scale/README.md) |
+| Building autonomous agents | [Module 20 — Agent Architecture](20-agent-architecture/README.md) |
+| Don't know how to monitor AI systems | [Module 22 — Production AI](22-production-ai-system/README.md) |
 
 ---
 
@@ -206,22 +231,30 @@ go straight at it:
 | [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~1.5h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 
-### Phase 4: Core Infrastructure (Modules 13-15)
+### Phase 4: Operating Systems in Production (Modules 13-16)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [13](13-security/README.md) | [Security](13-security/README.md) | Auth, encryption, OWASP, prompt injection | ⭐⭐ Intermediate | ~2.5h |
 | [14](14-api-design/README.md) | [API Design](14-api-design/README.md) | REST, gRPC, GraphQL, versioning, pagination | ⭐⭐ Intermediate | ~2.5h |
-| [15](15-observability/README.md) | [Observability](15-observability/README.md) | Metrics, tracing, cardinality, burn-rate alerting | ⭐⭐ Intermediate | ~4h |
+| [15](15-observability/README.md) | [Observability](15-observability/README.md) | Metrics, logs, tracing, cardinality, correlation, cost | ⭐⭐ Intermediate | ~3h |
+| [16](16-incident-response/README.md) | [Incident Response and On-Call](16-incident-response/README.md) | Burn-rate alerting, runbooks, incident command, rotations, postmortems | ⭐⭐ Intermediate | ~3.5h |
 
-### Phase 5: LLM AI Systems (Modules 16-19)
+### Phase 5: Machine Learning Systems (Module 17)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [16](16-llm-inference-serving/README.md) | [LLM Inference Serving](16-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
-| [17](17-rag-at-scale/README.md) | [RAG at Scale](17-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
-| [18](18-agent-architecture/README.md) | [Agent Architecture](18-agent-architecture/README.md) | ReAct, middleware stack, multi-agent, cost control | ⭐⭐⭐ Advanced | ~2h |
-| [19](19-production-ai-system/README.md) | [Production AI System](19-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
+| [17](17-ml-system-design/README.md) | [ML System Design](17-ml-system-design/README.md) | Retrieval/ranking funnel, feature stores, training-serving skew, offline vs online | ⭐⭐⭐ Advanced | ~3.5h |
+
+### Phase 6: LLM AI Systems (Modules 18-22)
+
+| Module | Topic | Key Concepts | Difficulty | Time |
+|--------|-------|-------------|------------|------|
+| [18](18-llm-inference-serving/README.md) | [LLM Inference Serving](18-llm-inference-serving/README.md) | PagedAttention, batching, quantization, GPU clusters | ⭐⭐⭐ Advanced | ~2h |
+| [19](19-rag-at-scale/README.md) | [RAG at Scale](19-rag-at-scale/README.md) | Chunking, two-stage retrieval, hybrid search, evaluation | ⭐⭐⭐ Advanced | ~2h |
+| [20](20-agent-architecture/README.md) | [Agent Architecture](20-agent-architecture/README.md) | ReAct, context engineering, tool design, MCP, computer use, multi-agent | ⭐⭐⭐ Advanced | ~3h |
+| [21](21-ai-evaluation/README.md) | [AI Evaluation and Quality](21-ai-evaluation/README.md) | Error analysis, LLM-as-judge, calibration, RAG and agent evals, CI gates | ⭐⭐⭐ Advanced | ~3.5h |
+| [22](22-production-ai-system/README.md) | [Production AI System](22-production-ai-system/README.md) | Model routing, guardrails, observability, scaling | ⭐⭐⭐ Advanced | ~2h |
 
 ---
 
@@ -231,10 +264,10 @@ This course pairs with the **[LLM Engineering Course](https://github.com/dnakhoa
 
 | System Design (This Course) | LLM Engineering |
 |---------------------------|-----------------|
-| Module 16: LLM Inference Serving | Module 05-06: Deployment & Optimization |
-| Module 17: RAG at Scale | Module 02: RAG Systems |
-| Module 18: Agent Architecture | Module 07: Agentic Workflows |
-| Module 19: Production AI | Module 08-10: LLM Ops, EvalOps, Guardrails |
+| Module 18: LLM Inference Serving | Module 05-06: Deployment & Optimization |
+| Module 19: RAG at Scale | Module 02: RAG Systems |
+| Module 20: Agent Architecture | Module 07: Agentic Workflows |
+| Module 22: Production AI | Module 08-10: LLM Ops, EvalOps, Guardrails |
 
 **System Design** teaches you *how to think about architecture*.  
 **LLM Engineering** teaches you *how to build the implementations*.
@@ -271,8 +304,9 @@ things that self-study doesn't naturally build:
   of the friction in a review is two people using "consistency" differently.
 - Reference: link a specific module section from an architecture decision
   record instead of re-explaining the trade-off each time.
-- AI teams: Modules 15–19 stand alone reasonably well for an ML group that
-  already has backend fundamentals.
+- AI teams: Modules 15–22 stand alone reasonably well for an ML group that
+  already has backend fundamentals. Module 21 is the one to read first if the
+  team cannot currently tell whether a change helped.
 
 ---
 
@@ -311,7 +345,7 @@ things that self-study doesn't naturally build:
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |
 
-### Security, API Design, and Observability (Modules 13-15)
+### Security, API Design, and Operations (Modules 13-16)
 
 | Term | Definition |
 |------|-----------|
@@ -342,8 +376,34 @@ things that self-study doesn't naturally build:
 | **Span** | One unit of work in a trace, carrying trace ID, span ID, parent ID, and duration |
 | **Structured Logging** | Stable event name plus queryable fields, instead of an interpolated sentence |
 | **Trace Context** | W3C `traceparent` header that carries trace ID and sampling decision across hops |
+| **Blameless Postmortem** | Review that treats human action as a symptom of the system, because blame suppresses reporting |
+| **Counterfactual Trap** | "Should have noticed" — describing a world where the responder had information they lacked |
+| **Incident Command (ICS)** | Separated roles — Commander, Operations, Communications, Scribe — where the Commander fixes nothing |
+| **MTTD / MTTA / MTTM / MTTR** | Time to detect, acknowledge, mitigate, resolve — decomposed because each has a different fix |
+| **Multi-Window Burn Rate** | Pairing a long and short window so an alert fires on real burn and clears on recovery |
+| **Page Budget** | ~2 pages per on-call shift; sustained breach is a detection defect, not an annoyance |
+| **Runbook** | A decision procedure for a stranger at 3am, ordered to mitigate before diagnosing |
 
-### LLM AI Systems (Modules 16-19)
+### Machine Learning Systems (Module 17)
+
+| Term | Definition |
+|------|-----------|
+| **Calibration** | Whether predicted probabilities are true — required anywhere a score is multiplied, irrelevant if you only sort |
+| **Cold Start** | New user or item with no engagement history; without intervention the feedback loop makes it permanent |
+| **Concept Drift** | P(Y\|X) changes — the world's meaning shifted, and the model is now wrong rather than stale |
+| **Feature Store** | One feature definition compiled to an offline store (point-in-time joins) and an online store (millisecond reads) |
+| **Guardrail Metric** | A metric an experiment may not degrade even when the primary metric improves |
+| **IPW** | Inverse Propensity Weighting — dividing out examination probability to de-bias click logs |
+| **Log-and-Train** | Logging the exact feature vector served, then training on it — makes skew structurally impossible |
+| **Multi-Stage Funnel** | Retrieval → pre-rank → rank → re-rank, each stage costlier per item and smaller in count |
+| **Novelty Effect** | Early A/B lift from users engaging with change itself, which decays over weeks |
+| **Point-in-Time Correctness** | Joining every feature as of the prediction timestamp, never as of query time |
+| **Position Bias** | Top-ranked items get clicked regardless of relevance, so naive training learns your own ranker |
+| **Randomised Logging Slice** | 1-2% of traffic ranked randomly — the only unbiased evaluation data you own |
+| **Training/Serving Skew** | Batch and serving paths computing a feature differently, so production inputs are unlike training ones |
+| **Two-Tower Model** | User and item encoded separately so item vectors can be precomputed and ANN-indexed |
+
+### LLM AI Systems (Modules 18-22)
 
 | Term | Definition |
 |------|-----------|
@@ -372,6 +432,17 @@ things that self-study doesn't naturally build:
 | **Speculative Decoding** | Small draft model proposes tokens, large model verifies — 2-3x speedup, no quality loss |
 | **Tensor Parallelism** | Splitting each layer's weights across GPUs (low latency, high communication) |
 | **Trajectory-Aware Evaluation** | Scoring an agent's tool calls, steps, and recovery behavior — not just its final answer |
+| **Claim Decomposition** | Splitting an answer into atomic claims and entailing each — how small plausible hallucinations get caught |
+| **Cohen's Kappa** | Agreement beyond chance; the honest version of "the judge agrees with humans 91% of the time" |
+| **Context Engineering** | Managing the window as a budget: write, select, compress, isolate |
+| **Context Rot** | Quality degrading as a window fills, well before the hard token limit |
+| **Error Analysis** | Open-coding real traces into a failure taxonomy, so metrics measure how *your* system fails |
+| **Faithfulness** | Fraction of an answer's claims supported by the retrieved context — grounding, not truth |
+| **LLM-as-Judge** | A model scoring another model's output; needs a rubric, bias controls, and its own test split |
+| **Observation Masking** | Storing a large tool result and putting a summary plus a handle in the context instead |
+| **Position Bias (judging)** | Pairwise judges favouring the first or last option; controlled by running both orders |
+| **Rogan-Gladen Correction** | Recovering a true pass rate from an observed one given the judge's TPR and FPR |
+| **Wilson Interval** | Confidence interval for a pass rate; at n=50 it is roughly ±11 points |
 
 ---
 

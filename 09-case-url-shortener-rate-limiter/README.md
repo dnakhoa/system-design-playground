@@ -127,32 +127,22 @@ CREATE INDEX idx_expires ON urls (expires_at) WHERE expires_at IS NOT NULL;
 
 ### Architecture
 
+```mermaid
+flowchart TD
+    C["Client"] --> LB["Load Balancer"] --> API["API Servers"]
+    API --> R["Redis<br/>cache"]
+    API --> DB["MySQL<br/>(id → long URL)"]
+    API --> K["Kafka<br/>(analytics events)"]
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    URL Shortener Architecture            │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  Client ────▶ Load Balancer ────▶ API Servers            │
-│                                      │                   │
-│                              ┌───────┼───────┐           │
-│                              │       │       │           │
-│                              ▼       ▼       ▼           │
-│                           ┌─────┐ ┌─────┐ ┌─────┐        │
-│                           │Redis│ │MySQL│ │Kafka│        │
-│                           │cache│ │ DB  │ │     │        │
-│                           └─────┘ └─────┘ └─────┘        │
-│                                                          │
-│  Write Path:                                             │
-│  Client → API → Generate ID → Write DB → Invalidate      │
-│                                  cache → Publish event   │
-│                                                          │
-│  Read Path:                                              │
-│  Client → API → Check Redis → (miss: query DB,           │
-│                                populate cache)           │
-│                              → Return 301 redirect       │
-│                              → Publish analytics event   │
-└──────────────────────────────────────────────────────────┘
-```
+
+**Write path.** Client → API → generate ID → write to MySQL → invalidate the
+cache entry → publish a `link_created` event.
+
+**Read path.** Client → API → check Redis → on miss, query MySQL and populate
+the cache → return a 301 redirect → publish a click event to Kafka.
+
+The asymmetry is the design: reads outnumber writes by roughly 100:1, so the
+read path is the one that must never touch the database if it can avoid it.
 
 ### Deep Dive: ID Generation Strategies
 
@@ -510,4 +500,4 @@ limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
 ---
 
-*Module 09 of 19 in the System Design Playground*
+*Module 09 of 22 in the System Design Playground*

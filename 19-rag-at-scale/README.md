@@ -1,4 +1,4 @@
-# Module 17: RAG System Architecture at Scale
+# Module 19: RAG System Architecture at Scale
 
 > **Designing production retrieval-augmented generation.** RAG is the most common pattern for grounding LLMs in external knowledge. At scale, the challenges shift from "does it work?" to "is it fast, accurate, and cost-effective?"
 
@@ -6,9 +6,9 @@
 
 | Module | Title | Link |
 |--------|-------|------|
-| Module 16 | LLM Inference Serving Architecture | [../16-llm-inference-serving/](../16-llm-inference-serving/) |
-| **Module 17** | **RAG System Architecture at Scale** | **(current)** |
-| Module 18 | Agent System Architecture | [../18-agent-architecture/](../18-agent-architecture/) |
+| Module 18 | LLM Inference Serving Architecture | [../18-llm-inference-serving/](../18-llm-inference-serving/) |
+| **Module 19** | **RAG System Architecture at Scale** | **(current)** |
+| Module 20 | Agent System Architecture | [../20-agent-architecture/](../20-agent-architecture/) |
 
 ---
 
@@ -569,7 +569,7 @@ Perplexity built a production search-augmented LLM that cites its sources.
 | [Module 02: Databases and Storage](../02-databases-storage/README.md) | Vector databases are a specialized storage layer — the pgvector/Qdrant/Milvus selection tree extends this module's storage trade-offs |
 | [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Scaling retrieval past a billion vectors means sharding, quantization, and approximate recall — the same distributed trade-offs this module covers |
 | [Module 15: Observability](../15-observability/README.md) | Faithfulness, relevancy, and hallucination metrics are the RAG-specific instance of the monitoring and evaluation discipline this module teaches |
-| [Module 19: Production AI System Architecture](../19-production-ai-system/README.md) | RAG is typically one subsystem wired into a larger production AI system alongside inference serving and agents |
+| [Module 22: Production AI System Architecture](../22-production-ai-system/README.md) | RAG is typically one subsystem wired into a larger production AI system alongside inference serving and agents |
 
 ---
 
@@ -610,10 +610,10 @@ Perplexity built a production search-augmented LLM that cites its sources.
 
 ## Navigation
 
-**Previous:** [Module 16: LLM Inference Serving Architecture](../16-llm-inference-serving/README.md)
+**Previous:** [Module 18: LLM Inference Serving Architecture](../18-llm-inference-serving/README.md)
 
-**Next:** [Module 18: Agent System Architecture](../18-agent-architecture/README.md)
+**Next:** [Module 20: Agent System Architecture](../20-agent-architecture/README.md)
 
 ---
 
-*Module 17 of 19 in the System Design Playground*
+*Module 19 of 22 in the System Design Playground*

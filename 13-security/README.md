@@ -991,7 +991,7 @@ class SecureFileService:
 |--------|-----------|
 | [Module 04: Load Balancing](../04-load-balancing/README.md) | Security considerations for distributed load balancers (SSL termination, health check security) |
 | [Module 07: Reliability](../07-reliability/README.md) | Security as a component of system reliability (DDoS mitigation, failover strategies) |
-| [Module 19: Production AI](../19-production-ai-system/README.md) | Securing ML pipelines, model access control, and data privacy in production AI systems |
+| [Module 22: Production AI](../22-production-ai-system/README.md) | Securing ML pipelines, model access control, and data privacy in production AI systems |
 
 ---
 
@@ -1040,4 +1040,4 @@ class SecureFileService:
 
 ---
 
-*Module 13 of 19 in the System Design Playground*
+*Module 13 of 22 in the System Design Playground*

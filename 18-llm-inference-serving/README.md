@@ -1,4 +1,4 @@
-# Module 16: LLM Inference Serving Architecture
+# Module 18: LLM Inference Serving Architecture
 
 > **How to serve LLMs at scale.** LLM inference is fundamentally different from traditional web serving — it's memory-bound, not compute-bound. The KV cache is the bottleneck, and every optimization revolves around managing it efficiently.
 
@@ -6,9 +6,9 @@
 
 | Module | Title | Link |
 |--------|-------|------|
-| Module 15 | Observability | [../15-observability/](../15-observability/) |
-| **Module 16** | **LLM Inference Serving Architecture** | **(current)** |
-| Module 17 | RAG System Architecture at Scale | [../17-rag-at-scale/](../17-rag-at-scale/) |
+| Module 17 | Machine Learning System Design | [../17-ml-system-design/](../17-ml-system-design/) |
+| **Module 18** | **LLM Inference Serving Architecture** | **(current)** |
+| Module 19 | RAG System Architecture at Scale | [../19-rag-at-scale/](../19-rag-at-scale/) |
 
 ---
 
@@ -644,7 +644,7 @@ the compilation and operational cost.
 | [Module 03: Caching Strategies](../03-caching/README.md) | KV cache management (PagedAttention, RadixAttention) is a caching and eviction problem applied to GPU memory instead of application data |
 | [Module 04: Load Balancing and Networking](../04-load-balancing/README.md) | The GPU cluster's model router and cross-datacenter failover extend Module 04's L7 routing patterns to route by model instead of by endpoint |
 | [Module 08: Distributed Systems Deep Dive](../08-distributed-systems/README.md) | Tensor parallelism, pipeline parallelism, and disaggregated prefill/decode all partition compute and state across GPUs and nodes — the same trade-offs as any distributed system |
-| [Module 19: Production AI System Architecture](../19-production-ai-system/README.md) | Inference serving is the compute layer production AI systems are built on, alongside RAG and agents |
+| [Module 22: Production AI System Architecture](../22-production-ai-system/README.md) | Inference serving is the compute layer production AI systems are built on, alongside RAG and agents |
 
 ---
 
@@ -685,10 +685,10 @@ the compilation and operational cost.
 
 ## Navigation
 
-**Previous:** [Module 15: Observability](../15-observability/README.md)
+**Previous:** [Module 17: Machine Learning System Design](../17-ml-system-design/README.md)
 
-**Next:** [Module 17: RAG System Architecture at Scale](../17-rag-at-scale/README.md)
+**Next:** [Module 19: RAG System Architecture at Scale](../19-rag-at-scale/README.md)
 
 ---
 
-*Module 16 of 19 in the System Design Playground*
+*Module 18 of 22 in the System Design Playground*
