@@ -201,11 +201,11 @@ from typing import Optional
 
 class JWTManager:
     """Demonstrates JWT creation and validation."""
-    
+
     def __init__(self, secret_key: str):
         self.secret_key = secret_key
         self.algorithm = "HS256"
-    
+
     def create_token(
         self,
         user_id: str,
@@ -313,48 +313,48 @@ import os
 
 class EncryptionService:
     """Demonstrates AES-256-GCM encryption."""
-    
+
     def __init__(self):
         # In production, fetch from KMS
         self.key = AESGCM.generate_key(bit_length=256)
-    
+
     def encrypt(self, plaintext: str, associated_data: str = None) -> dict:
         nonce = os.urandom(12)  # 96-bit nonce for GCM
         aesgcm = AESGCM(self.key)
-        
+
         ciphertext = aesgcm.encrypt(
             nonce,
             plaintext.encode('utf-8'),
             associated_data.encode('utf-8') if associated_data else None
         )
-        
+
         return {
             "ciphertext": ciphertext.hex(),
             "nonce": nonce.hex()
         }
-    
-    def decrypt(self, ciphertext_hex: str, nonce_hex: str, 
+
+    def decrypt(self, ciphertext_hex: str, nonce_hex: str,
                 associated_data: str = None) -> str:
         ciphertext = bytes.fromhex(ciphertext_hex)
         nonce = bytes.fromhex(nonce_hex)
         aesgcm = AESGCM(self.key)
-        
+
         plaintext = aesgcm.decrypt(
             nonce,
             ciphertext,
             associated_data.encode('utf-8') if associated_data else None
         )
-        
+
         return plaintext.decode('utf-8')
 
 # Usage
 service = EncryptionService()
-encrypted = service.encrypt("Sensitive data: SSN 123-45-6789", 
+encrypted = service.encrypt("Sensitive data: SSN 123-45-6789",
                            associated_data="user_id:123")
 print(f"Encrypted: {encrypted}")
 
 decrypted = service.decrypt(
-    encrypted["ciphertext"], 
+    encrypted["ciphertext"],
     encrypted["nonce"],
     associated_data="user_id:123"
 )
@@ -417,7 +417,7 @@ Client                                          Server
   │                                                │
   │◀══════(4) Encrypted Application Data══════════│
   │                                                │
-  
+
   Key difference from TLS 1.2: Only 1 round trip (vs 2)
   All handshake messages after ServerHello are encrypted
 ```
@@ -538,24 +538,24 @@ from functools import wraps
 
 class SlidingWindowRateLimiter:
     """Sliding window rate limiter using Redis-style storage."""
-    
+
     def __init__(self, max_requests: int, window_seconds: int):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.requests: dict[str, list[float]] = defaultdict(list)
-    
+
     def is_allowed(self, key: str) -> bool:
         now = time.time()
         window_start = now - self.window_seconds
-        
+
         # Remove expired requests
         self.requests[key] = [
             ts for ts in self.requests[key] if ts > window_start
         ]
-        
+
         if len(self.requests[key]) >= self.max_requests:
             return False
-        
+
         self.requests[key].append(now)
         return True
 
@@ -633,42 +633,42 @@ from typing import Optional
 
 class SecretRotator:
     """Demonstrates zero-downtime secret rotation."""
-    
+
     def __init__(self):
         self.current_secret: Optional[str] = None
         self.previous_secret: Optional[str] = None
         self.rotation_time: float = 0
         self.rotation_interval: int = 3600 * 24 * 90  # 90 days
-    
+
     def get_current_secret(self) -> str:
         if self.current_secret is None:
             self.rotate()
         return self.current_secret
-    
+
     def rotate(self):
         import secrets
         new_secret = secrets.token_hex(32)
-        
+
         if self.current_secret:
             self.previous_secret = self.current_secret
-        
+
         self.current_secret = new_secret
         self.rotation_time = time.time()
-        
+
         # In production: Update secret manager, not in-memory
         # await secret_manager.put("api_key", new_secret)
-    
+
     def verify_secret(self, provided_secret: str) -> bool:
         """Accept both current and previous during grace period."""
         if provided_secret == self.current_secret:
             return True
-        
+
         # Grace period: accept old secret for 1 hour after rotation
-        if (self.previous_secret and 
+        if (self.previous_secret and
             provided_secret == self.previous_secret and
             time.time() - self.rotation_time < 3600):
             return True
-        
+
         return False
 
 # Usage
@@ -742,18 +742,18 @@ def create_payment_stripe_style(amount: int, idempotency_key: str = None):
     """
     if idempotency_key is None:
         idempotency_key = str(uuid.uuid4())
-    
+
     # Check if this idempotency key was already processed
     existing = db.get_idempotency(idempotency_key)
     if existing:
         return existing["response"]  # Return cached response
-    
+
     # Process payment
     result = process_payment(amount)
-    
+
     # Store result for future idempotent requests
     db.store_idempotency(idempotency_key, result)
-    
+
     return result
 ```
 
@@ -862,15 +862,15 @@ class SecureFileService:
             'image/jpeg', 'image/png', 'application/pdf',
             'text/plain', 'application/json'
         ]
-    
-    def generate_signed_url(self, file_path: str, 
+
+    def generate_signed_url(self, file_path: str,
                            expires_in_minutes: int = 60) -> str:
         """Generate a signed URL for secure file access."""
         # TODO: Implement
         # Include expiry timestamp in signature
         # Return URL with signature and expiry
         pass
-    
+
     def validate_upload(self, content_type: str, file_size: int) -> bool:
         """Validate file upload meets security requirements."""
         # TODO: Implement

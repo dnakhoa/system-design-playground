@@ -231,10 +231,10 @@ import json
 class EventBus:
     def __init__(self):
         self.handlers = {}
-    
+
     def subscribe(self, event_type: str, handler: Callable):
         self.handlers.setdefault(event_type, []).append(handler)
-    
+
     def publish(self, event_type: str, data: dict):
         for handler in self.handlers.get(event_type, []):
             handler(data)
@@ -338,16 +338,16 @@ class SagaStep:
 
 class OrderSagaOrchestrator:
     """Centralized orchestrator for the order saga."""
-    
+
     def __init__(self):
         self.steps: List[SagaStep] = []
-    
+
     def add_step(self, name: str, action: Callable, compensation: Callable):
         self.steps.append(SagaStep(name=name, action=action, compensation=compensation))
-    
+
     def execute(self, order_data: dict) -> dict:
         completed_steps = []
-        
+
         for step in self.steps:
             try:
                 print(f"Executing: {step.name}")
@@ -357,7 +357,7 @@ class OrderSagaOrchestrator:
             except Exception as e:
                 print(f"Failed: {step.name} — {e}")
                 step.status = StepStatus.FAILED
-                
+
                 # Compensate in reverse order
                 for completed in reversed(completed_steps):
                     try:
@@ -366,9 +366,9 @@ class OrderSagaOrchestrator:
                         completed.status = StepStatus.COMPENSATED
                     except Exception as comp_error:
                         print(f"Compensation failed: {completed.name} — {comp_error}")
-                
+
                 return {"status": "failed", "failed_step": step.name}
-        
+
         return {"status": "completed"}
 
 # Usage:
@@ -419,15 +419,15 @@ class ServiceInstance:
 
 class ServiceRegistry:
     """Simple in-memory service registry (production: use Consul, etcd, or K8s DNS)."""
-    
+
     def __init__(self):
         self.services: Dict[str, List[ServiceInstance]] = {}
         self._lock = threading.Lock()
-    
+
     def register(self, service_name: str, instance: ServiceInstance):
         with self._lock:
             self.services.setdefault(service_name, []).append(instance)
-    
+
     def deregister(self, service_name: str, host: str, port: int):
         with self._lock:
             if service_name in self.services:
@@ -435,7 +435,7 @@ class ServiceRegistry:
                     i for i in self.services[service_name]
                     if not (i.host == host and i.port == port)
                 ]
-    
+
     def get_instances(self, service_name: str) -> List[ServiceInstance]:
         """Return healthy instances only."""
         with self._lock:
@@ -443,7 +443,7 @@ class ServiceRegistry:
                 i for i in self.services.get(service_name, [])
                 if i.health == "healthy"
             ]
-    
+
     def discover(self, service_name: str) -> ServiceInstance:
         """Client-side discovery: pick a random healthy instance."""
         instances = self.get_instances(service_name)

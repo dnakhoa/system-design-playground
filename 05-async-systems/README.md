@@ -242,30 +242,30 @@ class Event:
 
 class BankAccount:
     """Event-sourced bank account. State is derived from events."""
-    
+
     def __init__(self, account_id: str):
         self.account_id = account_id
         self.balance = 0.0
         self.events: List[Event] = []
-    
+
     def deposit(self, amount: float):
         event = Event("Deposited", {"amount": amount})
         self._apply(event)
         self.events.append(event)
-    
+
     def withdraw(self, amount: float):
         if amount > self.balance:
             raise ValueError("Insufficient funds")
         event = Event("Withdrawn", {"amount": amount})
         self._apply(event)
         self.events.append(event)
-    
+
     def _apply(self, event: Event):
         if event.event_type == "Deposited":
             self.balance += event.data["amount"]
         elif event.event_type == "Withdrawn":
             self.balance -= event.data["amount"]
-    
+
     @classmethod
     def from_events(cls, account_id: str, events: List[Event]) -> "BankAccount":
         """Reconstruct account state from event history."""
@@ -274,7 +274,7 @@ class BankAccount:
             account._apply(event)
             account.events.append(event)
         return account
-    
+
     def snapshot(self) -> dict:
         """Save current state as a snapshot (optimization)."""
         return {
@@ -341,19 +341,19 @@ class Order:
 
 class OrderWriteDB:
     """Write-optimized: normalized, supports transactions."""
-    
+
     def __init__(self):
         self.orders = {}
-    
+
     def create_order(self, order: Order):
         self.orders[order.id] = order
         # Publish event for read model sync
         self._publish_event("OrderCreated", order)
-    
+
     def update_status(self, order_id: str, status: str):
         self.orders[order_id].status = status
         self._publish_event("OrderUpdated", self.orders[order_id])
-    
+
     def _publish_event(self, event_type: str, order: Order):
         # In production: publish to Kafka/message queue
         print(f"EVENT: {event_type} -> {order.id}")
@@ -361,10 +361,10 @@ class OrderWriteDB:
 # --- Read Model (Denormalized) ---
 class OrderReadDB:
     """Read-optimized: pre-joined, denormalized for fast queries."""
-    
+
     def __init__(self):
         self.orders = {}  # Denormalized view
-    
+
     def sync_from_events(self, event_type: str, order_data: dict):
         """Update read model from events (eventual consistency)."""
         if event_type == "OrderCreated":
@@ -377,11 +377,11 @@ class OrderReadDB:
             }
         elif event_type == "OrderUpdated":
             self.orders[order_data["id"]]["status"] = order_data["status"]
-    
+
     def get_order(self, order_id: str) -> dict:
         """Fast read — no JOINs needed."""
         return self.orders.get(order_id)
-    
+
     def get_user_orders(self, user_id: str) -> List[dict]:
         """Fast query — pre-joined data."""
         return [o for o in self.orders.values() if o.get("user_id") == user_id]
@@ -395,8 +395,8 @@ order = Order(id="o1", user_id="u1", items=[{"name": "Widget"}], total=29.99)
 write_db.create_order(order)
 
 # Read path (denormalized, eventually consistent)
-read_db.sync_from_events("OrderCreated", {"id": "o1", "user_name": "Alice", 
-                                           "items": [{"name": "Widget"}], 
+read_db.sync_from_events("OrderCreated", {"id": "o1", "user_name": "Alice",
+                                           "items": [{"name": "Widget"}],
                                            "total": 29.99, "status": "pending"})
 print(read_db.get_order("o1"))  # Fast read, no JOINs
 ```
@@ -440,14 +440,14 @@ print(read_db.get_order("o1"))  # Fast read, no JOINs
 def consume_at_most_once(message):
     # ACK first — if we crash, message is lost
     kafka_consumer.commit()
-    
+
     # Process (if we crash here, message is gone)
     process_message(message)
 ```
 
 ```
   Producer ──▶ Queue ──▶ Consumer (process, ACK immediately)
-  
+
   If consumer crashes after ACK but before processing:
   → Message is LOST
 
@@ -463,7 +463,7 @@ def consume_at_most_once(message):
 def consume_at_least_once(message):
     # Process first
     process_message(message)
-    
+
     # ACK after processing — if we crash before ACK, message redelivers
     kafka_consumer.commit()
 
@@ -478,7 +478,7 @@ def process_message(message):
 
 ```
   Producer ──▶ Queue ──▶ Consumer (process, then ACK)
-  
+
   If consumer crashes after processing but before ACK:
   → Queue redelivers → Message is DUPLICATED
 
@@ -497,14 +497,14 @@ def consume_exactly_once(message):
     """Process + commit atomically via Kafka transactions."""
     # Start transaction
     producer.begin_transaction()
-    
+
     try:
         # Process message
         result = process_message(message)
-        
+
         # Produce output to another topic (within transaction)
         producer.produce("output-topic", value=json.dumps(result))
-        
+
         # Commit transaction (atomic: process + produce + offset commit)
         producer.commit_transaction(offsets)
     except KafkaException:
@@ -537,10 +537,10 @@ from typing import Callable
 @dataclass
 class DLQConsumer:
     """Consumer with retry logic and dead letter queue."""
-    
+
     max_retries: int = 3
     dlq_topic: str = "dead-letter-queue"
-    
+
     def consume(self, message: dict, handler: Callable):
         for attempt in range(self.max_retries):
             try:
@@ -550,10 +550,10 @@ class DLQConsumer:
                 wait_time = 2 ** attempt  # Exponential backoff
                 print(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s")
                 time.sleep(wait_time)
-        
+
         # All retries exhausted → send to DLQ
         self._send_to_dlq(message, "Max retries exceeded")
-    
+
     def _send_to_dlq(self, message: dict, reason: str):
         dlq_message = {
             "original_message": message,

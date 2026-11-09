@@ -639,4 +639,3 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 ---
 
 *Module 22 of 22 in the System Design Playground*
-

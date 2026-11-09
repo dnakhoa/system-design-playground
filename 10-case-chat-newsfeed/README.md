@@ -131,7 +131,7 @@ The connection layer is the most critical component. Each user maintains a persi
 
 ```
   Challenge: Multiple messages from Alice may arrive out of order
-  
+
   Solution: Sequence numbers per conversation
 
   Chat 123:

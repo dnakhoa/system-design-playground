@@ -694,7 +694,7 @@ Inject remaining budget into the agent's prompt for self-regulation.
   while spent < budget:
       response = llm_call(prompt, ...)
       spent += response.usage.total_tokens
-      
+
       if spent > budget * 0.8:
           log("80% budget consumed — wrapping up")
 ```
@@ -967,4 +967,3 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 ---
 
 *Module 20 of 22 in the System Design Playground*
-
