@@ -617,47 +617,19 @@ X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1704067230
 ```
 
-### Implementation Patterns
+### Implementation
 
-**Token Bucket:**
-- Tokens added at a fixed rate up to a bucket capacity
-- Each request consumes one token
-- Allows bursts up to bucket size
+Algorithms and their trade-offs are in
+[Module 04](../04-load-balancing/README.md#rate-limiting). What belongs to
+**API design** is the contract around them:
 
-**Sliding Window:**
-- Counts requests in a rolling time window
-- More precise than fixed windows
-- Higher memory cost (store timestamps per user)
-
-```python
-import time
-
-class SlidingWindowRateLimiter:
-    def __init__(self, max_requests: int, window_seconds: int):
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        self.requests: dict[str, list[float]] = {}
-
-    def allow(self, key: str) -> tuple[bool, dict]:
-        now = time.time()
-        window_start = now - self.window_seconds
-
-        if key not in self.requests:
-            self.requests[key] = []
-
-        self.requests[key] = [
-            ts for ts in self.requests[key] if ts > window_start
-        ]
-
-        remaining = self.max_requests - len(self.requests[key])
-
-        if remaining > 0:
-            self.requests[key].append(now)
-            return True, {"remaining": remaining, "reset": window_start + self.window_seconds}
-
-        reset_at = self.requests[key][0] + self.window_seconds
-        return False, {"remaining": 0, "reset": reset_at}
-```
+| Decision | Recommendation |
+|----------|----------------|
+| What to key on | The API key or authenticated principal, not the IP — many legitimate clients share an IP behind NAT |
+| What to count | Weight by cost if endpoints differ wildly: a search can count as 10 units, a `GET` by ID as 1 |
+| What to return on limit | `429` with `Retry-After` and `X-RateLimit-Reset` — never `503`, which tells clients the server is broken |
+| What to return on success | `X-RateLimit-Remaining` on every response, so clients can slow down *before* they hit the wall |
+| How to document it | Publish the limits per tier and endpoint; an undocumented limit looks like a bug to the integrator who hits it |
 
 ### Retry Logic
 

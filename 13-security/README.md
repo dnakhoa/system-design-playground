@@ -167,7 +167,7 @@ def login(stored_hash: str, password: str) -> tuple[bool, str | None]:
 > **Do not hand-roll this.** Every line you write here is a line that can
 > silently disable the protection — a reused salt, a truncated input, a
 > timing leak. Use the platform's password-hashing library and spend your
-> attention on rate limiting the login endpoint (see Common Mistakes) and on
+> attention on [rate limiting the login endpoint](#rate-limiting-as-a-security-control) and on
 > supporting a second factor, which protects users whose passwords were
 > already leaked somewhere else.
 
@@ -518,58 +518,33 @@ at the point of use.
 
 ## 4. API Security
 
-### Rate Limiting Strategies
+### Rate Limiting as a Security Control
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Strategy         │  Implementation      │  Use Case            │
-├───────────────────┼──────────────────────┼───────────────────── ┤
-│  Fixed Window     │  Counter per hour    │  Simple APIs         │
-│  Sliding Window   │  Timestamps per min  │  Smooth traffic      │
-│  Token Bucket     │  Tokens + refill     │  Bursty traffic      │
-│  Leaky Bucket     │  Queue + fixed rate  │  Constant output     │
-└─────────────────────────────────────────────────────────────────┘
-```
+The algorithms are covered in
+[Module 04](../04-load-balancing/README.md#rate-limiting). For load
+protection the question is "how much traffic?"; for security it is **"what
+is the attacker counting on?"** — and the answer changes what you key the
+limit on.
 
-```python
-import time
-from collections import defaultdict
-from functools import wraps
+| Attack | What it relies on | Limit keyed on |
+|--------|-------------------|----------------|
+| Password brute force | Many guesses against **one account** | Per **account**, not per IP — the attacker can rotate IPs freely |
+| Credential stuffing | One guess each against **many accounts**, from a botnet | Per-IP *and* a global failed-login rate; alert on a spike in failures across accounts |
+| Account / email enumeration | Different responses for "no such user" vs "wrong password" | Fix the response first (identical message and timing); then rate-limit |
+| SMS / email bombing | Your "send code" endpoint costs you money per call | Per **phone number / address** and per account, with a low daily cap |
+| Expensive-endpoint DoS | Search, export, or report endpoints cost far more than they look | Per-endpoint limits sized by cost, not one global limit |
 
-class SlidingWindowRateLimiter:
-    """Sliding window rate limiter using Redis-style storage."""
+**Three rules that matter more than the algorithm:**
 
-    def __init__(self, max_requests: int, window_seconds: int):
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        self.requests: dict[str, list[float]] = defaultdict(list)
-
-    def is_allowed(self, key: str) -> bool:
-        now = time.time()
-        window_start = now - self.window_seconds
-
-        # Remove expired requests
-        self.requests[key] = [
-            ts for ts in self.requests[key] if ts > window_start
-        ]
-
-        if len(self.requests[key]) >= self.max_requests:
-            return False
-
-        self.requests[key].append(now)
-        return True
-
-# Usage
-limiter = SlidingWindowRateLimiter(max_requests=100, window_seconds=60)
-
-def rate_limit(func):
-    @wraps(func)
-    def wrapper(request_key: str, *args, **kwargs):
-        if not limiter.is_allowed(request_key):
-            raise Exception("Rate limit exceeded")
-        return func(request_key, *args, **kwargs)
-    return wrapper
-```
+- **Use an exact limiter for small security limits.** "5 attempts per 15
+  minutes" should use a sliding window *log*: with a limit that low, the
+  counter approximation's error is a meaningful share of the budget.
+- **Lock out gradually, not permanently.** A hard lock after N failures lets
+  anyone lock out any user by guessing wrong on purpose. Use increasing
+  delays, or require a CAPTCHA, instead of disabling the account.
+- **Rate-limit before the expensive work.** If the limiter runs after the
+  password hash comparison, an attacker still makes you compute every
+  bcrypt/argon2 hash. Check the limit first.
 
 ### CORS Configuration
 

@@ -477,12 +477,27 @@ limiter = SlidingWindow(limit=100, window_seconds=60)
 
 ### Algorithm Comparison
 
-| Algorithm | Burst Handling | Memory | Accuracy | Use Case |
-|-----------|---------------|--------|----------|----------|
+| Algorithm | Burst Handling | Memory per client | Accuracy | Use Case |
+|-----------|---------------|-------------------|----------|----------|
 | Token Bucket | Allows controlled bursts | O(1) | High | API rate limiting |
 | Leaky Bucket | Smooths bursts | O(n) queue | High | Traffic shaping |
 | Fixed Window | Boundary burst risk | O(1) | Low | Simple limits |
-| Sliding Window | No boundary issues | O(n) | High | Precise limiting |
+| Sliding Window Counter (above) | Approximates away the boundary | O(1) — two counters | High (approximate) | Default for precise limits |
+| Sliding Window Log | No boundary issues | O(n) — one timestamp per request | Exact | Low limits where exactness matters (e.g. 5 login attempts) |
+
+**Sliding window log** is the exact variant: keep every request timestamp,
+drop those older than the window, and allow the request if fewer than
+`limit` remain. It is simple and exact, but memory grows with the limit —
+100,000 requests/hour means storing up to 100,000 timestamps per client.
+That is fine for a limit of 5 login attempts and wasteful for a limit of
+10,000 API calls, which is why the counter approximation above is the
+usual default. In Redis the log is a sorted set: `ZREMRANGEBYSCORE` to drop
+old entries, `ZCARD` to count, `ZADD` to record, inside one Lua script.
+
+> **Other modules apply these algorithms rather than re-implement them:**
+> Module 09 designs a distributed limiter around them, Module 13 covers
+> rate limiting as a security control, and Module 14 covers the HTTP
+> contract (`429`, `Retry-After`, `X-RateLimit-*`).
 
 ### Distributed Rate Limiting
 

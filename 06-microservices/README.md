@@ -492,69 +492,45 @@ def call_order_service():
 
 ## API Versioning
 
-```python
-# --- URL Versioning (simplest, most explicit) ---
-# GET /api/v1/users
-# GET /api/v2/users
+Versioning *strategies* — URL, header, content negotiation, deprecation
+lifecycles — are covered in
+[Module 14](../14-api-design/README.md#4-api-versioning-strategies). Between
+your own microservices the problem is different, and in some ways harder:
+there is no "v2 release day". Services deploy independently, so for some
+window **old and new versions of a service run side by side**, talking to
+old and new versions of their callers.
 
-from fastapi import FastAPI, APIRouter
-
-app = FastAPI()
-
-# v1 router
-v1 = APIRouter(prefix="/api/v1")
-@v1.get("/users")
-def get_users_v1():
-    return {"users": [{"id": 1, "name": "Alice"}]}
-
-# v2 router (breaking change: different response format)
-v2 = APIRouter(prefix="/api/v2")
-@v2.get("/users")
-def get_users_v2():
-    return {"data": [{"id": 1, "name": "Alice", "email": "alice@example.com"}]}
-
-app.include_router(v1)
-app.include_router(v2)
-
-# --- Header Versioning ---
-# Accept: application/vnd.myapp.v2+json
-
-@app.get("/users-header")
-def get_users_header(accept: str = Header(default="application/vnd.myapp.v1+json")):
-    if "v2" in accept:
-        return {"data": [...]}  # v2 format
-    return {"users": [...]}  # v1 format
-
-# --- Content Negotiation ---
-# GET /api/users
-# Accept: application/json; version=2
-
-@app.get("/users-negotiate")
-def get_users_negotiate(accept: str = Header(default="application/json")):
-    version = 2 if "version=2" in accept else 1
-    if version == 2:
-        return {"data": [...]}
-    return {"users": [...]}
-```
+### The Rule: Every Change Must Survive Mixed Versions
 
 ```
-  URL Versioning:
-  /api/v1/users
-  /api/v2/users
-  ✓ Simple, explicit
-  ✗ URL pollution
+  Deploy timeline for a field rename (customer_name → full_name)
 
-  Header Versioning:
-  Accept: application/vnd.myapp.v2+json
-  ✓ Clean URLs
-  ✗ Less discoverable
+  WRONG — one step                RIGHT — expand, migrate, contract
+  ─────────────────────           ──────────────────────────────────
+  deploy producer: sends          1. producer sends BOTH fields
+    only full_name                2. deploy every consumer to read
+  consumers still read               full_name (fall back to
+    customer_name → null            customer_name if absent)
+  → outage until every            3. confirm no consumer reads the
+    consumer is redeployed           old field (logs / contract tests)
+                                  4. producer stops sending the old one
 
-  Content Negotiation:
-  GET /api/users
-  Accept: application/json; version=2
-  ✓ RESTful
-  ✗ Complex implementation
+  Each step is safe to deploy, and safe to roll back, on its own.
 ```
+
+### Three Practices That Make This Routine
+
+| Practice | What it means | Why it matters |
+|----------|---------------|----------------|
+| **Tolerant reader** | Consumers ignore fields they don't recognise and treat optional fields as optional | A producer can add a field without coordinating with anyone |
+| **Consumer-driven contract tests** | Each consumer publishes the fields it actually depends on; the producer's CI fails if a change would break one (e.g. Pact) | You learn about a breaking change in the producer's PR, not in production |
+| **Schema registry for events** | Event schemas are versioned centrally and checked for compatibility on publish (Module 05) | Events outlive deployments — a consumer may replay a message written months ago |
+
+**What counts as breaking** is narrower than it seems: adding an optional
+field, adding an endpoint, or adding an enum value a tolerant reader ignores
+are all safe. Removing or renaming a field, tightening validation, changing
+a type, or changing a field's *meaning* while keeping its name are not — and
+the last one is the one no tooling catches.
 
 ---
 
