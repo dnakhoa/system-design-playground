@@ -275,32 +275,18 @@ Click analytics are written asynchronously to avoid blocking the redirect.
   └───────────────────────────────────────────────────────┘
 ```
 
-### Token Bucket Implementation
+### Algorithm Choice
 
-```python
-import time
+The algorithms themselves — token bucket, leaky bucket, fixed and sliding
+windows, with implementations and a comparison table — are in
+[Module 04](../04-load-balancing/README.md#rate-limiting). This design uses a
+**token bucket** (`capacity` = burst size, `refill_rate` = sustained limit),
+because the requirement is to tolerate short bursts while enforcing an
+average rate.
 
-class TokenBucket:
-    def __init__(self, capacity, refill_rate):
-        self.capacity = capacity
-        self.tokens = capacity
-        self.refill_rate = refill_rate  # tokens per second
-        self.last_refill = time.time()
-
-    def allow(self):
-        now = time.time()
-        elapsed = now - self.last_refill
-        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
-        self.last_refill = now
-
-        if self.tokens >= 1:
-            self.tokens -= 1
-            return True
-        return False
-
-# Usage: 100 requests/minute, burst of 10
-limiter = TokenBucket(capacity=10, refill_rate=100/60)
-```
+The design problem here is not the algorithm, which fits in twenty lines.
+It is **where the bucket's state lives** when ten API servers all handle
+the same client.
 
 ### Distributed Rate Limiting with Redis
 

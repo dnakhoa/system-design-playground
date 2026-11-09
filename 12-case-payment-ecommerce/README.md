@@ -539,6 +539,7 @@ Design a daily reconciliation system:
 |---------|---------------|-------------------|
 | **Generating the idempotency key server-side** | A retry arrives with a fresh key, misses dedup, and charges twice — defeating the entire mechanism | The client mints a key that is stable across retries of one intent |
 | **Check-then-set for idempotency** | Two concurrent retries both pass the check and both charge | Atomic claim (`SET NX`) *before* calling the gateway |
+| **Updating the payment, then publishing "PaymentCompleted" separately** | A crash in between leaves a captured payment that the order service never hears about — the customer is charged and the order never ships | Transactional outbox ([Module 05](../05-async-systems/README.md#the-dual-write-problem-outbox-and-cdc)): the status change and the event commit together |
 | **Storing money as a float** | `0.1 + 0.2 != 0.3`; rounding errors accumulate into real losses | Integer minor units (cents) or exact `DECIMAL` |
 | **Trusting the client's amount** | Anyone can post `{"amount": 1}` for a $1,000 order | Recompute the total server-side from authoritative prices |
 | **No reconciliation** | A charge that succeeds at the gateway but fails to record locally is invisible until the customer complains | Daily gateway-vs-ledger comparison with an explicit repair path |

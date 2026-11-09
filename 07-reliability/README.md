@@ -28,14 +28,15 @@
 2. [Circuit Breaker Pattern](#circuit-breaker-pattern)
 3. [Retry Strategies](#retry-strategies)
 4. [Timeout Design](#timeout-design)
-5. [Disaster Recovery](#disaster-recovery)
-6. [SLOs, SLAs, and Error Budgets](#slos-slas-and-error-budgets)
-7. [Chaos Engineering](#chaos-engineering)
-8. [Case Study: Google's Reliability Engineering](#case-study-googles-reliability-engineering)
-9. [Key References](#key-references)
-10. [Practice Exercise](#practice-exercise)
-11. [Common Mistakes](#common-mistakes)
-12. [Discussion Questions](#discussion-questions)
+5. [Overload: Backpressure, Load Shedding, and Bulkheads](#overload-backpressure-load-shedding-and-bulkheads)
+6. [Disaster Recovery](#disaster-recovery)
+7. [SLOs, SLAs, and Error Budgets](#slos-slas-and-error-budgets)
+8. [Chaos Engineering](#chaos-engineering)
+9. [Case Study: Google's Reliability Engineering](#case-study-googles-reliability-engineering)
+10. [Key References](#key-references)
+11. [Practice Exercise](#practice-exercise)
+12. [Common Mistakes](#common-mistakes)
+13. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -512,6 +513,128 @@ def call_service_b(request, deadline: Deadline):
 
 ---
 
+## Overload: Backpressure, Load Shedding, and Bulkheads
+
+Circuit breakers protect you from a *failing* dependency. Timeouts protect
+you from a *slow* one. Neither protects you from the most ordinary failure
+of all: **more traffic than you can serve.**
+
+### Why Overload Collapses Instead of Degrading
+
+The intuition is that a service at 110% of capacity serves 100% and drops
+10%. What actually happens is closer to serving 0%.
+
+Queueing theory says why. For a simple single-server queue, the average
+time a request waits *before* being served grows as `ρ / (1 − ρ)` service
+times, where ρ is utilisation:
+
+```
+  Utilisation   Wait in queue (× service time)
+     50%          1×    ▏
+     80%          4×    ████
+     90%          9×    █████████
+     95%         19×    ███████████████████
+     99%         99×    ███████████████████████████████████████… (off the chart)
+```
+
+Latency doesn't rise gently as you approach capacity — it goes vertical.
+Then the collapse feeds itself:
+
+```
+  queue grows ──▶ latency exceeds client timeout ──▶ clients give up
+       ▲                                                   │
+       │                                                   ▼
+  server still works on   ◀── clients RETRY, adding ◀── server keeps
+  requests nobody awaits       more load                processing them
+```
+
+The server stays 100% busy producing responses no one is waiting for.
+Throughput looks fine on a dashboard; **goodput** — useful work completed
+in time — is near zero.
+
+**Little's Law** gives the sizing arithmetic: requests in flight =
+throughput × latency. At 1,000 req/s and 200 ms, a service holds 200
+concurrent requests. If a dependency slows to 2 s, the same traffic needs
+2,000 — and a 500-thread pool is now exhausted by one slow dependency.
+
+### Three Defences
+
+**1. Backpressure — bounded queues, fast rejection.** Never queue without a
+limit. When the queue is full, reject immediately with `503` and a
+`Retry-After`. A fast "no" lets the client back off or try elsewhere; a slow
+timeout wastes its time and yours.
+
+**2. Load shedding — drop the least valuable work first.** When you must
+reject, choose what. Shed in priority order, as close to the edge as
+possible so rejected work costs almost nothing:
+
+| Drop first | Drop last |
+|------------|-----------|
+| Prefetches, analytics, recommendations | Checkout, payment, login |
+| Free tier | Paid tier |
+| Requests whose deadline has already passed (see deadline propagation above) | Requests with time left to succeed |
+| Retries | First attempts |
+
+That third row is free wins: a request whose client has already given up
+should be dropped from the queue, not processed.
+
+**3. Bulkheads — isolate resources per dependency.** Named after a ship's
+watertight compartments: one flooded section doesn't sink the ship. Give
+each downstream dependency its own capped pool, so a slow one exhausts only
+its own slots:
+
+```
+  ONE SHARED POOL (200 threads)          BULKHEADS
+  ─────────────────────────────          ──────────────────────────
+  payments slows to 10 s                 payments slows to 10 s
+  → all 200 threads wait on payments     → its 50 slots fill; extra
+  → search, profile, cart: no threads      payment calls fail fast
+  → whole service down                   → search, profile, cart
+                                           unaffected
+```
+
+```python
+import threading
+
+
+class Overloaded(Exception):
+    """Raised instead of queueing when a dependency is at capacity."""
+
+
+class Bulkhead:
+    """Cap concurrent calls to one dependency; reject rather than wait."""
+
+    def __init__(self, name: str, max_concurrent: int):
+        self.name = name
+        self._slots = threading.BoundedSemaphore(max_concurrent)
+
+    def call(self, fn, *args, **kwargs):
+        # Non-blocking acquire: waiting for a slot IS an unbounded queue.
+        if not self._slots.acquire(blocking=False):
+            raise Overloaded(f"{self.name}: at capacity, shedding request")
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            self._slots.release()
+
+
+# One bulkhead per dependency, sized from Little's Law:
+# expected throughput × acceptable latency, plus headroom.
+payments = Bulkhead("payments", max_concurrent=50)
+search = Bulkhead("search", max_concurrent=100)
+```
+
+### Fixed vs Adaptive Limits
+
+A fixed limit is a guess, and it goes stale as hardware, code, and traffic
+change. **Adaptive concurrency limits** borrow from TCP congestion control:
+raise the limit while latency holds steady, cut it sharply when latency
+rises. Netflix's open-source `concurrency-limits` library implements this.
+Start with fixed limits sized by Little's Law; move to adaptive ones once
+you can observe latency per dependency reliably (Module 15).
+
+---
+
 ## Disaster Recovery
 
 ### RPO and RTO
@@ -786,6 +909,8 @@ Google's SRE practices are the gold standard for reliability engineering.
 | **Retrying without a circuit breaker** | Retries add load exactly when the dependency needs less | Breaker opens after N failures and sheds load until it recovers |
 | **Timeouts that increase downstream** | The caller gives up while everything below keeps burning capacity on a response nobody reads | Timeouts strictly decrease downstream; propagate a deadline |
 | **No timeout at all** | One hung dependency exhausts the connection pool and takes the service with it | Every network call gets an explicit timeout — no exceptions |
+| **Unbounded queues** | Past capacity, latency goes vertical; the server works on requests clients abandoned, and goodput falls to near zero | Bound every queue; reject fast with `503` + `Retry-After`; shed low-priority work first |
+| **One shared pool for every dependency** | One slow dependency holds every thread, so unrelated features fail too | Bulkheads: a capped pool per dependency |
 | **SLOs at 100%** | It leaves no error budget, so all change becomes unshippable | Pick a target users actually notice; spend the difference on velocity |
 | **SLIs measured server-side only** | You miss DNS, TLS, and network failures — the ones users see | Measure client-side or at the edge |
 | **Untested backups** | A backup you've never restored is a hypothesis, not a recovery plan | Restore drills on a schedule; measure against your RTO |

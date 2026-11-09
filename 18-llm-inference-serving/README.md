@@ -32,7 +32,7 @@
 6. [Speculative Decoding](#speculative-decoding)
 7. [Model Parallelism](#model-parallelism)
 8. [GPU Cluster Design](#gpu-cluster-design)
-9. [Case Study: How OpenAI Serves GPT-4](#case-study-how-openai-serves-gpt-4)
+9. [Case Study: Character.AI's Inference Costs](#case-study-characterais-inference-costs)
 10. [Framework Comparison](#framework-comparison)
 11. [Key References](#key-references)
 12. [Practice Exercise](#practice-exercise)
@@ -539,20 +539,69 @@ Split model into stages across GPUs.
 
 ---
 
-## Case Study: How OpenAI Serves GPT-4
+## Case Study: Character.AI's Inference Costs
 
-### Key Design Decisions
+Most "how company X serves LLMs" write-ups are guesses; the large API
+providers have not published their serving architectures. Character.AI is
+a useful exception: it runs its own models for a consumer chat product and
+published the results in June 2024.
 
-1. **Massive GPU clusters**: Tens of thousands of GPUs across multiple data centers. Custom networking (InfiniBand) for tensor parallelism.
+### What They Reported
 
-2. **KV cache optimization**: Custom implementation beyond PagedAttention. Prefix caching for system prompts shared across millions of requests.
+From the company's own announcement:
 
-3. **Model routing**: Different models for different use cases. GPT-4o for general use, o1/o3 for reasoning, GPT-4o-mini for cost-sensitive workloads.
+| Metric | Reported value |
+|--------|----------------|
+| Traffic | ~20,000 inference queries per second |
+| Unit cost | Under one cent per hour of conversation |
+| Cost trend | At least **33× cheaper** to serve than at launch in 2022 |
+| Versus buying | 13.5× less than serving the same traffic through leading commercial APIs |
 
-4. **Speculative decoding**: Draft models for faster time-to-first-token. Critical for chat UX.
+They attributed the gains to two things: **changes to the Transformer
+architecture that shrink the attention KV cache**, and **better inter-turn
+caching**.
 
-5. **Global load balancing**: Requests routed to the least-loaded data center. Automatic failover if a data center goes down.
+### Why Those Two Levers — Connecting It to This Module
 
+Both target the bottleneck this module opened with: serving is bound by
+KV-cache memory, not compute.
+
+**1. A smaller KV cache per token means more concurrent conversations per GPU.**
+The cache size per token is:
+
+```
+  KV bytes per token = 2 (K and V) × layers × KV heads × head dim × bytes/value
+
+  LLaMA-13B, FP16: 2 × 40 × 40 × 128 × 2 B ≈ 0.8 MB per token
+                   → ~1.7 GB for a 2K context, matching the figure above
+```
+
+Architecture changes that cut any of those terms — fewer KV heads shared across query heads, attention limited
+to a local window in some layers, KV shared across layers — shrink the
+cache linearly. Halve the cache and, at the same context length, roughly
+double the batch you can fit, which is close to halving cost per token in a
+memory-bound system.
+
+**2. Chat is the best case for caching across turns.** Each new message
+re-sends the whole conversation. Without caching, turn 20 re-runs prefill
+over turns 1-19 every time. Keeping a conversation's KV cache between turns
+— on the GPU, in host memory, or on local disk, as in the offloading tiers
+above — turns that repeated prefill into a lookup. It also needs routing
+that sends a conversation back to the replica that holds its cache, which
+is consistent hashing (Module 04) applied to GPU state.
+
+### The Transferable Lessons
+
+| Lesson | Why it generalises |
+|--------|--------------------|
+| **Owning the model changes the cost curve** | Architecture changes to the KV cache are only available if you train the model. API customers can still use prefix caching, but not this |
+| **Workload shape decides the optimisation** | Long multi-turn chat rewards inter-turn caching; one-shot batch summarisation would get nothing from it |
+| **Measure in the unit the business sells** | "Cost per hour of conversation" is what makes a consumer product viable; cost per token is an engineering proxy for it |
+
+> **Reading vendor numbers critically.** These are self-reported figures from
+> a company describing its own advantage, with no independent benchmark. They
+> are useful as an order of magnitude and as evidence of *which* levers
+> matter, not as targets to plan against.
 ---
 
 ## Framework Comparison
@@ -587,6 +636,7 @@ the compilation and operational cost.
 | vLLM Disaggregated Prefill/Decode (Blog) | Blog | KV-transfer connectors (NIXL, Mooncake) |
 | SGLang Disaggregation Benchmarks | Blog | Prefill/decode pool scaling results |
 | SemiAnalysis InferenceX Benchmarks (2026) | Benchmark | Cross-hardware inference cost/throughput |
+| [Optimizing AI Inference at Character.AI](https://blog.character.ai/optimizing-ai-inference-at-character-ai/) (2024) | Blog | Self-reported serving cost, KV-cache and inter-turn caching levers |
 
 ---
 

@@ -26,16 +26,17 @@
 
 1. [SQL vs NoSQL: The Decision Matrix](#sql-vs-nosql-the-decision-matrix)
 2. [Indexing Strategies](#indexing-strategies)
-3. [Sharding Strategies](#sharding-strategies)
-4. [Replication Strategies](#replication-strategies)
-5. [ACID vs BASE](#acid-vs-base)
-6. [NewSQL: When You Need Both](#newsql-when-you-need-both)
-7. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
-8. [Data Modeling Patterns](#data-modeling-patterns)
-9. [Key References](#key-references)
-10. [Practice Exercise](#practice-exercise)
-11. [Common Mistakes](#common-mistakes)
-12. [Discussion Questions](#discussion-questions)
+3. [Storage Engines: B-Tree vs LSM-Tree](#storage-engines-b-tree-vs-lsm-tree)
+4. [Sharding Strategies](#sharding-strategies)
+5. [Replication Strategies](#replication-strategies)
+6. [ACID vs BASE](#acid-vs-base)
+7. [NewSQL: When You Need Both](#newsql-when-you-need-both)
+8. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
+9. [Data Modeling Patterns](#data-modeling-patterns)
+10. [Key References](#key-references)
+11. [Practice Exercise](#practice-exercise)
+12. [Common Mistakes](#common-mistakes)
+13. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -142,6 +143,148 @@ Indexes speed up reads at the cost of write performance and storage.
 | **Write speed** | Slower (must update index on every write) |
 | **Storage** | 10-30% more disk space |
 | **Memory** | Indexes must fit in memory for best performance |
+
+---
+
+## Storage Engines: B-Tree vs LSM-Tree
+
+"Cassandra is write-optimized" and "Postgres is read-optimized" are
+shorthand for a real difference in how each lays data out on disk. The
+storage engine, not the query language, is what decides write throughput.
+
+### B-Tree: Update in Place
+
+The B-tree from the indexing section above *is* the table storage in
+Postgres, MySQL (InnoDB), and most relational databases. Data lives in
+fixed-size pages (8 KB in Postgres, 16 KB in InnoDB) and a write modifies
+the page where the row belongs:
+
+```
+  write row 42 ──▶ WAL (sequential, for crash safety)
+               ──▶ find the page holding row 42 ──▶ rewrite that page
+                    (random I/O: the page could be anywhere on disk)
+```
+
+Reads are predictable: walk the tree, read one leaf page. Writes pay for
+that. Changing 100 bytes can mean writing a whole 8 KB page plus the WAL
+record — and when writes land on random pages, the disk does random I/O.
+
+### LSM-Tree: Append, Then Merge Later
+
+A log-structured merge tree never updates in place. Used by Cassandra,
+ScyllaDB, HBase, RocksDB, and LevelDB — and underneath CockroachDB (Pebble)
+and TiKV (RocksDB):
+
+```
+  WRITE PATH
+  write ──▶ WAL ──▶ memtable (sorted, in memory)
+                        │ when full, flush as one sequential write
+                        ▼
+                    SSTable (immutable, sorted file on disk)
+
+  Over time, disk holds many SSTables, newest first:
+    [SST 7] [SST 6] [SST 5] ... [SST 1]
+         ╲     │     ╱
+          compaction merges them in the background, keeps the
+          newest version of each key, drops deleted ones
+
+  READ PATH for key k
+    memtable? ──▶ SST 7? ──▶ SST 6? ──▶ ... (stop at the first hit)
+```
+
+Every disk write is sequential, which is why LSM engines sustain far higher
+write rates on the same hardware. The cost moves to reads and to background
+work:
+
+| | B-Tree | LSM-Tree |
+|---|---|---|
+| Write path | Random page rewrites | Sequential appends |
+| Write throughput | Lower | Higher — often several times on the same disk |
+| Point read | One tree walk, predictable | May check several SSTables (mitigated by Bloom filters) |
+| Range scan | Excellent — leaves are in key order | Good, but must merge across SSTables |
+| Space overhead | Pages partly empty after splits | Stale versions live until compacted |
+| Latency profile | Steady | Can spike when compaction competes with foreground I/O |
+| Deletes | Remove the row | Write a **tombstone**; space returns only after compaction |
+| Typical fit | Transactional, read-heavy, range queries | Write-heavy: time-series, event logs, messages |
+
+> **Tombstones are the classic LSM production surprise.** A queue-like
+> table where rows are inserted and then deleted leaves a trail of
+> tombstones; reads must skip every one until compaction removes them.
+> Cassandra logs a warning past 1,000 tombstones in one read and aborts
+> the query past 100,000 by default. Model "delete after processing"
+> workloads with time-bucketed partitions you can drop whole, instead.
+
+### Bloom Filters: How LSM Reads Stay Fast
+
+Checking every SSTable for a key that isn't there would make misses slow.
+Each SSTable carries a **Bloom filter**: a small bit array that answers
+"definitely not here" or "probably here". A "definitely not" skips the
+file with no disk read at all.
+
+```python
+import hashlib
+import math
+
+
+class BloomFilter:
+    """Answers "definitely not present" or "probably present"."""
+
+    def __init__(self, expected_items: int, false_positive_rate: float):
+        # Standard sizing: m bits and k hash functions minimise the
+        # false-positive rate for n items.
+        n, p = expected_items, false_positive_rate
+        self.m = math.ceil(-n * math.log(p) / (math.log(2) ** 2))
+        self.k = max(1, round(self.m / n * math.log(2)))
+        self.bits = bytearray(math.ceil(self.m / 8))
+
+    def _positions(self, key: str):
+        # Double hashing: derive k positions from two independent hashes.
+        digest = hashlib.sha256(key.encode()).digest()
+        h1 = int.from_bytes(digest[:8], "big")
+        h2 = int.from_bytes(digest[8:16], "big") | 1
+        return [(h1 + i * h2) % self.m for i in range(self.k)]
+
+    def add(self, key: str) -> None:
+        for pos in self._positions(key):
+            self.bits[pos // 8] |= 1 << (pos % 8)
+
+    def might_contain(self, key: str) -> bool:
+        return all(self.bits[pos // 8] & (1 << (pos % 8))
+                   for pos in self._positions(key))
+
+
+bf = BloomFilter(expected_items=1_000_000, false_positive_rate=0.01)
+print(f"{bf.m:,} bits = {bf.m / 8 / 1024 / 1024:.2f} MB, k = {bf.k}")
+# 9,585,059 bits = 1.14 MB, k = 7
+```
+
+Two properties make it useful:
+
+- **No false negatives.** If it says "not present", that is certain — so
+  skipping the SSTable is always safe.
+- **Tunable false positives at tiny cost.** About 9.6 bits per key gives a
+  1% false-positive rate, whatever the key's size: 1M keys fit in ~1.1 MB.
+  A false positive costs one unnecessary disk read, never a wrong answer.
+
+The same structure appears well beyond storage engines: rejecting requests
+for keys that don't exist before they reach the cache or database
+(Module 03), "have we already crawled this URL?", and "has this user
+already seen this post?".
+
+### Related Approximate Structures
+
+Bloom filters belong to a family that trades exactness for memory that
+stays tiny no matter how much data passes through:
+
+| Structure | Answers | Error | Typical use |
+|-----------|---------|-------|-------------|
+| **Bloom filter** | Is `x` in the set? | False positives only | SSTable lookups, dedup, cache-miss shielding |
+| **HyperLogLog** | How many *distinct* items? | ~0.81% standard error in Redis's 12 KB version | Unique visitors, distinct search queries |
+| **Count-min sketch** | Roughly how often has `x` appeared? | Overestimates only, never under | Heavy hitters, top-K trending, hot-key detection |
+
+Redis ships HyperLogLog natively (`PFADD`, `PFCOUNT`). Counting 100M
+distinct visitors exactly would need gigabytes of IDs; HyperLogLog does it
+in 12 KB, within about 1%.
 
 ---
 

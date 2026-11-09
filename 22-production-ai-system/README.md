@@ -33,7 +33,7 @@
 5. [Observability and Monitoring](#observability-and-monitoring)
 6. [Scaling from Prototype to 100M Users](#scaling-from-prototype-to-100m-users)
 7. [Security Considerations](#security-considerations)
-8. [Case Study: ChatGPT-Scale Architecture](#case-study-chatgpt-scale-architecture)
+8. [Design Sketch: An Assistant at Consumer Scale](#design-sketch-an-assistant-at-consumer-scale)
 9. [Practice Exercises](#practice-exercises)
 10. [Key References](#key-references)
 11. [Common Mistakes](#common-mistakes)
@@ -98,7 +98,7 @@ Route queries to the right model based on complexity. This is the single biggest
 │  ├── Yes → Medium model (70B, $0.01/query)                │
 │  │                                                        │
 │  Complex query? (reasoning, math, multi-step)             │
-│  ├── Yes → Reasoning model (o3, $0.10/query)              │
+│  ├── Yes → Reasoning model (frontier, $0.10/query)        │
 │  │                                                        │
 │  Unknown complexity?                                      │
 │  ├── Start with small model                               │
@@ -120,7 +120,9 @@ Route queries to the right model based on complexity. This is the single biggest
 ### Cost Impact
 
 ```
-  Without routing (all queries → GPT-4):
+  Illustrative prices — check your provider's current rates.
+
+  Without routing (all queries → frontier model):
   1M queries/day × $0.03/query = $30,000/day = $900K/month
 
   With routing (70% small, 25% medium, 5% reasoning):
@@ -485,19 +487,31 @@ By 2026 the "Observability (OpenTelemetry)" box above has an actual standard to 
 
 ---
 
-## Case Study: ChatGPT-Scale Architecture
+## Design Sketch: An Assistant at Consumer Scale
 
-### OpenAI's Design Decisions
+> **This is a reasoned design, not a description of any company's system.**
+> The large assistant providers have not published their serving
+> architectures. Treat each decision below as an inference from the
+> constraints — exactly the reasoning you'd be expected to produce in a
+> design review — and check it against the published material in
+> [Module 18's case study](../18-llm-inference-serving/README.md) and the
+> references below.
 
-1. **Massive GPU clusters**: Tens of thousands of GPUs. Custom networking for tensor parallelism.
+Assume 100M weekly users, chat plus tool use, a mix of free and paid tiers.
+The constraints drive the design:
 
-2. **Multi-model routing**: GPT-4o for general use, o1/o3 for reasoning, GPT-4o-mini for cost-sensitive workloads.
+| Constraint | Decision it forces |
+|------------|--------------------|
+| GPU capacity is the scarcest and most expensive resource | Route aggressively: most turns go to a small model; a reasoning-tier model only when a classifier or a failed first attempt says it's needed |
+| Every conversation re-sends its history | Cache the KV state of earlier turns between requests (Module 18), so turn 20 doesn't re-run prefill over turns 1-19 |
+| Long system prompts are identical across millions of requests | Prefix caching on the shared system prompt — computed once per replica, not once per request |
+| Demand spikes with news and product launches | Degrade by tier rather than fail: queue or downgrade free-tier traffic before touching paid traffic (load shedding, Module 07) |
+| Unsafe output is a product-level incident | Guardrails on both input and output, with a separate policy model, not instructions in the main prompt (this module, above) |
+| Model behaviour changes are the riskiest deploys | Ship model and prompt changes behind flags to a small cohort, gated on offline evals first (Module 21) |
 
-3. **Global edge caching**: System prompts and common completions cached at edge locations.
-
-4. **Content policy enforcement**: Multi-layer safety system (input filtering, output filtering, policy engine).
-
-5. **A/B testing at scale**: Every feature change is A/B tested on a subset of users before full rollout.
+**What the sketch deliberately does not claim:** cluster sizes, specific
+model names per tier, or where caches live geographically. Those depend on
+numbers no outsider has, and a design that asserts them is guessing.
 
 ---
 
@@ -520,7 +534,7 @@ Your AI system costs $50K/month. Break down:
 - 30% are medium (need 70B model)
 - 10% are complex (need reasoning model)
 
-Currently all queries go to GPT-4 ($0.03/query). Design a routing strategy and calculate savings.
+Currently all queries go to a frontier model ($0.03/query). Design a routing strategy and calculate savings.
 
 ### Exercise 3: Guardrails Design (20 min)
 
