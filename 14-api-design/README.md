@@ -847,8 +847,8 @@ Several possibilities: (1) The rate limit configuration is too restrictive for t
 
 ## 11. Key References
 
-- **REST**: [RFC 7231 — HTTP/1.1 Semantics](https://tools.ietf.org/html/rfc7231), Roy Fielding's [dissertation](https://www.ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm)
-- **gRPC**: [grpc.io documentation](https://grpc.io/docs/), [Protocol Buffers Language Guide](https://developers.google.com/protocol-buffers/docs/proto3)
+- **REST**: [RFC 9110 — HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110) (obsoletes RFC 7231), Roy Fielding's [dissertation](https://www.ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm)
+- **gRPC**: [grpc.io documentation](https://grpc.io/docs/), [Protocol Buffers Language Guide (proto3)](https://protobuf.dev/programming-guides/proto3/)
 - **GraphQL**: [graphql.org specification](https://graphql.org/learn/), [Apollo GraphQL docs](https://www.apollographql.com/docs/)
 - **RFC 9457**: [Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457) (obsoletes RFC 7807)
 - **Stripe API**: [stripe.com/docs/api](https://stripe.com/docs/api)

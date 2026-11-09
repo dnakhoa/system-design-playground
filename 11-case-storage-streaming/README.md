@@ -329,18 +329,18 @@ Only changed chunks are transferred, not the entire file.
 
 ```
   Original file: [Chunk A][Chunk B][Chunk C][Chunk D]
-  
+
   User edits Chunk C:
-  
+
   Before: [A][B][C_old][D]
   After:  [A][B][C_new][D]
-  
+
   Delta sync: Only upload C_new (4MB instead of 16MB)
-  
+
   Server stores:
   Version 1: [hash_A][hash_B][hash_C_old][hash_D]
   Version 2: [hash_A][hash_B][hash_C_new][hash_D]
-  
+
   Only hash_C_new is new storage. hash_A, hash_B, hash_D are shared.
 ```
 
@@ -348,15 +348,15 @@ Only changed chunks are transferred, not the entire file.
 
 ```
   Each chunk is identified by its content hash:
-  
+
   chunk_hash = SHA-256(chunk_content)
-  
+
   Deduplication:
   - User A uploads "report.pdf" → chunks [H1, H2, H3]
   - User B uploads same "report.pdf" → chunks [H1, H2, H3]
   - Server already has H1, H2, H3 → skip upload
   - Both users reference same physical chunks
-  
+
   Storage savings: 5-10x for typical workloads
 ```
 
@@ -399,7 +399,7 @@ Only changed chunks are transferred, not the entire file.
   720p/playlist.m3u8
   #EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480
   480p/playlist.m3u8
-  
+
   Quality playlist (1080p/playlist.m3u8):
   #EXTM3U
   #EXTINF:6.0,

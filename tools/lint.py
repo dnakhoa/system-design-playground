@@ -3,7 +3,7 @@
 
     python3 tools/lint.py
 
-Five checks, all of which have caught real defects in this course:
+Six checks, all of which have caught real defects in this course:
 
 1. Python code blocks parse. A missing dot once turned a whole example
    into a SyntaxError that sat in the course unnoticed.
@@ -17,9 +17,13 @@ Five checks, all of which have caught real defects in this course:
 5. Mermaid blocks are well-formed. GitHub renders a broken Mermaid block
    as a red error box, which looks worse than no diagram at all — and
    the failure is invisible until the page is viewed on GitHub.
+6. Whitespace hygiene: no trailing whitespace, every file ends in a
+   newline. Cosmetic, but it turns every later diff into noise.
+   `python3 tools/lint.py --fix` repairs these automatically.
 
 Exits non-zero if anything fails, so it works as a CI step or a
-pre-commit hook.
+pre-commit hook. It runs on every pull request via
+.github/workflows/lint.yml.
 """
 import ast
 import pathlib
@@ -295,7 +299,43 @@ def _mermaid_problems(md, body, offset):
     return problems
 
 
+def _course_files():
+    return [ROOT / "README.md"] + sorted(ROOT.glob("*/README.md"))
+
+
+def _is_hard_break(line, in_fence):
+    """Exactly two trailing spaces in prose is a markdown line break."""
+    return (not in_fence and line.endswith("  ")
+            and not line.endswith("   ") and line.strip() != "")
+
+
+def check_hygiene(fix=False):
+    failures = []
+    for md in _course_files():
+        text = md.read_text()
+        out, in_fence, bad = [], False, 0
+        for line in text.split("\n"):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+            if line != line.rstrip() and not _is_hard_break(line, in_fence):
+                bad += 1
+                line = line.rstrip()
+            out.append(line)
+        fixed = "\n".join(out).rstrip("\n") + "\n"
+        rel = md.relative_to(ROOT)
+        if bad:
+            failures.append(f"{rel}: {bad} line(s) with trailing whitespace")
+        if not text.endswith("\n") or text.endswith("\n\n"):
+            failures.append(f"{rel}: must end with exactly one newline")
+        if fix and fixed != text:
+            md.write_text(fixed)
+    if fix:
+        return len(_course_files()), []
+    return len(_course_files()), failures
+
+
 def main():
+    fix = "--fix" in sys.argv
     ok = True
     for label, (count, failures), noun in (
         ("Python blocks", check_python(), "blocks"),
@@ -303,6 +343,7 @@ def main():
         ("Links", check_links(), "links"),
         ("Anchors", check_anchors(), "anchors"),
         ("Mermaid", check_mermaid(), "blocks"),
+        ("Hygiene", check_hygiene(fix=fix), "files"),
     ):
         if failures:
             ok = False
@@ -315,6 +356,7 @@ def main():
             print(f"ok    {label}: {count} {noun} checked")
     if not ok:
         print("\nlint failed")
+        print("whitespace problems can be fixed with: python3 tools/lint.py --fix")
     return 0 if ok else 1
 
 

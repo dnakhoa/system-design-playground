@@ -171,33 +171,33 @@ from dataclasses import dataclass, field
 @dataclass
 class FencedResource:
     """Resource protected by fencing tokens."""
-    
+
     _last_token: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _data: dict = field(default_factory=dict)
-    
+
     def write(self, token: int, key: str, value: any) -> bool:
         """Write only if token is higher than last seen."""
         with self._lock:
             if token < self._last_token:
                 print(f"REJECTED: token {token} < last token {self._last_token}")
                 return False
-            
+
             self._last_token = token
             self._data[key] = value
             print(f"ACCEPTED: token {token}, wrote {key}={value}")
             return True
-    
+
     def read(self) -> dict:
         return self._data.copy()
 
 @dataclass
 class Leader:
     """Leader with fencing token."""
-    
+
     node_id: str
     fence_token: int = 0
-    
+
     def acquire_lock(self) -> int:
         """Increment token when acquiring lock."""
         self.fence_token += 1
@@ -254,20 +254,20 @@ from typing import List, Tuple
 @dataclass
 class LamportClock:
     """Lamport logical clock for causality ordering."""
-    
+
     counter: int = 0
     process_id: str = ""
-    
+
     def tick(self) -> int:
         """Local event: increment counter."""
         self.counter += 1
         return self.counter
-    
+
     def send(self) -> int:
         """Send message: include current timestamp."""
         self.counter += 1
         return self.counter
-    
+
     def receive(self, received_ts: int) -> int:
         """Receive message: take max(local, received) + 1."""
         self.counter = max(self.counter, received_ts) + 1
@@ -341,27 +341,27 @@ from typing import Dict
 @dataclass
 class VectorClock:
     """Vector clock for tracking causality across processes."""
-    
+
     process_id: str
     clock: Dict[str, int] = field(default_factory=dict)
-    
+
     def tick(self) -> Dict[str, int]:
         """Local event: increment own counter."""
         self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
         return self.clock.copy()
-    
+
     def send(self) -> Dict[str, int]:
         """Send message: include full vector."""
         self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
         return self.clock.copy()
-    
+
     def receive(self, received_clock: Dict[str, int]) -> Dict[str, int]:
         """Receive message: merge vectors (take max of each)."""
         for process, ts in received_clock.items():
             self.clock[process] = max(self.clock.get(process, 0), ts)
         self.clock[self.process_id] = self.clock.get(self.process_id, 0) + 1
         return self.clock.copy()
-    
+
     @staticmethod
     def compare(a: Dict[str, int], b: Dict[str, int]) -> str:
         """Compare two vector clocks.
@@ -369,7 +369,7 @@ class VectorClock:
         """
         a_leq_b = all(a.get(k, 0) <= b.get(k, 0) for k in set(a) | set(b))
         b_leq_a = all(b.get(k, 0) <= a.get(k, 0) for k in set(a) | set(b))
-        
+
         if a_leq_b and b_leq_a:
             return "equal"
         elif a_leq_b:
@@ -481,18 +481,18 @@ from typing import Dict
 @dataclass
 class GCounter:
     """Grow-only counter CRDT. Can only increment."""
-    
+
     node_id: str
     counts: Dict[str, int] = field(default_factory=dict)
-    
+
     def increment(self, amount: int = 1):
         """Increment this node's counter."""
         self.counts[self.node_id] = self.counts.get(self.node_id, 0) + amount
-    
+
     def value(self) -> int:
         """Get total count across all nodes."""
         return sum(self.counts.values())
-    
+
     def merge(self, other: "GCounter"):
         """Merge with another GCounter (take max of each component)."""
         for node, count in other.counts.items():
@@ -537,24 +537,24 @@ print(f"Total: {node_a.value()}")  # 16
 @dataclass
 class PNCounter:
     """Positive-Negative counter CRDT. Can increment and decrement."""
-    
+
     node_id: str
     inc: GCounter = field(default_factory=lambda: GCounter(""))
     dec: GCounter = field(default_factory=lambda: GCounter(""))
-    
+
     def __post_init__(self):
         self.inc = GCounter(node_id=self.node_id)
         self.dec = GCounter(node_id=self.node_id)
-    
+
     def increment(self, amount: int = 1):
         self.inc.increment(amount)
-    
+
     def decrement(self, amount: int = 1):
         self.dec.increment(amount)
-    
+
     def value(self) -> int:
         return self.inc.value() - self.dec.value()
-    
+
     def merge(self, other: "PNCounter"):
         self.inc.merge(other.inc)
         self.dec.merge(other.dec)
@@ -602,16 +602,16 @@ from dataclasses import dataclass
 @dataclass
 class LWWRegister:
     """Last-Writer-Wins register CRDT."""
-    
+
     node_id: str
     value: any = None
     timestamp: float = 0
-    
+
     def set(self, new_value: any):
         """Set value with current timestamp."""
         self.value = new_value
         self.timestamp = time.time() * 1000  # milliseconds
-    
+
     def merge(self, other: "LWWRegister"):
         """Keep the value with the higher timestamp."""
         if other.timestamp > self.timestamp:

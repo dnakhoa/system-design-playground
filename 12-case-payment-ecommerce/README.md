@@ -95,7 +95,7 @@ The most critical property in payment systems. Each payment must be processed ex
   Solution: Idempotency keys
 
   Client sends: { order_id: "123", amount: 99.99, idempotency_key: "abc-123" }
-  
+
   Payment Service:
   1. Check: Has idempotency_key "abc-123" been processed?
   2. No → Process payment, store {key: "abc-123", result: SUCCESS}

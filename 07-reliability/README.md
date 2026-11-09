@@ -120,31 +120,31 @@ class CircuitOpenError(Exception):
 @dataclass
 class CircuitBreaker:
     """Circuit breaker with configurable thresholds and timeouts."""
-    
+
     failure_threshold: int = 5       # Failures before opening
     recovery_timeout: int = 30       # Seconds before trying again
     half_open_max_calls: int = 1     # Probe calls in HALF_OPEN state
-    
+
     state: CircuitState = CircuitState.CLOSED
     failure_count: int = 0
     success_count: int = 0
     last_failure_time: float = 0
     half_open_calls: int = 0
-    
+
     def call(self, func: Callable, *args, **kwargs) -> Any:
         """Execute function through the circuit breaker."""
         self._check_state()
-        
+
         if self.state == CircuitState.OPEN:
             raise CircuitOpenError(
                 f"Circuit is OPEN. Retry after {self._time_until_half_open():.0f}s"
             )
-        
+
         if self.state == CircuitState.HALF_OPEN:
             if self.half_open_calls >= self.half_open_max_calls:
                 raise CircuitOpenError("Circuit HALF_OPEN: max probe calls reached")
             self.half_open_calls += 1
-        
+
         try:
             result = func(*args, **kwargs)
             self._on_success()
@@ -152,14 +152,14 @@ class CircuitBreaker:
         except Exception as e:
             self._on_failure()
             raise
-    
+
     def _check_state(self):
         """Transition to HALF_OPEN if recovery timeout elapsed."""
         if self.state == CircuitState.OPEN:
             if time.time() - self.last_failure_time >= self.recovery_timeout:
                 self.state = CircuitState.HALF_OPEN
                 self.half_open_calls = 0
-    
+
     def _on_success(self):
         if self.state == CircuitState.HALF_OPEN:
             # Recovery successful → close circuit
@@ -168,18 +168,18 @@ class CircuitBreaker:
         elif self.state == CircuitState.CLOSED:
             # Reset failure count on success
             self.failure_count = 0
-    
+
     def _on_failure(self):
         self.failure_count += 1
         self.last_failure_time = time.time()
-        
+
         if self.state == CircuitState.HALF_OPEN:
             # Probe failed → reopen circuit
             self.state = CircuitState.OPEN
         elif self.failure_count >= self.failure_threshold:
             # Too many failures → open circuit
             self.state = CircuitState.OPEN
-    
+
     def _time_until_half_open(self) -> float:
         elapsed = time.time() - self.last_failure_time
         return max(0, self.recovery_timeout - elapsed)
@@ -227,29 +227,29 @@ def retry_with_backoff(
 ) -> Any:
     """Execute function with exponential backoff retry."""
     last_exception = None
-    
+
     for attempt in range(config.max_retries + 1):
         try:
             return func()
         except retryable_exceptions as e:
             last_exception = e
-            
+
             if attempt == config.max_retries:
                 break  # All retries exhausted
-            
+
             # Calculate delay with exponential backoff
             delay = config.base_delay * (config.exponential_base ** attempt)
-            
+
             # Add jitter to prevent thundering herd
             if config.jitter:
                 delay = random.uniform(0, delay)
-            
+
             # Cap at max delay
             delay = min(delay, config.max_delay)
-            
+
             print(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay:.2f}s")
             time.sleep(delay)
-    
+
     raise last_exception  # All retries failed
 
 # Usage:
@@ -293,11 +293,11 @@ def retry_with_jitter(
         except Exception as e:
             if attempt == max_retries:
                 raise
-            
+
             # Exponential backoff + random jitter
             delay = min(base_delay * (2 ** attempt), max_delay)
             jittered_delay = random.uniform(0, delay)
-            
+
             print(f"Attempt {attempt + 1} failed. Retrying in {jittered_delay:.2f}s")
             time.sleep(jittered_delay)
 
@@ -452,18 +452,18 @@ class Deadline:
     """Propagate time budget through service calls."""
     start_time: float
     timeout_seconds: float
-    
+
     @classmethod
     def from_timeout(cls, timeout: float) -> "Deadline":
         return cls(start_time=time.time(), timeout_seconds=timeout)
-    
+
     def remaining(self) -> float:
         elapsed = time.time() - self.start_time
         return max(0, self.timeout_seconds - elapsed)
-    
+
     def is_expired(self) -> bool:
         return self.remaining() <= 0
-    
+
     def child_deadline(self, fraction: float = 0.8) -> "Deadline":
         """Create child deadline with fraction of remaining time."""
         remaining = self.remaining() * fraction
@@ -472,20 +472,20 @@ class Deadline:
 # Usage in service chain:
 def api_gateway_handler(request):
     deadline = Deadline.from_timeout(30.0)  # 30s total budget
-    
+
     # Pass 80% of remaining time to Service A
     return call_service_a(request, deadline=deadline)
 
 def call_service_a(request, deadline: Deadline):
     child_deadline = deadline.child_deadline(fraction=0.8)  # 24s
-    
+
     # Pass 80% to Service B
     return call_service_b(request, deadline=child_deadline)
 
 def call_service_b(request, deadline: Deadline):
     if deadline.is_expired():
         raise TimeoutError("Deadline expired before call")
-    
+
     # Use remaining time for database query
     db_timeout = deadline.remaining() * 0.7  # 70% of remaining
     return query_database(request, timeout=db_timeout)
@@ -591,31 +591,31 @@ from datetime import datetime, timedelta
 @dataclass
 class ErrorBudget:
     """Track and manage error budgets."""
-    
+
     slo_target: float  # e.g., 0.999 for 99.9%
     window_days: int = 30
-    
+
     @property
     def error_rate(self) -> float:
         return 1.0 - self.slo_target
-    
+
     @property
     def total_minutes(self) -> float:
         return self.window_days * 24 * 60
-    
+
     @property
     def budget_minutes(self) -> float:
         return self.error_rate * self.total_minutes
-    
+
     def remaining_minutes(self, incidents_minutes: list) -> float:
         """Calculate remaining budget after incidents."""
         return self.budget_minutes - sum(incidents_minutes)
-    
+
     def remaining_pct(self, incidents_minutes: list) -> float:
         """Calculate remaining budget percentage."""
         remaining = self.remaining_minutes(incidents_minutes)
         return max(0, remaining / self.budget_minutes * 100)
-    
+
     def status(self, incidents_minutes: list) -> str:
         """Get deployment status based on remaining budget."""
         pct = self.remaining_pct(incidents_minutes)

@@ -274,7 +274,7 @@ import time
 
 class TokenBucket:
     """Token bucket rate limiter. Allows controlled bursts."""
-    
+
     def __init__(self, capacity: int, refill_rate: float):
         """
         Args:
@@ -285,13 +285,13 @@ class TokenBucket:
         self.refill_rate = refill_rate
         self.tokens = capacity
         self.last_refill = time.time()
-    
+
     def _refill(self):
         now = time.time()
         elapsed = now - self.last_refill
         self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
         self.last_refill = now
-    
+
     def allow(self) -> bool:
         self._refill()
         if self.tokens >= 1:
@@ -332,7 +332,7 @@ from collections import deque
 
 class LeakyBucket:
     """Leaky bucket rate limiter. Smooths traffic to constant rate."""
-    
+
     def __init__(self, capacity: int, leak_rate: float):
         """
         Args:
@@ -343,7 +343,7 @@ class LeakyBucket:
         self.leak_rate = leak_rate
         self.queue = deque()
         self.last_leak = time.time()
-    
+
     def _leak(self):
         now = time.time()
         elapsed = now - self.last_leak
@@ -352,7 +352,7 @@ class LeakyBucket:
             self.queue.popleft()
         if leaked:
             self.last_leak = now
-    
+
     def allow(self) -> bool:
         self._leak()
         if len(self.queue) < self.capacity:
@@ -386,16 +386,16 @@ from collections import defaultdict
 
 class FixedWindow:
     """Fixed window rate limiter. Simple but has boundary burst problem."""
-    
+
     def __init__(self, limit: int, window_seconds: int = 60):
         self.limit = limit
         self.window_seconds = window_seconds
         self.counters = defaultdict(int)
-    
+
     def _get_window_key(self) -> str:
         window_start = int(time.time()) // self.window_seconds
         return str(window_start)
-    
+
     def allow(self, client_id: str) -> bool:
         key = f"{client_id}:{self._get_window_key()}"
         self.counters[key] += 1
@@ -425,30 +425,30 @@ from collections import defaultdict
 
 class SlidingWindow:
     """Sliding window rate limiter. No boundary burst problem."""
-    
+
     def __init__(self, limit: int, window_seconds: int = 60):
         self.limit = limit
         self.window_seconds = window_seconds
         self.prev_counts = defaultdict(int)
         self.curr_counts = defaultdict(int)
         self.window_start = int(time.time())
-    
+
     def _rotate_if_needed(self):
         now = int(time.time())
         if now >= self.window_start + self.window_seconds:
             self.prev_counts = self.curr_counts
             self.curr_counts = defaultdict(int)
             self.window_start = now
-    
+
     def allow(self, client_id: str) -> bool:
         self._rotate_if_needed()
         now = time.time()
         elapsed = now - self.window_start
-        
+
         # Weighted count: prev window's contribution decays over time
         prev_weight = 1 - (elapsed / self.window_seconds)
         count = self.prev_counts[client_id] * prev_weight + self.curr_counts[client_id]
-        
+
         if count < self.limit:
             self.curr_counts[client_id] += 1
             return True
@@ -493,12 +493,12 @@ import redis
 
 class DistributedRateLimiter:
     """Rate limiter using Redis for distributed coordination."""
-    
+
     def __init__(self, redis_client: redis.Redis, limit: int, window: int = 60):
         self.r = redis_client
         self.limit = limit
         self.window = window
-    
+
     def allow(self, client_id: str) -> bool:
         # Bucket the key by window so each window gets a fresh counter and
         # its own independent expiry.
@@ -592,16 +592,16 @@ class ServerStatus(Enum):
 @dataclass
 class HealthChecker:
     """Active health checker with configurable thresholds."""
-    
+
     check_interval: int = 10      # seconds between checks
     failure_threshold: int = 3    # failures before marking DOWN
     success_threshold: int = 3    # successes before marking UP
-    
+
     # Track state per server
     _failure_counts: dict = field(default_factory=dict)
     _success_counts: dict = field(default_factory=dict)
     _status: dict = field(default_factory=dict)
-    
+
     def check(self, server_url: str) -> ServerStatus:
         """Probe server and update status."""
         try:
@@ -612,15 +612,15 @@ class HealthChecker:
                 self._on_failure(server_url)
         except requests.RequestException:
             self._on_failure(server_url)
-        
+
         return self._status.get(server_url, ServerStatus.UNKNOWN)
-    
+
     def _on_success(self, server_url: str):
         self._failure_counts[server_url] = 0
         self._success_counts[server_url] = self._success_counts.get(server_url, 0) + 1
         if self._success_counts[server_url] >= self.success_threshold:
             self._status[server_url] = ServerStatus.UP
-    
+
     def _on_failure(self, server_url: str):
         self._success_counts[server_url] = 0
         self._failure_counts[server_url] = self._failure_counts.get(server_url, 0) + 1
@@ -657,18 +657,18 @@ import time
 
 class PassiveHealthChecker:
     """Detect failures from actual request traffic (no extra probes)."""
-    
+
     def __init__(self, failure_threshold: int = 3, window: int = 60):
         self.failure_threshold = failure_threshold
         self.window = window
         self.failures = defaultdict(list)  # server -> [timestamps]
-    
+
     def record_failure(self, server: str):
         now = time.time()
         self.failures[server].append(now)
         # Clean old failures outside window
         self.failures[server] = [t for t in self.failures[server] if now - t < self.window]
-    
+
     def is_healthy(self, server: str) -> bool:
         return len(self.failures[server]) < self.failure_threshold
 
