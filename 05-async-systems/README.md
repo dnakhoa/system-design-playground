@@ -32,12 +32,13 @@
 6. [Event Sourcing](#event-sourcing)
 7. [CQRS (Command Query Responsibility Segregation)](#cqrs-command-query-responsibility-segregation)
 8. [Delivery Guarantees](#delivery-guarantees)
-9. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
-10. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
-11. [Key References](#key-references)
-12. [Practice Exercise](#practice-exercise)
-13. [Common Mistakes](#common-mistakes)
-14. [Discussion Questions](#discussion-questions)
+9. [The Dual-Write Problem: Outbox and CDC](#the-dual-write-problem-outbox-and-cdc)
+10. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
+11. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
+12. [Key References](#key-references)
+13. [Practice Exercise](#practice-exercise)
+14. [Common Mistakes](#common-mistakes)
+15. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -355,7 +356,10 @@ class OrderWriteDB:
         self._publish_event("OrderUpdated", self.orders[order_id])
 
     def _publish_event(self, event_type: str, order: Order):
-        # In production: publish to Kafka/message queue
+        # In production: publish to Kafka/message queue.
+        # Caution: writing the DB and then publishing separately is a
+        # "dual write" — a crash between the two loses the event. See
+        # "The Dual-Write Problem" below for the outbox pattern.
         print(f"EVENT: {event_type} -> {order.id}")
 
 # --- Read Model (Denormalized) ---
@@ -524,6 +528,107 @@ def consume_exactly_once(message):
 
 ---
 
+## The Dual-Write Problem: Outbox and CDC
+
+Almost every event-driven example — including the CQRS one above — has the
+same hidden bug. The service writes to its database, then publishes an
+event:
+
+```python
+def place_order(order):
+    db.insert(order)                         # 1. commit to the database
+    kafka.send("orders", order_placed(order))  # 2. tell everyone else
+```
+
+These are two separate systems with no shared transaction, so every
+failure mode between them leaves them disagreeing:
+
+| What happens | Result |
+|--------------|--------|
+| Crash after step 1, before step 2 | Order exists; **no event**. Inventory never reserves, email never sends — silently, forever |
+| Kafka is down at step 2 | Same, unless you fail the request — and then the order exists but the user saw an error |
+| Publish first, then the DB write fails | Downstream services act on an order **that doesn't exist** |
+| Retry step 2 after a timeout that actually succeeded | Duplicate event (handled by idempotent consumers — the easy case) |
+
+Retries cannot fix the first row: the process that would retry is the one
+that crashed. Wrapping both in a "transaction" does not work either, because
+the database and the broker cannot commit atomically together.
+
+### The Transactional Outbox
+
+Write the event **into the same database, in the same transaction** as the
+business change. A separate relay then publishes it:
+
+```
+  ┌──────────────────── one DB transaction ────────────────────┐
+  │                                                            │
+  │   INSERT INTO orders (...)          ──┐                     │
+  │   INSERT INTO outbox (id, topic,    ──┤ both commit,        │
+  │                       payload)        │ or neither does     │
+  │                                                            │
+  └──────────────────────────┬─────────────────────────────────┘
+                             │
+                ┌────────────▼────────────┐       ┌──────────┐
+                │  Relay                  │       │          │
+                │  read unpublished rows  │──────▶│  Kafka   │
+                │  publish, mark as sent  │       │          │
+                └─────────────────────────┘       └──────────┘
+```
+
+```python
+def place_order(order):
+    with db.transaction() as tx:
+        tx.insert("orders", order)
+        tx.insert("outbox", {
+            "id": new_uuid(),            # doubles as the idempotency key
+            "topic": "orders",
+            "payload": order_placed(order),
+        })
+    # No Kafka call here. The request succeeds as soon as the DB commits.
+
+
+def relay_once():
+    """Run in a loop or on a schedule; safe to run more than one copy."""
+    rows = db.query(
+        "SELECT * FROM outbox WHERE sent_at IS NULL "
+        "ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED"
+    )
+    for row in rows:
+        kafka.send(row["topic"], row["payload"], key=row["id"])
+        db.execute("UPDATE outbox SET sent_at = now() WHERE id = %s", row["id"])
+```
+
+The guarantee is **at-least-once**: if the relay crashes after publishing
+but before marking the row, it publishes again on restart. That is why the
+outbox row's `id` travels with the message — consumers deduplicate on it
+(see Delivery Guarantees above). What the outbox removes is the *lost*
+event, which no consumer-side technique can recover.
+
+### Change Data Capture (CDC)
+
+Instead of polling an outbox table, read the database's own replication
+log — the Postgres WAL, the MySQL binlog — and turn committed changes into
+events. Debezium is the common open-source tool.
+
+| | Polling outbox | CDC (log-based) |
+|---|---|---|
+| Latency | Poll interval (typically 100 ms - 1 s) | Near real-time |
+| Load on the database | A query every poll | Reads the log the DB already writes |
+| Event shape | Exactly what you wrote — designed for consumers | Raw row changes, unless you CDC an outbox table |
+| Operational cost | A loop in your service | A connector cluster to run and monitor |
+| Good default for | Most teams, most services | High volume, or many tables feeding many consumers |
+
+**The common combination:** use an outbox table for the event's *shape* and
+CDC on that table for *delivery*. Consumers get deliberately designed
+events, not leaked internal column names, and you avoid the polling query.
+
+> **When you don't need any of this:** if losing an event is acceptable —
+> analytics clicks, view counters — a direct publish is fine. Use the outbox
+> where a missing event means a missing side effect someone will notice:
+> payments, orders, inventory, notifications a user is waiting for.
+
+---
+
 ## Dead Letter Queues (DLQ)
 
 Messages that fail processing are sent to a DLQ for investigation.
@@ -689,6 +794,7 @@ When a user places an order:
 |---------|---------------|-------------------|
 | **Believing "exactly-once delivery" exists** | Over a network it's impossible; Kafka gives exactly-once *processing* within its own transaction boundary | At-least-once delivery plus idempotent consumers |
 | **At-least-once without idempotency** | Redelivery is normal, not exceptional — duplicate charges and double-sent emails follow | Deduplicate on a stable business key before doing work |
+| **Writing the DB, then publishing the event** | Two systems, no shared transaction: a crash between them loses the event permanently, and no retry can recover it | Transactional outbox — write the event in the same DB transaction, relay it afterwards (or CDC) |
 | **Partitioning by a random key when order matters** | Kafka orders within a partition only; a ride's events land on different partitions and process out of order | Partition by the entity whose order matters (`ride_id`, `account_id`) |
 | **Partitioning by a hot key** | One partition takes 10x the traffic; a single consumer becomes the bottleneck | Choose a high-cardinality key, or add a salt and re-aggregate downstream |
 | **No dead letter queue** | A permanently-bad message retries forever and blocks its partition | DLQ after bounded retries, with an alert and a replay path |

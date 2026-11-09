@@ -112,7 +112,7 @@ opened:
 
 Choose your path based on your goals:
 
-### Path A: System Design Interview Prep (~12 hours)
+### Path A: System Design Interview Prep (~12.5 hours)
 
 Focus on the most commonly asked topics:
 
@@ -131,12 +131,12 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
 
-### Path B: ML Systems and Recommenders (~9 hours)
+### Path B: ML Systems and Recommenders (~14.5 hours)
 
 For the ML system design interview, and for anyone whose system ranks things:
 
 ```
-Module 17 (ML System Design) → Module 03 (Caching) → Module 05 (Async)
+Module 01 (Fundamentals) → Module 17 (ML System Design) → Module 05 (Async)
     → Module 15 (Observability) → Module 21 (Evaluation)
 ```
 
@@ -148,7 +148,7 @@ Module 17 (ML System Design) → Module 03 (Caching) → Module 05 (Async)
 | **Should** | 15 | Data health and prediction health need the telemetry from here |
 | Nice to have | 21 | Evaluation rigour transfers directly from LLM systems to ML ones |
 
-### Path C: Build LLM AI Systems (~14 hours)
+### Path C: Build LLM AI Systems (~12.5 hours)
 
 Focus on LLM-specific architecture:
 
@@ -167,7 +167,7 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~51 hours)
+### Path D: Full Curriculum (~53.5 hours)
 
 Work through all 22 modules in order. Each builds on the previous.
 
@@ -210,17 +210,17 @@ go straight at it:
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [01](01-fundamentals/README.md) | [System Design Fundamentals](01-fundamentals/README.md) | 9-step framework, CAP theorem, estimation | ⭐ Beginner | ~2h |
-| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, sharding, replication, ACID | ⭐ Beginner | ~1.5h |
-| [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, cache stampede | ⭐⭐ Intermediate | ~2.5h |
+| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, B-tree vs LSM, sharding, replication, Bloom filters | ⭐ Beginner | ~2h |
+| [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, stampede, penetration, avalanche | ⭐⭐ Intermediate | ~3h |
 | [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, API gateway | ⭐⭐ Intermediate | ~2.5h |
 
 ### Phase 2: Intermediate (Modules 05-08)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, event-driven, CQRS, delivery guarantees | ⭐⭐ Intermediate | ~2h |
+| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, CQRS, delivery guarantees, transactional outbox, CDC | ⭐⭐ Intermediate | ~2.5h |
 | [06](06-microservices/README.md) | [Microservices](06-microservices/README.md) | DDD, saga pattern, service mesh, observability | ⭐⭐ Intermediate | ~2h |
-| [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, chaos engineering, SLOs | ⭐⭐ Intermediate | ~2.5h |
+| [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
 | [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2.5h |
 
 ### Phase 3: Design Cases (Modules 09-12)
@@ -319,6 +319,11 @@ things that self-study doesn't naturally build:
 |------|-----------|
 | **CAP Theorem** | During a network partition, a distributed system must give up either consistency or availability. Partition tolerance is not optional — "pick 2 of 3" is the common misstatement |
 | **PACELC** | CAP plus the normal case: if Partitioned, choose A or C; Else, choose Latency or Consistency |
+| **Backpressure** | Rejecting work early when a bounded queue is full, so overload produces fast errors instead of runaway latency |
+| **Bloom Filter** | Compact set that answers "definitely not present" or "probably present"; ~10 bits/key for a 1% false-positive rate |
+| **Bulkhead** | A capped resource pool per dependency, so one slow dependency can't exhaust every thread |
+| **Cache Penetration** | Requests for keys that exist nowhere bypass the cache every time; fixed with negative caching or a Bloom filter |
+| **CDC** | Change Data Capture — turning a database's replication log into a stream of events |
 | **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
 | **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
 | **CQRS** | Command Query Responsibility Segregation — separate write and read models |
@@ -330,11 +335,15 @@ things that self-study doesn't naturally build:
 | **Fan-out** | Distributing one message to multiple consumers |
 | **Fencing Token** | Monotonically increasing token that prevents stale leaders from acting |
 | **G-Counter** | Grow-only counter CRDT — can only increment |
+| **HyperLogLog** | Approximate distinct-count structure; Redis's version counts billions of items in 12 KB within ~1% |
 | **Idempotency** | Property where doing an operation multiple times has the same effect as once |
 | **Kafka** | Distributed event streaming platform for high-throughput message queues |
 | **Lamport Timestamp** | Logical clock that tracks causality in distributed systems |
 | **Leader Election** | Process of selecting one node to coordinate actions |
 | **Load Balancer** | Distributes incoming traffic across multiple servers |
+| **Little's Law** | Requests in flight = throughput × latency — the arithmetic behind pool and concurrency-limit sizing |
+| **Load Shedding** | Deliberately dropping the least valuable work first when demand exceeds capacity |
+| **LSM-Tree** | Storage engine that appends to sorted immutable files and merges them later; fast writes, used by Cassandra and RocksDB |
 | **Quorum** | Read/write overlap rule (W + R > N) that guarantees a read sees the latest write |
 | **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
 | **RPO / RTO** | Recovery Point Objective (tolerable data loss) / Recovery Time Objective (tolerable downtime) |
@@ -342,6 +351,8 @@ things that self-study doesn't naturally build:
 | **SLI** | Service Level Indicator — what you measure (e.g., latency, error rate) |
 | **SLO** | Service Level Objective — what you promise internally (e.g., 99.9% availability) |
 | **Token Bucket** | Rate limiting algorithm that allows controlled bursts |
+| **Tombstone** | A deletion marker in an LSM-tree; space is reclaimed only when compaction runs |
+| **Transactional Outbox** | Writing an event to the database in the same transaction as the business change, then relaying it — fixes the dual-write problem |
 | **Vector Clock** | Logical clock that tracks causality more precisely than Lamport timestamps |
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |

@@ -32,12 +32,13 @@
 6. [Cache Invalidation Strategies](#cache-invalidation-strategies)
 7. [Cache Stampede (Thundering Herd)](#cache-stampede-thundering-herd)
 8. [Hot Keys](#hot-keys)
-9. [When NOT to Cache](#when-not-to-cache)
-10. [Case Study: Netflix Caching Architecture](#case-study-netflix-caching-architecture)
-11. [Key References](#key-references)
-12. [Practice Exercise](#practice-exercise)
-13. [Common Mistakes](#common-mistakes)
-14. [Discussion Questions](#discussion-questions)
+9. [Cache Penetration and Avalanche](#cache-penetration-and-avalanche)
+10. [When NOT to Cache](#when-not-to-cache)
+11. [Case Study: Netflix Caching Architecture](#case-study-netflix-caching-architecture)
+12. [Key References](#key-references)
+13. [Practice Exercise](#practice-exercise)
+14. [Common Mistakes](#common-mistakes)
+15. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -701,6 +702,95 @@ class CacheHierarchy:
         self.l1[key] = value
         return value
 ```
+
+---
+
+## Cache Penetration and Avalanche
+
+Stampede and hot keys are two of the standard cache failure modes. These
+are the other two, and both end the same way: the database absorbs load
+the cache was supposed to absorb.
+
+| Failure | What happens | Trigger |
+|---------|--------------|---------|
+| **Stampede** (above) | One popular key expires; many requests rebuild it at once | Popular key's TTL lapses |
+| **Hot key** (above) | One key's traffic overloads one cache node | Skewed popularity |
+| **Penetration** | Requests for keys that exist **nowhere** skip the cache every time | Bad IDs, scrapers, or a deliberate attack |
+| **Avalanche** | **Many** keys expire or vanish at the same moment | Same TTL set in bulk, or a cache node restart |
+
+### Penetration: Caching the Absence
+
+Cache-aside only caches what the database returns. Ask for
+`/users/99999999` and the database returns nothing, so nothing is cached,
+so the next request for it goes to the database too. An attacker who sends
+random IDs bypasses your cache completely.
+
+**Fix 1 — negative caching.** Cache "not found" as a value, with a short TTL:
+
+```python
+NOT_FOUND = b"__none__"
+
+def get_user(user_id: int):
+    key = f"user:{user_id}"
+    cached = r.get(key)
+    if cached == NOT_FOUND:
+        return None                      # absence, served from cache
+    if cached is not None:
+        return deserialize(cached)
+
+    user = db.find_user(user_id)
+    if user is None:
+        # Short TTL: if this ID is created later, the stale "absent"
+        # entry must not hide it for long. Better still, DEL this key
+        # when the user is created.
+        r.setex(key, 60, NOT_FOUND)
+        return None
+    r.setex(key, 3600, serialize(user))
+    return user
+```
+
+This stops repeats of the same bad ID, but not an attacker who never
+repeats one.
+
+**Fix 2 — a Bloom filter of existing keys** in front of the cache
+([Module 02](../02-databases-storage/README.md#bloom-filters-how-lsm-reads-stay-fast)).
+"Definitely not present" is rejected before touching cache or database;
+"probably present" proceeds normally. Random IDs are stopped with no
+storage per bad ID.
+
+> **The staleness trap.** A Bloom filter has no false negatives *for keys
+> it was told about*. If a user is created and the filter isn't updated,
+> the filter says "definitely not" for a real user — and the request is
+> wrongly rejected. Add the key to the filter in the same write path that
+> creates the record, and rebuild the filter periodically from the source
+> of truth. Deletions are harmless: a deleted key still reads "probably
+> present" and just falls through to the normal path.
+
+**Fix 3 — validate first.** If IDs have a format (a UUID, a checksum digit,
+a range), reject malformed ones before any lookup. It's the cheapest of the
+three.
+
+### Avalanche: Spreading Out the Expiry
+
+If 10 million keys are loaded together — at deploy, at a cache warm-up, by
+a nightly batch — with the same one-hour TTL, they all expire in the same
+second an hour later. Every one becomes a miss at once.
+
+```python
+import random
+
+def ttl_with_jitter(base_seconds: int, spread: float = 0.1) -> int:
+    """Spread expiries over ±10% so keys loaded together expire apart."""
+    return int(base_seconds * (1 + random.uniform(-spread, spread)))
+
+r.setex(key, ttl_with_jitter(3600), value)   # 54 to 66 minutes
+```
+
+A cache node restart is the same failure without the timer: every key it
+held is gone at once. The defences are the reliability patterns from
+Module 07 — replicas so one node's loss isn't a full miss, and a
+concurrency limit or circuit breaker in front of the database so a burst of
+misses queues instead of overwhelming it.
 
 ---
 
