@@ -1,11 +1,11 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-22-blue.svg)](#curriculum)
+[![Modules](https://img.shields.io/badge/modules-23-blue.svg)](#curriculum)
 [![Lint](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml/badge.svg)](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml)
 [![Learning paths](https://img.shields.io/badge/start-learning%20paths-orange.svg)](#learning-paths)
 
-A free, self-paced course in 22 written modules. It starts at "what is a QPS
+A free, self-paced course in 23 written modules. It starts at "what is a QPS
 estimate" and ends at "how would you architect an LLM agent platform for a
 hundred million users" — and it explains the reasoning at every step, not just
 the conclusions.
@@ -112,13 +112,14 @@ opened:
 
 Choose your path based on your goals:
 
-### Path A: System Design Interview Prep (~12.5 hours)
+### Path A: System Design Interview Prep (~14.5 hours)
 
 Focus on the most commonly asked topics:
 
 ```
 Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News Feed)
-    → Module 12 (Payments) → Module 03 (Caching) → Module 04 (Load Balancing)
+    → Module 12 (Payments) → Module 23 (Search/Nearby) → Module 03 (Caching)
+    → Module 04 (Load Balancing)
 ```
 
 | Priority | Module | Why |
@@ -127,6 +128,7 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Must** | 09 | URL shortener is the #1 most-asked question |
 | **Must** | 10 | Chat/news feed tests real-time design |
 | **Must** | 12 | Payments tests consistency and idempotency |
+| **Must** | 23 | Autocomplete and "find nearby" are among the most-asked questions |
 | **Should** | 03 | Caching comes up in every design |
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
@@ -167,9 +169,11 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~53.5 hours)
+### Path D: Full Curriculum (~55.5 hours)
 
-Work through all 22 modules in order. Each builds on the previous.
+Work through all 23 modules in order. Each builds on the previous —
+except Module 23, a design case that was added last and fits best straight
+after Module 12.
 
 ### Path E: Fill Your Gaps
 
@@ -185,6 +189,8 @@ go straight at it:
 | One key is melting one cache node | [Module 03 — Caching](03-caching/README.md) |
 | Retries make outages worse, not better | [Module 07 — Reliability](07-reliability/README.md) |
 | Need to design a chat system | [Module 10 — Chat/News Feed](10-case-chat-newsfeed/README.md) |
+| Need search-as-you-type or full-text search | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
+| Need "find what's near me" | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
 | Auth, encryption, password storage, or OWASP gaps | [Module 13 — Security](13-security/README.md) |
 | APIs keep breaking clients | [Module 14 — API Design](14-api-design/README.md) |
 | Outages take hours to diagnose | [Module 15 — Observability](15-observability/README.md) |
@@ -223,7 +229,7 @@ go straight at it:
 | [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
 | [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2.5h |
 
-### Phase 3: Design Cases (Modules 09-12)
+### Phase 3: Design Cases (Modules 09-12, 23)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
@@ -231,6 +237,10 @@ go straight at it:
 | [10](10-case-chat-newsfeed/README.md) | [Chat System & News Feed](10-case-chat-newsfeed/README.md) | WebSocket, fan-out, presence, ranking | ⭐⭐ Intermediate | ~1.5h |
 | [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~1.5h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
+| [23](23-case-search-proximity/README.md) | [Search Autocomplete & Proximity Search](23-case-search-proximity/README.md) | Tries, inverted index, geohash, quadtree, live location | ⭐⭐ Intermediate | ~2h |
+
+Module 23 was added after the rest of the course, so it is numbered last; it
+assumes only Modules 01-05 and is best read straight after Module 12.
 
 ### Phase 4: Operating Systems in Production (Modules 13-16)
 
@@ -292,8 +302,8 @@ things that self-study doesn't naturally build:
 3. **Rehearse the trade-off sentence.** "I'd choose X because Y, and the cost
    is Z." If you can't finish that sentence for a component, you don't
    understand it yet.
-4. **Do Phase 3 twice.** The four design cases (Modules 09–12) map onto most
-   commonly asked questions. Second pass, do them from memory first.
+4. **Do Phase 3 twice.** The five design cases (Modules 09–12 and 23) map
+   onto most commonly asked questions. Second pass, do them from memory first.
 5. **Expect the follow-up.** Interviewers push on scale ("now 100×") and
    failure ("now that region is gone"). The Discussion Questions in each
    module are written in that voice on purpose.
@@ -313,7 +323,7 @@ things that self-study doesn't naturally build:
 
 ## Glossary
 
-### Distributed Systems Fundamentals (Modules 01-12)
+### Distributed Systems Fundamentals (Modules 01-12, 23)
 
 | Term | Definition |
 |------|-----------|
@@ -335,8 +345,10 @@ things that self-study doesn't naturally build:
 | **Fan-out** | Distributing one message to multiple consumers |
 | **Fencing Token** | Monotonically increasing token that prevents stale leaders from acting |
 | **G-Counter** | Grow-only counter CRDT — can only increment |
+| **Geohash** | Encodes a location as a string so that places sharing a prefix share a grid cell; nearby search checks a cell plus its 8 neighbours |
 | **HyperLogLog** | Approximate distinct-count structure; Redis's version counts billions of items in 12 KB within ~1% |
 | **Idempotency** | Property where doing an operation multiple times has the same effect as once |
+| **Inverted Index** | Map from each term to the documents containing it (its posting list) — the core of full-text search |
 | **Kafka** | Distributed event streaming platform for high-throughput message queues |
 | **Lamport Timestamp** | Logical clock that tracks causality in distributed systems |
 | **Leader Election** | Process of selecting one node to coordinate actions |
@@ -345,6 +357,7 @@ things that self-study doesn't naturally build:
 | **Load Shedding** | Deliberately dropping the least valuable work first when demand exceeds capacity |
 | **LSM-Tree** | Storage engine that appends to sorted immutable files and merges them later; fast writes, used by Cassandra and RocksDB |
 | **Quorum** | Read/write overlap rule (W + R > N) that guarantees a read sees the latest write |
+| **Quadtree** | Spatial index that splits a region into four only where it is dense, so every leaf holds a bounded number of points |
 | **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
 | **RPO / RTO** | Recovery Point Objective (tolerable data loss) / Recovery Time Objective (tolerable downtime) |
 | **SAGA** | Distributed transaction pattern using compensating actions instead of locks |
@@ -353,6 +366,7 @@ things that self-study doesn't naturally build:
 | **Token Bucket** | Rate limiting algorithm that allows controlled bursts |
 | **Tombstone** | A deletion marker in an LSM-tree; space is reclaimed only when compaction runs |
 | **Transactional Outbox** | Writing an event to the database in the same transaction as the business change, then relaying it — fixes the dual-write problem |
+| **Trie** | Prefix tree; with the top-k completions cached at each node, autocomplete becomes one walk of the prefix |
 | **Vector Clock** | Logical clock that tracks causality more precisely than Lamport timestamps |
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |

@@ -1077,4 +1077,4 @@ topic for order events.
 
 ---
 
-*Module 15 of 22 in the System Design Playground*
+*Module 15 of 23 in the System Design Playground*

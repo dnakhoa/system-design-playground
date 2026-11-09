@@ -750,4 +750,4 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 
 ---
 
-*Module 06 of 22 in the System Design Playground*
+*Module 06 of 23 in the System Design Playground*

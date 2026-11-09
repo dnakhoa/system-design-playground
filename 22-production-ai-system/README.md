@@ -8,7 +8,7 @@
 |--------|-------|------|
 | Module 21 | AI Evaluation and Quality | [../21-ai-evaluation/](../21-ai-evaluation/) |
 | **Module 22** | **Production AI System Architecture** | **(current)** |
-| Course Home | — | [../README.md](../README.md) |
+| Module 23 | Design Case — Search Autocomplete and Proximity Search | [../23-case-search-proximity/](../23-case-search-proximity/) |
 
 ---
 
@@ -648,8 +648,8 @@ Your AI system handles medical questions. Design the guardrails pipeline:
 
 **Previous:** [Module 21: AI Evaluation and Quality](../21-ai-evaluation/README.md)
 
-**Next:** [Course Home](../README.md)
+**Next:** [Module 23: Design Case — Search Autocomplete and Proximity Search](../23-case-search-proximity/README.md)
 
 ---
 
-*Module 22 of 22 in the System Design Playground*
+*Module 22 of 23 in the System Design Playground*
