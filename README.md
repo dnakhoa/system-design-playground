@@ -1,8 +1,9 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-22-blue.svg)]()
-[![Theory](https://img.shields.io/badge/type-theory%20%2B%20design-orange.svg)]()
+[![Modules](https://img.shields.io/badge/modules-22-blue.svg)](#curriculum)
+[![Lint](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml/badge.svg)](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml)
+[![Learning paths](https://img.shields.io/badge/start-learning%20paths-orange.svg)](#learning-paths)
 
 A free, self-paced course in 22 written modules. It starts at "what is a QPS
 estimate" and ends at "how would you architect an LLM agent platform for a
@@ -492,7 +493,7 @@ Corrections and additions are welcome. Before opening a pull request, run:
 python3 tools/lint.py
 ```
 
-It checks four things that are easy to break and hard to spot in review:
+It checks six things that are easy to break and hard to spot in review:
 
 | Check | Catches |
 |-------|---------|
@@ -500,6 +501,11 @@ It checks four things that are easy to break and hard to spot in review:
 | Diagram geometry | Box borders that drift out of alignment — invisible while editing, obvious once rendered |
 | Relative links | Broken cross-module references, especially after renumbering |
 | Anchor fragments | Table-of-contents and `#heading` links that point at nothing |
+| Mermaid blocks | Malformed diagrams that GitHub renders as a red error box |
+| Whitespace | Trailing spaces and missing final newlines — run `python3 tools/lint.py --fix` |
+
+The same check runs automatically on every pull request, so a failing
+check on your PR means the linter found something — run it locally to see what.
 
 Corrections to technical claims are especially welcome — please include a
 primary source (paper, spec, or vendor docs) rather than a blog summary.
