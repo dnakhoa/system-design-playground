@@ -18,6 +18,7 @@
 - Compare L4 vs L7 load balancing
 - Design rate limiting with appropriate algorithms
 - Implement health checks and failover
+- Configure autoscaling with the right signal, headroom and scale-in behaviour
 - Understand API gateway patterns
 
 ---
@@ -30,13 +31,14 @@
 4. [DNS-Based Load Balancing](#dns-based-load-balancing)
 5. [Rate Limiting](#rate-limiting)
 6. [Health Checks](#health-checks)
-7. [API Gateway Pattern](#api-gateway-pattern)
-8. [Service Mesh](#service-mesh)
-9. [Case Study: Cloudflare at Scale](#case-study-cloudflare-at-scale)
-10. [Key References](#key-references)
-11. [Practice Exercise](#practice-exercise)
-12. [Common Mistakes](#common-mistakes)
-13. [Discussion Questions](#discussion-questions)
+7. [Autoscaling](#autoscaling)
+8. [API Gateway Pattern](#api-gateway-pattern)
+9. [Service Mesh](#service-mesh)
+10. [Case Study: Cloudflare at Scale](#case-study-cloudflare-at-scale)
+11. [Key References](#key-references)
+12. [Practice Exercise](#practice-exercise)
+13. [Common Mistakes](#common-mistakes)
+14. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -302,11 +304,10 @@ class TokenBucket:
 # Usage: 100 requests/minute, burst of 10
 limiter = TokenBucket(capacity=10, refill_rate=100/60)
 
-# In request handler:
-if limiter.allow():
-    process_request()
-else:
-    return 429, "Too Many Requests"
+def handle(request):
+    if not limiter.allow():
+        return 429, "Too Many Requests"
+    return process_request(request)
 ```
 
 ```
@@ -549,11 +550,10 @@ class DistributedRateLimiter:
 r = redis.Redis(host='redis-cluster', port=6379)
 limiter = DistributedRateLimiter(r, limit=100, window=60)
 
-# In request handler:
-if limiter.allow("user:123"):
-    process_request()
-else:
-    return 429, "Rate limit exceeded"
+def handle(request):
+    if not limiter.allow("user:123"):
+        return 429, "Rate limit exceeded"
+    return process_request(request)
 ```
 
 **Two traps in distributed counters:**
@@ -712,6 +712,110 @@ def handle_request(server):
 |-------|---------|----------------|
 | **Readiness** | Can the server handle traffic? | Remove from load balancer pool |
 | **Liveness** | Is the server alive? | Restart the server (Kubernetes) |
+
+---
+
+## Autoscaling
+
+A load balancer spreads traffic over the instances you have; an autoscaler
+decides how many you have. Its job is to track demand closely enough that you
+neither pay for idle machines nor run out of capacity.
+
+### Choosing the Signal
+
+| Signal | Good for | Misleads when |
+|--------|----------|---------------|
+| **CPU utilization** | CPU-bound services | The service waits on I/O: CPU stays low while requests queue |
+| **Requests per second per instance** | Stateless web/API tiers with uniform requests | Request cost varies widely (search vs health check) |
+| **Concurrency / in-flight requests** | Mixed or I/O-bound work | Rarely; it measures queueing directly ([Little's Law](../07-reliability/README.md#overload-backpressure-load-shedding-and-bulkheads)) |
+| **Queue depth / consumer lag** | Async workers (Kafka, SQS) | Messages vary a lot in processing time |
+| **Schedule / prediction** | Known daily peaks, launches, sales events | Demand doesn't follow the pattern |
+
+### The Scaling Rule
+
+Kubernetes' Horizontal Pod Autoscaler (HPA) uses one proportional rule, and
+most cloud *target tracking* policies behave the same way:
+`desired = ceil(current × metric / target)`. Two safeguards keep it stable: a
+**tolerance band** (default ±10%) so small wobbles cause no change, and a
+**scale-down stabilization window** (default 5 minutes) that scales down only
+to the *highest* recommendation in that window. Scale-up acts immediately.
+
+```python
+"""The Kubernetes HPA scaling rule, with its tolerance band and scale-down stabilization."""
+
+import math
+from collections import deque
+
+
+def desired_replicas(current: int, metric: float, target: float,
+                     tolerance: float = 0.1) -> int:
+    """desired = ceil(current × metric / target), unless within ±10% of target."""
+    ratio = metric / target
+    if abs(ratio - 1.0) <= tolerance:
+        return current                      # close enough: don't churn
+    return math.ceil(current * ratio)
+
+
+class ScaleDownStabilizer:
+    """Scale UP immediately; scale DOWN only to the highest recommendation
+    seen in the last `window` seconds (HPA default: 300 s)."""
+
+    def __init__(self, window_s: int = 300):
+        self.window_s = window_s
+        self.history = deque()              # (time, recommendation)
+
+    def decide(self, now: int, recommendation: int) -> int:
+        self.history.append((now, recommendation))
+        while self.history[0][0] < now - self.window_s:
+            self.history.popleft()
+        return max(r for _, r in self.history)
+
+
+print(desired_replicas(10, metric=90, target=60))   # 15: CPU 90% vs 60% target
+print(desired_replicas(10, metric=64, target=60))   # 10: within tolerance
+
+# Bursty traffic: raw recommendations swing every 60 s.
+stab = ScaleDownStabilizer()
+for t, rec in [(0, 15), (60, 8), (120, 14), (180, 7), (240, 9), (420, 8), (540, 6)]:
+    print(f"t={t:>3}s  recommended {rec:>2} -> run {stab.decide(t, rec):>2}")
+```
+
+The asymmetry is deliberate. Scaling up too late drops requests; scaling down
+too early means scaling up again a minute later, paying for cold starts both
+times. **Flapping** between the two is the classic autoscaler failure.
+
+### Autoscaling Is Not Overload Protection
+
+New capacity is never instant:
+
+```
+  traffic doubles ────┐
+                      ▼
+  t=0      metric crosses target
+  t=15s    autoscaler notices (metrics scrape + evaluation interval)
+  t=30s    new VMs / pods requested
+  t=90s    instances booted, image pulled
+  t=150s   app warm (JIT, caches, connection pools); passes readiness
+           ───────────────────────────────────────────────────
+           ~2.5 minutes running on the OLD capacity
+```
+
+Any spike faster than that lag hits the capacity you already had. Two rules
+follow:
+
+- **Keep headroom equal to the growth you can see within one lag period.** If
+  traffic can grow 50% in 3 minutes and scaling takes 3 minutes, target about
+  65% utilization, not 90%.
+- **Pair autoscaling with load shedding.** Shedding protects the fleet during
+  the lag; autoscaling removes the need to shed once capacity arrives
+  ([Module 07](../07-reliability/README.md#overload-backpressure-load-shedding-and-bulkheads)).
+
+Scale-in needs care too. Remove instances by **draining** them: take them out
+of the load balancer, let in-flight requests finish (connection draining,
+Kubernetes `preStop` plus `terminationGracePeriodSeconds`), then terminate.
+And set a **maximum**: an autoscaler with no ceiling turns a retry storm or a
+bot attack into an unbounded bill, and can exhaust downstream databases that do
+not scale with it.
 
 ---
 
@@ -875,6 +979,7 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 | **DNS as the failover mechanism** | Clients and resolvers ignore TTLs; propagation takes minutes to hours | Anycast or an LB with health checks; treat DNS as coarse geo-routing only |
 | **No rate-limiter fallback** | Redis down means either no limiting at all or a total outage | Decide fail-open vs fail-closed *per endpoint* and make it explicit |
 | **Rate limiting without response headers** | Clients can't self-regulate, so they hammer you and retry blindly | Always return `X-RateLimit-*` and `Retry-After` |
+| **Autoscaling on CPU for an I/O-bound service** | CPU stays at 20% while requests queue on the database or upstream calls, so the autoscaler never fires | Scale on concurrency, request rate, or queue depth; keep headroom for the scaling lag |
 | **Sticky sessions as the scaling plan** | Losing one server logs out every user on it, and load never rebalances | Externalize session state; keep servers stateless |
 
 ---
@@ -890,6 +995,10 @@ Cloudflare handles 40M+ HTTP requests per second across 310+ cities.
 4. Explain consistent hashing to a non-technical person. Why is it better than simple round-robin for a CDN?
 
 5. You're designing a health check system. What would you check beyond "is the server responding"? What's the difference between readiness and liveness probes?
+
+6. Your API autoscales on CPU with a 70% target. A marketing push sends traffic from 2,000 to 6,000 requests per second in 90 seconds; new instances take 3 minutes to become ready. What happens, and what would you change?
+
+   **Model answer**: For about 3 minutes the existing fleet takes 3× its normal load. Utilization goes far past 100%, queues grow, latency climbs until clients time out, and their retries add more load. The autoscaler responds correctly but too late. Fixes, in order of leverage: scale ahead of known events (a scheduled or predictive policy); add load shedding or admission control so overload produces fast 429/503s instead of a latency collapse; cut the lag itself with pre-baked images, a warm pool of stopped instances, and lighter startup; and lower the utilization target where traffic is known to be spiky. Also cap the maximum and check that the database behind the API can absorb 3× load, or scaling the web tier just moves the bottleneck.
 
 ---
 

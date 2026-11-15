@@ -18,6 +18,7 @@
 - Decompose systems using domain-driven design
 - Implement distributed transactions with the saga pattern
 - Design service discovery and API versioning
+- Roll out changes safely with canaries, feature flags and expand/contract schema migrations
 - Understand observability in microservices
 
 ---
@@ -30,12 +31,13 @@
 4. [Saga Pattern](#saga-pattern)
 5. [Service Discovery](#service-discovery)
 6. [API Versioning](#api-versioning)
-7. [Observability in Microservices](#observability-in-microservices)
-8. [Case Study: Netflix Microservices](#case-study-netflix-microservices)
-9. [Key References](#key-references)
-10. [Practice Exercise](#practice-exercise)
-11. [Common Mistakes](#common-mistakes)
-12. [Discussion Questions](#discussion-questions)
+7. [Deploying Safely: Rollouts, Flags, and Schema Migrations](#deploying-safely-rollouts-flags-and-schema-migrations)
+8. [Observability in Microservices](#observability-in-microservices)
+9. [Case Study: Netflix Microservices](#case-study-netflix-microservices)
+10. [Key References](#key-references)
+11. [Practice Exercise](#practice-exercise)
+12. [Common Mistakes](#common-mistakes)
+13. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -534,6 +536,97 @@ the last one is the one no tooling catches.
 
 ---
 
+## Deploying Safely: Rollouts, Flags, and Schema Migrations
+
+Most outages start with a change: a deploy, a config push, a migration.
+Independent deploys are the point of microservices, so each team needs a
+rollout process that limits how much damage one bad change can do and how long
+it lasts.
+
+### Rollout Strategies
+
+| Strategy | How it works | Extra capacity | Rollback | Watch out for |
+|----------|--------------|----------------|----------|---------------|
+| **Recreate** | Stop all old instances, start new ones | None | Redeploy the old version | Downtime; only for dev or batch jobs |
+| **Rolling** | Replace instances in batches (e.g. 25% at a time) | 0–1 batch | Roll forward again with the old version | Old and new run side by side for the whole rollout |
+| **Blue-green** | Stand up a full new environment, switch the load balancer | 2× during the switch | Instant: switch back | Both colours share the database, so the schema must suit both |
+| **Canary** | Send 1% → 5% → 25% → 100% of traffic to the new version, checking metrics at each step | Small | Fast: route traffic away | Needs automated analysis; a 1% canary can't see rare errors |
+| **Shadow (dark launch)** | Mirror real traffic to the new version and discard its responses | Up to 2× | Nothing to roll back | Side effects (emails, charges, writes) must be suppressed |
+
+**Canary analysis compares like with like.** Comparing new instances against
+the old fleet mixes in uptime, warm caches and JIT state. Netflix's Kayenta
+(in Spinnaker) instead starts a fresh *baseline* of the current version
+alongside the canary, same size and same age, and compares the two
+statistically on error rate, latency percentiles and saturation. Promotion
+and rollback should be automatic: a human watching dashboards at 2am is the
+failure mode [Module 16](../16-incident-response/README.md) dissects.
+
+### Feature Flags: Separate Deploy from Release
+
+A **deploy** puts code on servers; a **release** exposes behaviour to users.
+Feature flags make them separate steps: ship dark, enable for employees, then
+1% of users, then everyone, and turn it off in seconds without a redeploy.
+That same switch is the fastest incident mitigation there is.
+
+Two costs. **Flag changes are production changes**: a flag flipped to 100% at
+once is a big-bang deploy without a canary, so roll flags out gradually and
+log every flip next to deploys. And **flags rot**: every flag doubles the
+states your code can be in. Give each release flag an owner and an expiry, and
+delete it once it is fully on.
+
+### Zero-Downtime Schema Migrations
+
+During any rolling, blue-green or canary deploy, **two versions of your code
+run against one database**. So the rule from [API Versioning](#api-versioning)
+applies to schemas too: never change code and schema in a single step, and
+make every schema state work with both the code before it and the code after
+it. Renaming `users.name` to `users.full_name` takes six deploys:
+
+```
+  1. EXPAND     ALTER TABLE users ADD COLUMN full_name text;   (nullable, no default)
+  2. DUAL-WRITE app writes name AND full_name; still reads name
+  3. BACKFILL   copy name → full_name in small batches
+  4. SWITCH     app reads full_name (falls back to name if NULL)
+  5. STOP       app stops writing name
+  6. CONTRACT   ALTER TABLE users DROP COLUMN name;            (days later)
+
+  Rollback is a redeploy at every step, because
+  no step removes anything the previous code needs.
+```
+
+**Backfill in batches**, never one giant `UPDATE`. A single statement over 200
+million rows holds locks for its whole run, generates one enormous WAL burst
+that replicas must replay (replication lag), and if it fails at 90%, rolls
+everything back:
+
+```sql
+-- Repeat until 0 rows updated; pause between batches if replicas lag.
+UPDATE users SET full_name = name
+WHERE id IN (
+  SELECT id FROM users
+  WHERE full_name IS NULL AND id > :last_id
+  ORDER BY id LIMIT 5000
+);
+```
+
+**DDL can take the whole table offline.** These are the PostgreSQL traps; MySQL
+has equivalents, usually solved with online tools such as gh-ost or
+pt-online-schema-change:
+
+| Operation | The trap | The safe version |
+|-----------|----------|------------------|
+| Any `ALTER TABLE` | Needs an exclusive lock; while it waits behind one long-running query, **every new query on the table queues behind it** | `SET lock_timeout = '2s'` and retry, so a blocked migration fails fast instead of stalling traffic |
+| `CREATE INDEX` | Blocks writes for the whole build | `CREATE INDEX CONCURRENTLY` (can't run inside a transaction; a failed build leaves an `INVALID` index to drop) |
+| `ADD COLUMN ... DEFAULT` | Before PostgreSQL 11, rewrote the whole table | On 11+ a constant default is metadata-only; volatile defaults (`random()`) still rewrite |
+| `SET NOT NULL` | Scans the whole table under the exclusive lock | Add `CHECK (col IS NOT NULL) NOT VALID`, then `VALIDATE CONSTRAINT` (weaker lock); on 12+ `SET NOT NULL` then skips the scan |
+
+> **The contract step is the dangerous one.** Expand steps are additive and
+> easy to undo; a dropped column is gone. Wait until logs confirm nothing reads
+> the old column, and take a backup first. Many teams keep it for a full
+> release cycle before dropping it.
+
+---
+
 ## Observability in Microservices
 
 > This section is the overview. **[Module 15: Observability](../15-observability/README.md)**
@@ -651,6 +744,9 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 | "Microservices Patterns" (Chris Richardson) | Book | Saga, CQRS, API patterns |
 | Netflix Tech Blog | Blog | Chaos engineering, microservices at scale |
 | Domain-Driven Design (Eric Evans) | Book | Bounded contexts, decomposition |
+| "Automated Canary Analysis at Netflix with Kayenta" (Netflix Tech Blog, 2018) | Blog | Baseline-vs-canary comparison |
+| "ParallelChange" (Martin Fowler / Danilo Sato) | Article | The expand/contract pattern |
+| PostgreSQL docs: `ALTER TABLE`, `CREATE INDEX CONCURRENTLY` | Docs | Lock levels for online schema changes |
 
 ---
 
@@ -672,6 +768,7 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 
 | Mistake | Why It's Wrong | What to Do Instead |
 |---------|---------------|-------------------|
+| **Shipping code and schema change together** | During the rollout old code meets the new schema (or the reverse) and fails | Expand/contract: additive schema first, code next, removal last, each step deployable and reversible alone |
 | **Microservices before the domain is understood** | You cement the wrong boundaries, and moving them later costs far more than in a monolith | Start modular-monolith; extract once boundaries stop moving |
 | **A shared database between services** | The schema becomes an unversioned public API — nobody can migrate independently | One datastore per service; integrate over APIs or events |
 | **Splitting by technical layer** | An "API service" plus a "DB service" means every feature touches both — distributed, but not decoupled | Split by business capability so a change lands in one service |
@@ -696,6 +793,10 @@ Netflix runs 1000+ microservices serving 230M+ subscribers.
 4. How do you handle a failure in a downstream service? What patterns prevent cascading failures?
 
 5. You're migrating from a monolith to microservices. What's your strategy? Big bang or strangler fig?
+
+6. A migration runs `ALTER TABLE orders ADD COLUMN note text;` on PostgreSQL. It is a metadata-only change that should take milliseconds, yet the site goes down for four minutes. What happened?
+
+   **Model answer**: The `ALTER` needed an `ACCESS EXCLUSIVE` lock and queued behind a long-running query or idle-in-transaction session holding a lock on `orders` (an analytics report, a stuck worker). Lock requests queue in order, so every ordinary `SELECT` and `INSERT` on `orders` then queued behind the waiting `ALTER`. The migration itself was cheap; the wait made the table unavailable. Fixes: set `lock_timeout` (a few seconds) so the migration gives up and retries instead of blocking traffic; set `idle_in_transaction_session_timeout` and statement timeouts so stray sessions can't hold locks for minutes; and check for long-running transactions before migrating.
 
 ---
 

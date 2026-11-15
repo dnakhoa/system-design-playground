@@ -112,7 +112,7 @@ opened:
 
 Choose your path based on your goals:
 
-### Path A: System Design Interview Prep (~14.5 hours)
+### Path A: System Design Interview Prep (~15 hours)
 
 Focus on the most commonly asked topics:
 
@@ -133,7 +133,7 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
 
-### Path B: ML Systems and Recommenders (~14.5 hours)
+### Path B: ML Systems and Recommenders (~15 hours)
 
 For the ML system design interview, and for anyone whose system ranks things:
 
@@ -169,7 +169,7 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~55.5 hours)
+### Path D: Full Curriculum (~58 hours)
 
 Work through all 23 modules in order. Each builds on the previous —
 except Module 23, a design case that was added last and fits best straight
@@ -185,9 +185,14 @@ go straight at it:
 | Can't estimate QPS/storage | [Module 01 — Fundamentals](01-fundamentals/README.md) |
 | Confused by CAP, or by "eventual consistency" | [Module 01 — Fundamentals](01-fundamentals/README.md) |
 | Don't know when to use SQL vs NoSQL | [Module 02 — Databases](02-databases-storage/README.md) |
+| Concurrent requests oversell stock or corrupt counters | [Module 02 — Databases](02-databases-storage/README.md) |
 | Cache invalidation keeps breaking | [Module 03 — Caching](03-caching/README.md) |
 | One key is melting one cache node | [Module 03 — Caching](03-caching/README.md) |
+| Traffic spikes outrun the autoscaler | [Module 04 — Load Balancing](04-load-balancing/README.md) |
+| Need real-time counts or windows over a stream | [Module 05 — Async Systems](05-async-systems/README.md) |
+| Deploys and migrations cause outages | [Module 06 — Microservices](06-microservices/README.md) |
 | Retries make outages worse, not better | [Module 07 — Reliability](07-reliability/README.md) |
+| Failovers misfire or both nodes think they lead | [Module 08 — Distributed Systems](08-distributed-systems/README.md) |
 | Need to design a chat system | [Module 10 — Chat/News Feed](10-case-chat-newsfeed/README.md) |
 | Need search-as-you-type or full-text search | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
 | Need "find what's near me" | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
@@ -216,18 +221,18 @@ go straight at it:
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [01](01-fundamentals/README.md) | [System Design Fundamentals](01-fundamentals/README.md) | 9-step framework, CAP theorem, estimation | ⭐ Beginner | ~2h |
-| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, B-tree vs LSM, sharding, replication, Bloom filters | ⭐ Beginner | ~2h |
+| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, B-tree vs LSM, sharding, replication, isolation levels and MVCC, Bloom filters | ⭐ Beginner | ~2.5h |
 | [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, stampede, penetration, avalanche | ⭐⭐ Intermediate | ~3h |
-| [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, API gateway | ⭐⭐ Intermediate | ~2.5h |
+| [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, autoscaling, API gateway | ⭐⭐ Intermediate | ~3h |
 
 ### Phase 2: Intermediate (Modules 05-08)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, CQRS, delivery guarantees, transactional outbox, CDC | ⭐⭐ Intermediate | ~2.5h |
-| [06](06-microservices/README.md) | [Microservices](06-microservices/README.md) | DDD, saga pattern, service mesh, observability | ⭐⭐ Intermediate | ~2h |
+| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, CQRS, delivery guarantees, transactional outbox, CDC, stream processing | ⭐⭐ Intermediate | ~3h |
+| [06](06-microservices/README.md) | [Microservices](06-microservices/README.md) | DDD, saga pattern, canary and blue-green deploys, zero-downtime schema migrations | ⭐⭐ Intermediate | ~2.5h |
 | [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
-| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, consensus, CRDTs, leader election | ⭐⭐⭐ Advanced | ~2.5h |
+| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, leader election, failure detection, gossip, split brain, CRDTs | ⭐⭐⭐ Advanced | ~3h |
 
 ### Phase 3: Design Cases (Modules 09-12, 23)
 
@@ -329,10 +334,12 @@ things that self-study doesn't naturally build:
 |------|-----------|
 | **CAP Theorem** | During a network partition, a distributed system must give up either consistency or availability. Partition tolerance is not optional — "pick 2 of 3" is the common misstatement |
 | **PACELC** | CAP plus the normal case: if Partitioned, choose A or C; Else, choose Latency or Consistency |
+| **Autoscaling** | Adding and removing instances to track demand; new capacity takes minutes, so it needs headroom and load shedding alongside it |
 | **Backpressure** | Rejecting work early when a bounded queue is full, so overload produces fast errors instead of runaway latency |
 | **Bloom Filter** | Compact set that answers "definitely not present" or "probably present"; ~10 bits/key for a 1% false-positive rate |
 | **Bulkhead** | A capped resource pool per dependency, so one slow dependency can't exhaust every thread |
 | **Cache Penetration** | Requests for keys that exist nowhere bypass the cache every time; fixed with negative caching or a Bloom filter |
+| **Canary Release** | Sending a small share of traffic to a new version and comparing it against a baseline before rolling out further |
 | **CDC** | Change Data Capture — turning a database's replication log into a stream of events |
 | **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
 | **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
@@ -342,10 +349,13 @@ things that self-study doesn't naturally build:
 | **DLQ** | Dead Letter Queue — queue for messages that fail processing |
 | **Error Budget** | The failure allowance implied by an SLO (99.9% ⇒ ~43 min/month) |
 | **Event Sourcing** | Store every state change as an immutable event, not just current state |
+| **Expand/Contract** | Changing a schema or API in additive steps (add, migrate, remove) so old and new code both work at every step |
 | **Fan-out** | Distributing one message to multiple consumers |
+| **Feature Flag** | A runtime switch that separates deploying code from releasing behaviour to users |
 | **Fencing Token** | Monotonically increasing token that prevents stale leaders from acting |
 | **G-Counter** | Grow-only counter CRDT — can only increment |
 | **Geohash** | Encodes a location as a string so that places sharing a prefix share a grid cell; nearby search checks a cell plus its 8 neighbours |
+| **Gossip Protocol** | Peers exchange state with random peers each round; news reaches every node in O(log N) rounds |
 | **HyperLogLog** | Approximate distinct-count structure; Redis's version counts billions of items in 12 KB within ~1% |
 | **Idempotency** | Property where doing an operation multiple times has the same effect as once |
 | **Inverted Index** | Map from each term to the documents containing it (its posting list) — the core of full-text search |
@@ -356,6 +366,8 @@ things that self-study doesn't naturally build:
 | **Little's Law** | Requests in flight = throughput × latency — the arithmetic behind pool and concurrency-limit sizing |
 | **Load Shedding** | Deliberately dropping the least valuable work first when demand exceeds capacity |
 | **LSM-Tree** | Storage engine that appends to sorted immutable files and merges them later; fast writes, used by Cassandra and RocksDB |
+| **MVCC** | Multi-Version Concurrency Control — writes create new row versions so readers see a snapshot and never block writers |
+| **Phi Accrual Detector** | Failure detector that reports a suspicion level from the observed heartbeat distribution instead of a fixed timeout |
 | **Quorum** | Read/write overlap rule (W + R > N) that guarantees a read sees the latest write |
 | **Quadtree** | Spatial index that splits a region into four only where it is dense, so every leaf holds a bounded number of points |
 | **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
@@ -363,13 +375,17 @@ things that self-study doesn't naturally build:
 | **SAGA** | Distributed transaction pattern using compensating actions instead of locks |
 | **SLI** | Service Level Indicator — what you measure (e.g., latency, error rate) |
 | **SLO** | Service Level Objective — what you promise internally (e.g., 99.9% availability) |
+| **Snapshot Isolation** | Each transaction reads a consistent snapshot; prevents lost updates but still allows write skew |
+| **Split Brain** | Two sides of a partition each acting as leader; prevented by majority quorums and fencing tokens |
 | **Token Bucket** | Rate limiting algorithm that allows controlled bursts |
 | **Tombstone** | A deletion marker in an LSM-tree; space is reclaimed only when compaction runs |
 | **Transactional Outbox** | Writing an event to the database in the same transaction as the business change, then relaying it — fixes the dual-write problem |
 | **Trie** | Prefix tree; with the top-k completions cached at each node, autocomplete becomes one walk of the prefix |
 | **Vector Clock** | Logical clock that tracks causality more precisely than Lamport timestamps |
+| **Watermark** | A stream processor's estimate that no older events remain, which decides when an event-time window is complete |
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |
+| **Write Skew** | Two transactions read the same data and write different rows, together breaking a rule neither broke alone |
 
 ### Security, API Design, and Operations (Modules 13-16)
 
