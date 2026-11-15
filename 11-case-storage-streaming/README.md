@@ -562,4 +562,4 @@ Design a conflict resolution strategy. What happens when both come online? How d
 
 ---
 
-*Module 11 of 24 in the System Design Playground*
+*Module 11 of 25 in the System Design Playground*

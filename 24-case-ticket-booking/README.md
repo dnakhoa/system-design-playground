@@ -12,7 +12,7 @@
 |--------|-------|------|
 | Module 23 | Design Case — Search Autocomplete and Proximity Search | [../23-case-search-proximity/](../23-case-search-proximity/) |
 | **Module 24** | **Design Case — Ticket Booking and Reservations** | **(current)** |
-| — | Course Home | [../README.md](../README.md) |
+| Module 25 | Design Case — Web Crawler and Notification System | [../25-case-crawler-notifications/](../25-case-crawler-notifications/) |
 
 Like Module 23, this design case extends Modules 09-12 and was added after
 them. It assumes Modules 01-05, and especially
@@ -604,8 +604,8 @@ is in Module 01.
 
 **Previous:** [Module 23: Design Case — Search Autocomplete and Proximity Search](../23-case-search-proximity/README.md)
 
-**Next:** [Course Home](../README.md)
+**Next:** [Module 25: Design Case — Web Crawler and Notification System](../25-case-crawler-notifications/README.md)
 
 ---
 
-*Module 24 of 24 in the System Design Playground*
+*Module 24 of 25 in the System Design Playground*

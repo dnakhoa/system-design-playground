@@ -1007,4 +1007,4 @@ Coordination services that provide distributed primitives.
 
 ---
 
-*Module 08 of 24 in the System Design Playground*
+*Module 08 of 25 in the System Design Playground*
