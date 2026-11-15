@@ -281,6 +281,11 @@ except Exception as e:
 ### Exponential Backoff with Jitter
 
 ```python
+import random
+import time
+from typing import Any, Callable
+
+
 def retry_with_jitter(
     func: Callable,
     max_retries: int = 5,

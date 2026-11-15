@@ -18,6 +18,7 @@
 - Design event-driven architectures with Kafka and RabbitMQ
 - Implement event sourcing and CQRS patterns
 - Handle delivery guarantees (at-least-once, exactly-once)
+- Compute over streams with event-time windows, watermarks and a late-data policy
 - Design dead letter queues for error handling
 
 ---
@@ -33,12 +34,13 @@
 7. [CQRS (Command Query Responsibility Segregation)](#cqrs-command-query-responsibility-segregation)
 8. [Delivery Guarantees](#delivery-guarantees)
 9. [The Dual-Write Problem: Outbox and CDC](#the-dual-write-problem-outbox-and-cdc)
-10. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
-11. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
-12. [Key References](#key-references)
-13. [Practice Exercise](#practice-exercise)
-14. [Common Mistakes](#common-mistakes)
-15. [Discussion Questions](#discussion-questions)
+10. [Stream Processing: Windows, Watermarks, and Late Data](#stream-processing-windows-watermarks-and-late-data)
+11. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
+12. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
+13. [Key References](#key-references)
+14. [Practice Exercise](#practice-exercise)
+15. [Common Mistakes](#common-mistakes)
+16. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -629,6 +631,152 @@ events, not leaked internal column names, and you avoid the polling query.
 
 ---
 
+## Stream Processing: Windows, Watermarks, and Late Data
+
+A queue moves events from A to B. **Stream processing** computes over them while
+they move: clicks per minute, fraud scores over the last hour, a dashboard
+that is 5 seconds behind reality instead of a day. Kafka Streams, Apache Flink
+and Spark Structured Streaming are the common engines; the concepts below
+apply to all of them.
+
+### Batch vs Stream
+
+| | Batch | Stream |
+|---|---|---|
+| Input | Bounded: yesterday's files | Unbounded: events keep arriving |
+| Latency | Minutes to hours | Milliseconds to seconds |
+| Completeness | Easy: all the data is there when the job starts | Hard: when is "the 3pm minute" finished? |
+| Reprocessing | Re-run the job | Replay the log from an offset |
+| Typical use | Billing, training data, reports | Alerting, fraud, live dashboards, feature freshness |
+
+Two architectures dominate. **Lambda** (Nathan Marz) runs a batch layer for
+correct results and a speed layer for fresh approximate results, then merges
+them. It works, but every metric is implemented twice and the two drift.
+**Kappa** (Jay Kreps, 2014) keeps one streaming code path and reprocesses by
+replaying the retained Kafka log into a new version of the job. Most teams
+starting today choose Kappa unless a batch system already exists.
+
+### Event Time vs Processing Time
+
+Every event has two timestamps: when it **happened** (event time) and when the
+processor **saw** it (processing time). They diverge constantly: a phone
+buffers clicks in a tunnel, a consumer restarts and catches up, a partition lags.
+
+```
+  event time:      12:00:05   12:00:20   12:00:58      12:00:15
+  arrival order:   ────●──────────●──────────●─────────────●────▶
+                                                           ▲
+                    this click happened at 12:00:15 but arrived after 12:00:58
+```
+
+Count by processing time and a consumer restart moves an hour of traffic into
+one spike. Count by event time and results are correct, but you must decide
+how long to wait for stragglers.
+
+### Window Types
+
+```
+  Tumbling (fixed, non-overlapping): "clicks per minute"
+  |── 0-60 ──|── 60-120 ──|── 120-180 ──|
+
+  Sliding / hopping (overlapping): "clicks in the last 5 min, updated every min"
+  |────── 0-300 ──────|
+       |────── 60-360 ──────|
+            |────── 120-420 ──────|
+
+  Session (gap-based, per key): "one browsing session = activity with < 30 min gaps"
+  |─●─●──●─|            |─●──●─|         |─●─|
+           └── 30 min gap closes the session
+```
+
+### Watermarks: Deciding a Window Is Done
+
+A **watermark** is the processor's running assertion: "I don't expect any more
+events with event time earlier than *W*." When the watermark passes a window's
+end, the window is emitted. The common heuristic is *bounded
+out-of-orderness*: watermark = newest event time seen − allowed delay.
+
+```python
+"""Event-time tumbling windows with a watermark: count clicks per minute."""
+
+from collections import defaultdict
+
+WINDOW = 60          # seconds per tumbling window
+MAX_DELAY = 10       # watermark lags the newest event time by this much
+
+
+class TumblingWindowCounter:
+    def __init__(self):
+        self.open_windows = defaultdict(int)   # window start -> count
+        self.max_event_time = 0
+        self.late = []                          # side output: too late to count
+
+    def watermark(self) -> int:
+        """'No event older than this should still arrive.' A heuristic, not a promise."""
+        return self.max_event_time - MAX_DELAY
+
+    def on_event(self, event_time: int) -> list[str]:
+        start = event_time - event_time % WINDOW
+        if start + WINDOW <= self.watermark():
+            self.late.append(event_time)        # its window was already emitted
+            return []
+        self.open_windows[start] += 1
+        self.max_event_time = max(self.max_event_time, event_time)
+        return self._emit_closed()
+
+    def _emit_closed(self) -> list[str]:
+        out = []
+        for start in sorted(self.open_windows):
+            if start + WINDOW <= self.watermark():   # window end has passed the watermark
+                out.append(f"[{start:>3}, {start + WINDOW:>3})  clicks={self.open_windows.pop(start)}")
+        return out
+
+
+# Event times in ARRIVAL order. Mobile clients buffer offline, so order is not guaranteed.
+arrivals = [5, 20, 61, 15, 58, 75, 66, 130, 50, 140]
+
+counter = TumblingWindowCounter()
+for t in arrivals:
+    for line in counter.on_event(t):
+        print(f"after event t={t:>3}: emit {line}")
+print(f"late, sent to side output: {counter.late}")
+```
+
+```
+after event t= 75: emit [  0,  60)  clicks=4
+after event t=130: emit [ 60, 120)  clicks=3
+late, sent to side output: [50]
+```
+
+Event `15` arrived after event `61` and was still counted, because the
+watermark (51) hadn't yet passed its window's end (60). Event `50` arrived after
+the watermark reached 120, so its window had already been emitted. The delay
+setting is a **direct trade between latency and completeness**: a larger delay
+emits later but drops less.
+
+Late events need a deliberate policy, never silent loss:
+
+| Policy | When to use it |
+|--------|----------------|
+| **Drop and count** | Dashboards where 0.01% loss is acceptable; still *measure* the drop rate |
+| **Side output** | Route late events to a separate topic for a correcting batch job |
+| **Allowed lateness / updates** | Keep window state longer and emit a corrected result; downstream must accept updates (upserts, not appends) |
+
+### State and Exactly-Once
+
+Windows, joins and aggregations are **stateful**: a crash must not lose the
+counts accumulated so far. Engines checkpoint state together with the input
+offsets it reflects, so recovery resumes from a consistent point. Flink takes
+periodic distributed snapshots by flowing barrier markers through the job;
+Kafka Streams keeps state in local stores backed by changelog topics and
+commits offsets and outputs in one Kafka transaction. This gives
+**exactly-once effects inside the engine**. Writes to external systems (a
+database, an email API) are still at-least-once unless the sink is
+transactional or idempotent, which brings back the rules from
+[Delivery Guarantees](#delivery-guarantees).
+
+---
+
 ## Dead Letter Queues (DLQ)
 
 Messages that fail processing are sent to a DLQ for investigation.
@@ -769,6 +917,8 @@ Uber processes millions of events per second across ride matching, pricing, driv
 | Kafka Documentation | Docs | Partitions, consumer groups |
 | RabbitMQ Tutorials | Docs | Exchange types, routing |
 | Uber Engineering Blog | Blog | Kafka at scale |
+| "Streaming 101" and "Streaming 102" (Tyler Akidau, O'Reilly Radar) | Article | Event time, windows, watermarks |
+| "Questioning the Lambda Architecture" (Jay Kreps, 2014) | Article | The case for Kappa |
 
 ---
 
@@ -800,6 +950,7 @@ When a user places an order:
 | **No dead letter queue** | A permanently-bad message retries forever and blocks its partition | DLQ after bounded retries, with an alert and a replay path |
 | **Retrying non-retryable errors** | A malformed payload will fail identically 1,000 times | Split transient (network, 5xx) from permanent (validation) and DLQ the latter at once |
 | **Async for work the user is waiting on** | "Queued" isn't "done" — a checkout that returns before payment clears misleads the user | Keep the user-blocking path synchronous; make only side effects async |
+| **Windowing by processing time** | A consumer restart or lag spike moves hours of events into one window | Window by event time, with a watermark and an explicit late-data policy |
 | **Event sourcing with no snapshots** | Replay time grows without bound; a 10-year account takes minutes to load | Snapshot periodically and replay only events since the snapshot |
 | **Events carrying only IDs when consumers need data** | Every consumer calls back to the producer, recreating the coupling the queue removed | Event-carried state transfer for the fields consumers actually read |
 
@@ -816,6 +967,10 @@ When a user places an order:
 4. You're using Kafka and notice one partition has 10x more messages than others. What's happening and how do you fix it?
 
 5. Design a dead letter queue workflow for a payment processing system. What happens after a message lands in the DLQ?
+
+6. A real-time dashboard counts ad clicks per minute by event time with a 10-second watermark delay. Finance reports that the dashboard total is 2% lower than the next day's billing batch. Where did the 2% go, and what would you change?
+
+   **Model answer**: Most likely late events: clicks buffered on mobile devices or delayed by a lagging partition arrive after the watermark has closed their window and are dropped. First measure it: count late events per window instead of discarding them silently. Then pick a policy per consumer. The dashboard can keep its short delay, because freshness matters more than the last 2% there. Billing must not depend on it, so route late events to a side output that a correcting job merges, or allow lateness and emit updated window results to an upsert sink. Raising the delay to cover the long tail would fix completeness at the cost of a dashboard minutes behind. A Kappa design also lets you replay the log to recompute any window exactly.
 
 ---
 

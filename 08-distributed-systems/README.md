@@ -16,6 +16,7 @@
 
 - Understand consensus algorithms (Raft, Paxos)
 - Design leader election and fencing
+- Detect failures with heartbeats, phi accrual and gossip, and prevent split brain with majority quorums
 - Reason about logical clocks and event ordering
 - Implement distributed transactions (2PC, sagas)
 - Use CRDTs for conflict-free replication
@@ -27,14 +28,15 @@
 1. [The Eight Fallacies of Distributed Systems](#the-eight-fallacies-of-distributed-systems)
 2. [Consensus Algorithms](#consensus-algorithms)
 3. [Leader Election](#leader-election)
-4. [Logical Clocks](#logical-clocks)
-5. [Distributed Transactions](#distributed-transactions)
-6. [CRDTs (Conflict-Free Replicated Data Types)](#crdts-conflict-free-replicated-data-types)
-7. [Case Study: ZooKeeper / etcd](#case-study-zookeeper--etcd)
-8. [Key References](#key-references)
-9. [Practice Exercise](#practice-exercise)
-10. [Common Mistakes](#common-mistakes)
-11. [Discussion Questions](#discussion-questions)
+4. [Failure Detection and Membership](#failure-detection-and-membership)
+5. [Logical Clocks](#logical-clocks)
+6. [Distributed Transactions](#distributed-transactions)
+7. [CRDTs (Conflict-Free Replicated Data Types)](#crdts-conflict-free-replicated-data-types)
+8. [Case Study: ZooKeeper / etcd](#case-study-zookeeper--etcd)
+9. [Key References](#key-references)
+10. [Practice Exercise](#practice-exercise)
+11. [Common Mistakes](#common-mistakes)
+12. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -168,58 +170,55 @@ Prevent stale leaders from acting on old data.
 import threading
 from dataclasses import dataclass, field
 
+
+@dataclass
+class LockService:
+    """Issues fencing tokens from ONE counter (in practice: etcd's revision
+    or ZooKeeper's zxid). Tokens must come from the lock service — if each
+    client counted for itself, two holders could carry the same number."""
+
+    _next_token: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def acquire(self, node_id: str) -> int:
+        with self._lock:
+            self._next_token += 1
+            return self._next_token
+
+
 @dataclass
 class FencedResource:
-    """Resource protected by fencing tokens."""
+    """Storage that remembers the highest token it has seen."""
 
-    _last_token: int = 0
+    _highest_token: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _data: dict = field(default_factory=dict)
 
-    def write(self, token: int, key: str, value: any) -> bool:
-        """Write only if token is higher than last seen."""
+    def write(self, token: int, key: str, value) -> bool:
         with self._lock:
-            if token < self._last_token:
-                print(f"REJECTED: token {token} < last token {self._last_token}")
+            if token < self._highest_token:   # an older holder: refuse
+                print(f"REJECTED: token {token} < highest seen {self._highest_token}")
                 return False
-
-            self._last_token = token
+            self._highest_token = token       # equal is fine: same holder, next write
             self._data[key] = value
             print(f"ACCEPTED: token {token}, wrote {key}={value}")
             return True
 
-    def read(self) -> dict:
-        return self._data.copy()
 
-@dataclass
-class Leader:
-    """Leader with fencing token."""
-
-    node_id: str
-    fence_token: int = 0
-
-    def acquire_lock(self) -> int:
-        """Increment token when acquiring lock."""
-        self.fence_token += 1
-        return self.fence_token
-
-# Simulate the problem:
+locks = LockService()
 resource = FencedResource()
-leader_a = Leader("A", fence_token=0)
-leader_b = Leader("B", fence_token=0)
 
-# 1. A becomes leader, acquires lock (token=1)
-token_a = leader_a.acquire_lock()
-resource.write(token_a, "counter", 100)  # ACCEPTED
+# 1. A acquires the lock and writes.
+token_a = locks.acquire("A")                 # token 1
+resource.write(token_a, "counter", 100)      # ACCEPTED
 
-# 2. Network partition: A can't reach others
-# 3. B becomes new leader, acquires lock (token=2)
-token_b = leader_b.acquire_lock()
-resource.write(token_b, "counter", 200)  # ACCEPTED (token 2 > 1)
+# 2. A stalls (GC pause, partition); its lease expires.
+# 3. B acquires the lock and writes.
+token_b = locks.acquire("B")                 # token 2
+resource.write(token_b, "counter", 200)      # ACCEPTED (2 >= 2)
 
-# 4. Partition heals: A thinks it's still leader
-# 5. A tries to write with old token
-resource.write(token_a, "counter", 300)  # REJECTED (token 1 < 2)
+# 4. A wakes up still believing it holds the lock.
+resource.write(token_a, "counter", 300)      # REJECTED (1 < 2)
 ```
 
 ```
@@ -232,12 +231,201 @@ resource.write(token_a, "counter", 300)  # REJECTED (token 1 < 2)
 
   Solution: Fencing tokens
   - Each lock/leadership gets a monotonically increasing token
-  - Resource server rejects writes with tokens ≤ last seen token
+  - Tokens come from the lock service, never from the client
+  - Resource server rejects writes with a token lower than the highest seen
 
   Token 1: A acquires lock
   Token 2: B acquires lock (higher token)
   A tries to write with token 1 → REJECTED (token 2 is current)
 ```
+
+---
+
+## Failure Detection and Membership
+
+Every mechanism in this module — leader election, quorums, rebalancing —
+starts with one node deciding that another is dead. That decision is always a
+guess: **a crashed node, a paused node, and a partitioned node all look like
+silence.** Failure detection is about making that guess well, and making sure
+a wrong guess cannot corrupt data.
+
+### Heartbeats and the Timeout Dilemma
+
+The simplest detector: every node sends a heartbeat every second; if none
+arrives for *T* seconds, declare it dead.
+
+| Timeout | Detection | Failure mode |
+|---------|-----------|--------------|
+| Short (2 s) | Fast failover | A GC pause or congested link triggers false failovers, each with its own disruption (leader churn, rebalancing, cache misses) |
+| Long (30 s) | Few false alarms | 30 s of errors on every real crash |
+
+A fixed threshold is wrong somewhere: a link with 5 ms jitter and a cross-region
+link with 300 ms jitter need different timeouts, and the right value changes
+with load.
+
+### Phi Accrual: Suspicion Instead of a Verdict
+
+The **phi accrual detector** (Hayashibara et al., 2004), used by Cassandra and
+Akka, learns the distribution of recent heartbeat gaps and reports how
+*surprising* the current silence is:
+
+```
+  φ = -log10( P(a heartbeat would arrive even later than now) )
+
+  φ = 1  →  10% chance a live node would still be silent this long
+  φ = 3  →  0.1%
+  φ = 8  →  0.000001%      ← Cassandra's default conviction threshold
+```
+
+Because it adapts to the observed jitter, the same threshold works on a quiet
+LAN and a noisy WAN. Callers can also act at different levels: stop routing new
+requests at a low φ, and only trigger expensive failover at a high φ.
+
+```python
+"""Phi accrual failure detector: a suspicion level, not a yes/no verdict."""
+
+import math
+import statistics
+from collections import deque
+
+
+class PhiAccrualDetector:
+    def __init__(self, window: int = 100, min_std_ms: float = 50.0):
+        self.intervals = deque(maxlen=window)   # recent heartbeat gaps (ms)
+        self.min_std_ms = min_std_ms            # floor: a perfectly regular
+        self.last_heartbeat = None              # sender must not look "dead" at +1ms
+
+    def heartbeat(self, now_ms: float) -> None:
+        if self.last_heartbeat is not None:
+            self.intervals.append(now_ms - self.last_heartbeat)
+        self.last_heartbeat = now_ms
+
+    def phi(self, now_ms: float) -> float:
+        """-log10(P(a heartbeat arrives even later than this)).
+        phi 1 ≈ 10% chance we're wrong to suspect; phi 8 ≈ 0.000001%."""
+        elapsed = now_ms - self.last_heartbeat
+        mean = statistics.fmean(self.intervals)
+        std = max(statistics.pstdev(self.intervals), self.min_std_ms)
+        p_later = 0.5 * math.erfc((elapsed - mean) / (std * math.sqrt(2)))
+        return -math.log10(max(p_later, 1e-300))
+
+
+d = PhiAccrualDetector()
+t = 0.0
+for gap in [1000, 1010, 990, 1005, 995] * 4:   # heartbeats roughly every second
+    t += gap
+    d.heartbeat(t)
+
+for silence in (1000, 1100, 1200, 1300, 1500):
+    print(f"silent {silence:>4} ms  phi = {d.phi(t + silence):5.1f}")
+```
+
+The `min_std_ms` floor matters: heartbeats that arrive with near-perfect
+regularity have a standard deviation close to zero, and without the floor a
+2 ms delay would look like certain death.
+
+### Gossip: Membership Without a Coordinator
+
+How does every node in a 1,000-node Cassandra or Consul cluster learn that a
+node joined or died, without a central registry that itself becomes a single
+point of failure? **Gossip**: once per round, each node picks a random peer and
+exchanges its membership table (node → heartbeat counter, status). Newer
+counters win. Like an epidemic, news spreads in roughly *O(log N)* rounds:
+
+```python
+"""How many gossip rounds until a rumour reaches every node?"""
+
+import math
+import random
+
+
+def rounds_to_full_spread(n: int, fanout: int = 1, seed: int = 0) -> int:
+    rng = random.Random(seed)
+    informed = {0}                      # node 0 learns the news
+    rounds = 0
+    while len(informed) < n:
+        rounds += 1
+        for node in list(informed):     # each informed node tells `fanout` random peers
+            informed.update(rng.randrange(n) for _ in range(fanout))
+    return rounds
+
+
+for n in (100, 1_000, 10_000):
+    trials = [rounds_to_full_spread(n, seed=s) for s in range(5)]
+    print(f"{n:>7} nodes: {min(trials)}-{max(trials)} rounds "
+          f"(log2 N + ln N = {math.log2(n) + math.log(n):.0f})")
+```
+
+```
+    100 nodes: 11-14 rounds (log2 N + ln N = 11)
+   1000 nodes: 16-20 rounds (log2 N + ln N = 17)
+  10000 nodes: 23-26 rounds (log2 N + ln N = 22)
+```
+
+**A cluster 100 times larger needs only about 10 more rounds.** At one round per
+second that is the difference between ~15 s and ~25 s. Each node sends a
+constant number of messages per round regardless of cluster size, so no node
+becomes a hotspot.
+
+**SWIM** (used by HashiCorp's memberlist, under Consul, Nomad and Serf) adds
+two refinements. Before declaring a node dead after a missed direct ping, ask
+*k* other members to ping it (**indirect probing**), so one bad link between
+two nodes doesn't evict a healthy node. And spread "suspect" before "dead",
+giving a falsely accused node time to refute it.
+
+### Split Brain and Majority Quorums
+
+A partition can split a cluster into two halves that each believe the other
+died. If both halves elect a leader and accept writes, you have **split brain**:
+two divergent histories with no correct merge.
+
+The standard defence is to require a **majority** (more than N/2 nodes) for
+leadership and for every commit. Two disjoint groups cannot both hold a
+majority, so at most one side can make progress:
+
+```
+  5-node cluster, partitioned 3 | 2
+
+  ┌─────────────────┐       ┌───────────┐
+  │  A    B    C    │   ✂   │  D    E   │
+  │  3 of 5 = major │       │  2 of 5   │
+  │  ✓ elects leader│       │  ✗ refuses│
+  │  ✓ commits      │       │    writes │
+  └─────────────────┘       └───────────┘
+```
+
+| Cluster size | Majority | Failures tolerated |
+|--------------|----------|--------------------|
+| 3 | 2 | 1 |
+| 4 | 3 | 1 |
+| 5 | 3 | 2 |
+| 6 | 4 | 2 |
+| 7 | 4 | 3 |
+
+**Even sizes buy nothing**: 4 nodes tolerate the same single failure as 3,
+with one more node to fail and to replicate to. That's why consensus clusters
+run 3, 5 or 7 nodes. A 2-node primary/standby pair cannot tell "my peer died"
+from "the link died" without a third vote: a witness node, a cloud-provider
+lock, or a quorum disk.
+
+Majority quorums stop two leaders from *committing*, but a deposed leader can
+still *act* on the outside world (a storage write, an email, a payment)
+before it notices it was replaced. That's what the fencing tokens above are
+for: the quorum decides who the leader is, and the token lets downstream
+systems reject the old one.
+
+### A Note on Redis-Based Locks
+
+A single-instance Redis lock (`SET key value NX PX 30000`) is common and fine
+for **efficiency** locks, where a lost lock means duplicate work (two workers
+rebuild the same cache entry). **Redlock**, which takes the lock on a majority
+of independent Redis instances, was critiqued by Martin Kleppmann (2016) for
+**correctness** locks: it assumes bounded clock drift and process pauses, and it
+issues no fencing token, so a paused holder can still write after its lock
+expired. Redis's author, Salvatore Sanfilippo, published a rebuttal; the
+practical consensus since is to use Redis locks for efficiency, and a
+consensus-backed store (etcd, ZooKeeper) plus fencing tokens when a
+double-holder would corrupt data.
 
 ---
 
@@ -710,6 +898,9 @@ Coordination services that provide distributed primitives.
 | ZooKeeper Documentation | Docs | Distributed coordination |
 | etcd Documentation | Docs | Raft-based key-value store |
 | "Designing Data-Intensive Applications" | Book | Comprehensive distributed systems |
+| "The φ Accrual Failure Detector" (Hayashibara et al., 2004) | Paper | Adaptive failure detection used by Cassandra and Akka |
+| "SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol" (Das et al., 2002) | Paper | Gossip membership with indirect probes |
+| "How to do distributed locking" (Martin Kleppmann, 2016) | Blog | The Redlock critique and why locks need fencing tokens |
 
 ---
 
@@ -741,6 +932,7 @@ Coordination services that provide distributed primitives.
 | **Last-write-wins as the default merge** | Concurrent updates are silently discarded, and the "winner" depends on clock skew | Detect concurrency with vector clocks; merge, or surface both versions |
 | **2PC for cross-service transactions** | Blocking protocol, coordinator is a SPOF, locks held through the stall | Saga with compensations, or TCC |
 | **Assuming a failed node is a stopped node** | Slow, partitioned, and dead are indistinguishable from outside | Design for "unreachable"; use leases and fencing rather than liveness guesses |
+| **One fixed heartbeat timeout everywhere** | Too short causes false failovers on noisy links; too long leaves real crashes undetected | An adaptive detector (phi accrual), indirect probes before eviction, and fencing so a wrong guess is safe |
 | **Building consensus yourself** | It is famously easy to get subtly, silently wrong | Use etcd, ZooKeeper, or Consul |
 
 ---
@@ -756,6 +948,10 @@ Coordination services that provide distributed primitives.
 4. How do CRDTs achieve conflict-free replication? What are their limitations?
 
 5. Design a leader election system for a 5-node cluster. What happens when the leader crashes?
+
+6. A 2-node database pair (primary + standby) uses a heartbeat: if the standby misses 3 heartbeats it promotes itself. After a network blip, both nodes are accepting writes. What went wrong, and how do you fix it?
+
+   **Model answer**: The standby could not tell "the primary died" from "the link between us died", so it promoted itself while the primary was still serving clients: classic split brain. Two nodes cannot form a majority after a partition, so any rule that lets one side act alone will eventually let both sides act. Fixes: add a third vote (a witness node, or a lease in etcd/ZooKeeper or a cloud provider's lock) so promotion requires a majority; make the old primary fence itself, refusing writes once it cannot renew its lease; and give writes a fencing token (epoch number) so storage or replicas reject anything from the deposed epoch. Lengthening the timeout only makes the blip that triggers it rarer.
 
 ---
 

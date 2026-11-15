@@ -5,7 +5,7 @@
 
 Six checks, all of which have caught real defects in this course:
 
-1. Python code blocks parse. A missing dot once turned a whole example
+1. Python code blocks compile. A missing dot once turned a whole example
    into a SyntaxError that sat in the course unnoticed.
 2. ASCII box diagrams have sound geometry. Every row inside a ┌…┐/└…┘
    box must carry a border at BOTH the box's left and right columns.
@@ -122,7 +122,10 @@ def check_python():
             body = m.group(1)
             offset = text[:m.start(1)].count("\n") + 1
             try:
-                ast.parse(body)
+                # compile(), not ast.parse(): only the compiler rejects
+                # code like `return` outside a function.
+                compile(body, str(md), "exec", dont_inherit=True,
+                        flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
             except SyntaxError as exc:
                 line = offset + (exc.lineno or 1) - 1
                 failures.append(

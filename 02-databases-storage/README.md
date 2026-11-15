@@ -17,6 +17,7 @@
 - Choose between SQL and NoSQL with a clear decision framework
 - Understand sharding, replication, and partitioning strategies
 - Reason about ACID vs BASE trade-offs
+- Pick a transaction isolation level and name the anomalies it allows
 - Evaluate NewSQL options for modern applications
 - Design data models that scale
 
@@ -30,13 +31,14 @@
 4. [Sharding Strategies](#sharding-strategies)
 5. [Replication Strategies](#replication-strategies)
 6. [ACID vs BASE](#acid-vs-base)
-7. [NewSQL: When You Need Both](#newsql-when-you-need-both)
-8. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
-9. [Data Modeling Patterns](#data-modeling-patterns)
-10. [Key References](#key-references)
-11. [Practice Exercise](#practice-exercise)
-12. [Common Mistakes](#common-mistakes)
-13. [Discussion Questions](#discussion-questions)
+7. [Transaction Isolation Levels](#transaction-isolation-levels)
+8. [NewSQL: When You Need Both](#newsql-when-you-need-both)
+9. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
+10. [Data Modeling Patterns](#data-modeling-patterns)
+11. [Key References](#key-references)
+12. [Practice Exercise](#practice-exercise)
+13. [Common Mistakes](#common-mistakes)
+14. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -506,6 +508,170 @@ Eventual consistency — All replicas converge eventually
 
 ---
 
+## Transaction Isolation Levels
+
+The "I" in ACID is a dial, not a switch. Full isolation, where every transaction
+behaves as if it ran alone, costs throughput, so databases ship weaker levels and
+most ship one of them **as the default**. Bugs that only appear under concurrency
+come from not knowing which level you are running at.
+
+| Database | Default level | What that default actually is |
+|----------|---------------|-------------------------------|
+| PostgreSQL | Read Committed | Each *statement* sees a fresh snapshot |
+| MySQL (InnoDB) | Repeatable Read | Plain `SELECT`s read one snapshot; `UPDATE` and locking reads see the latest committed row |
+| Oracle, SQL Server | Read Committed | As above (SQL Server uses locks unless snapshot mode is enabled) |
+| CockroachDB | Serializable | Every transaction is checked for serializability |
+
+### The Anomalies
+
+Each level is defined by which of these it lets through:
+
+| Anomaly | What happens | Example |
+|---------|--------------|---------|
+| **Dirty read** | You see another transaction's *uncommitted* write, which may roll back | A report counts an order that is then cancelled |
+| **Non-repeatable read** | The same row read twice in one transaction returns different values | A balance check and a later debit see different balances |
+| **Phantom** | The same `WHERE` query returns a different *set of rows* | "No bookings for room 4 at 3pm" — then one appears |
+| **Lost update** | Two read-modify-write cycles overlap; one overwrites the other | Two `+1` increments of a counter produce `+1` |
+| **Write skew** | Two transactions read the same data, each writes a *different* row, and together they break a rule neither broke alone | Two doctors each see the other on call, both go off call |
+
+| | Dirty read | Non-repeatable read | Phantom | Lost update | Write skew |
+|---|---|---|---|---|---|
+| **Read Uncommitted** | possible | possible | possible | possible | possible |
+| **Read Committed** | prevented | possible | possible | possible | possible |
+| **Snapshot Isolation** (PostgreSQL's *Repeatable Read*) | prevented | prevented | prevented for reads | prevented (aborts) | **possible** |
+| **Serializable** | prevented | prevented | prevented | prevented | prevented |
+
+Two notes. PostgreSQL accepts `READ UNCOMMITTED` but runs it as Read Committed,
+so it never exposes dirty reads. And "Repeatable Read" means different things in
+different engines: PostgreSQL aborts the second of two conflicting
+read-modify-writes, while MySQL's version lets the overwrite through, because its
+`UPDATE` reads the latest row rather than the transaction's snapshot.
+
+### MVCC: How Snapshots Work
+
+Most databases implement snapshot reads with **multi-version concurrency
+control**. An update writes a new *version* of the row instead of overwriting it,
+and each version is tagged with the transaction that created it. A reader picks
+the newest version committed before its snapshot was taken.
+
+```
+  Row "balance" for account 42:
+
+  version   created by   value    visible to a snapshot taken...
+  ───────   ──────────   ─────    ──────────────────────────────
+  v1        txn 100      500      after 100 committed, before 205 did
+  v2        txn 205      350      after 205 committed
+
+  Txn 210 began before 205 committed  ──▶ reads v1 (500)
+  Txn 230 began after 205 committed   ──▶ reads v2 (350)
+```
+
+**Readers never block writers, and writers never block readers.** That is
+why MVCC databases handle mixed read/write load well. The price is old versions
+piling up: PostgreSQL's `VACUUM` and InnoDB's purge thread reclaim them, but
+only once no open transaction can still see them. **One forgotten transaction
+left open for hours blocks cleanup for the whole database**, and tables bloat
+until it ends.
+
+The simulation below implements snapshot isolation with the
+*first-committer-wins* rule. It catches the lost update but not the write skew,
+because the two doctors wrote *different* keys:
+
+```python
+"""Snapshot isolation in miniature: why it stops lost updates but not write skew."""
+
+
+class SerializationFailure(Exception):
+    pass
+
+
+class MVCCStore:
+    def __init__(self, initial: dict):
+        self.clock = 0
+        self.versions = {k: [(0, v)] for k, v in initial.items()}  # key -> [(commit_ts, value)]
+
+    def begin(self) -> "Txn":
+        return Txn(self, snapshot=self.clock)
+
+    def read(self, key, as_of: int):
+        """Newest version committed at or before the snapshot. Readers never block."""
+        return max((v for v in self.versions[key] if v[0] <= as_of), key=lambda v: v[0])[1]
+
+    def commit(self, txn: "Txn") -> None:
+        # First-committer-wins: abort if anyone committed to a key we wrote
+        # after our snapshot was taken. Keys we only READ are not checked.
+        for key in txn.writes:
+            if self.versions[key][-1][0] > txn.snapshot:
+                raise SerializationFailure(f"concurrent update to {key!r}")
+        self.clock += 1
+        for key, value in txn.writes.items():
+            self.versions[key].append((self.clock, value))
+
+
+class Txn:
+    def __init__(self, store: MVCCStore, snapshot: int):
+        self.store, self.snapshot, self.writes = store, snapshot, {}
+
+    def get(self, key):
+        return self.writes.get(key, self.store.read(key, self.snapshot))
+
+    def put(self, key, value):
+        self.writes[key] = value
+
+
+# 1. Lost update: two read-modify-write increments on the same key.
+db = MVCCStore({"counter": 10})
+t1, t2 = db.begin(), db.begin()
+t1.put("counter", t1.get("counter") + 1)
+t2.put("counter", t2.get("counter") + 1)
+db.commit(t1)
+try:
+    db.commit(t2)
+except SerializationFailure as e:
+    print(f"lost update: t2 aborted ({e}) -> retry it")
+
+# 2. Write skew: "at least one doctor must stay on call".
+db = MVCCStore({"alice": "on", "bob": "on"})
+t1, t2 = db.begin(), db.begin()
+if [t1.get("alice"), t1.get("bob")].count("on") >= 2:
+    t1.put("alice", "off")          # Alice: "Bob is on, I can leave"
+if [t2.get("alice"), t2.get("bob")].count("on") >= 2:
+    t2.put("bob", "off")            # Bob: "Alice is on, I can leave"
+db.commit(t1)
+db.commit(t2)                       # different keys -> no conflict detected
+on_call = [db.read(k, db.clock) for k in ("alice", "bob")].count("on")
+print(f"write skew: both committed, doctors on call = {on_call}")
+```
+
+### Fixing Each Anomaly
+
+| Problem | Fix | How it works |
+|---------|-----|--------------|
+| Lost update on a counter | `UPDATE t SET n = n + 1 WHERE id = ?` | One atomic statement; no read-modify-write gap |
+| Lost update on app logic | `SELECT ... FOR UPDATE`, then write | Row lock held until commit; the second reader waits |
+| Lost update, low contention | Version column: `UPDATE ... SET v = v + 1 WHERE id = ? AND v = ?` | Optimistic compare-and-set; 0 rows updated means retry |
+| Write skew | `SERIALIZABLE` and retry on serialization failure | PostgreSQL's SSI tracks read/write dependencies and aborts one transaction |
+| Write skew, single level | `SELECT ... FOR UPDATE` on every row the rule *reads* | Turns the read set into a lock set |
+| Write skew via phantom (nothing to lock yet) | Unique constraint or exclusion constraint | The database enforces the rule, so no read can be stale |
+
+The last row deserves emphasis. "Book room 4 at 3pm if it is free" has no row to
+lock when the room *is* free, which is exactly when two bookings race. A
+`UNIQUE (room_id, slot)` constraint turns the race into a constraint violation
+that one transaction gets, at any isolation level.
+
+> **Rule of thumb:** if a transaction reads data, makes a decision, and writes
+> something based on that decision, ask what happens if another transaction does
+> the same thing at the same moment. If the answer is "the rule breaks", you need
+> `SERIALIZABLE`, an explicit lock, or a constraint. Read Committed will not
+> protect you.
+
+Serializable transactions *can fail* with a serialization error under contention,
+so the caller must retry the whole transaction, not just the last statement.
+Design for that from day one. [Module 12](../12-case-payment-ecommerce/README.md)
+shows the inventory version of this problem.
+
+---
+
 ## NewSQL: When You Need Both
 
 NewSQL systems promise SQL interfaces with horizontal scalability.
@@ -634,6 +800,7 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 | **Adding an index per query** | Every index taxes all writes and competes for buffer-pool memory | Design composite indexes for query *patterns*; verify with `EXPLAIN` before adding |
 | **Composite index in the wrong order** | `(user_id, date)` can't serve a `date`-only filter — an index is usable left-to-right only | Put equality columns first, range columns last |
 | **Reading from a replica right after writing** | Replication lag means the write may not be visible yet | Route read-your-writes to the primary, or pin the session until the replica catches up |
+| **Assuming the default isolation level is safe** | Read Committed allows lost updates and write skew; check-then-write logic races silently | Use atomic updates, `SELECT ... FOR UPDATE`, constraints, or `SERIALIZABLE` with retries |
 | **Confusing the two "consistency"s** | ACID's C means constraints hold; CAP's C means replicas agree | Say "integrity constraints" or "linearizable" and skip the ambiguous word |
 
 ---
@@ -649,6 +816,10 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 4. What is consistent hashing, and why is it better than simple modulo hashing for sharding? When does it matter?
 
 5. You're migrating from a single PostgreSQL database to a sharded setup. What are the biggest challenges, and how would you approach the migration?
+
+6. A ticketing service checks `SELECT count(*) FROM seats WHERE event_id = ? AND sold` against capacity, then inserts a sale, all in one transaction at PostgreSQL's default isolation level. Under a load test it oversells. Why, and what are three ways to fix it?
+
+   **Model answer**: Read Committed gives each statement a fresh snapshot, so two transactions can both count 99 of 100 sold, both decide there is room, and both insert. The rows they insert are different, so nothing conflicts. This is write skew through a phantom. Fixes: (1) keep a per-event `remaining` counter and decrement it atomically with `UPDATE events SET remaining = remaining - 1 WHERE id = ? AND remaining > 0`, treating 0 rows updated as "sold out"; (2) lock the event row with `SELECT ... FOR UPDATE` before counting, which serializes sales per event; (3) run at `SERIALIZABLE` and retry on serialization failure. Option 1 is the usual production answer: one statement, no retries, and contention only on the hot event's row.
 
 ---
 
