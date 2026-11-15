@@ -1,0 +1,103 @@
+Roughly how many requests per second is 1 million requests per day?	About 12 per second. Divide daily volume by ~10^5 (86,400 seconds per day), then multiply by 2-3 for the peak.	module-01
+What does the CAP theorem actually force you to choose?	During a network partition, a system must give up either consistency (linearizability) or availability. Partition tolerance is not optional, so “pick 2 of 3” is a misstatement.	module-01
+What does PACELC add to CAP?	The normal case: if Partitioned, choose Availability or Consistency; Else, choose Latency or Consistency. Most of the time the real trade-off is latency vs consistency.	module-01
+List the 9 steps of the design framework.	Clarify requirements, estimate capacity, define the API, design the data model, sketch the high-level design, deep dive, discuss trade-offs, address bottlenecks, handle follow-ups.	module-01
+What separates a staff-level design answer from a senior one?	Staff answers question the requirements, find the one or two things that decide the design, choose deep dives by risk, and tie trade-offs to business and operational cost.	module-01
+Which anomaly does snapshot isolation still allow?	Write skew: two transactions read the same data and each writes a different row, together breaking a rule neither broke alone.	module-02
+What is PostgreSQL's default isolation level, and what does it let through?	Read Committed. Each statement sees a fresh snapshot, so read-then-write logic can suffer lost updates and write skew.	module-02
+Name three fixes for a lost update.	An atomic UPDATE (SET n = n + 1), SELECT ... FOR UPDATE before writing, or an optimistic version column checked in the WHERE clause.	module-02
+B-tree vs LSM-tree: which favours writes, and why?	LSM-tree. It appends to an in-memory memtable and flushes sorted immutable files that are merged later; a B-tree updates pages in place.	module-02
+What can a Bloom filter answer with certainty?	“Definitely not present.” “Present” may be a false positive. About 10 bits per key gives roughly a 1% false-positive rate.	module-02
+Why do column stores beat row stores for analytics?	A query reads only the columns it needs, similar values stored together compress far better (dictionary, run-length), and min/max statistics let it skip blocks.	module-02
+When data changes, should you update or delete the cached copy?	Delete it. Two racing writers that overwrite the cache can leave stale data cached indefinitely.	module-03
+Why doesn't sharding fix a hot key?	All the traffic is on one key, so it lands on one shard however many shards exist. Use an in-process L1 cache, replicate the key, or serve it from the CDN.	module-03
+Cache penetration vs cache avalanche?	Penetration: requests for keys that exist nowhere bypass the cache every time (cache negative results or use a Bloom filter). Avalanche: many keys expire at once (add jitter to TTLs).	module-03
+What data should never be cached?	Data that must be exactly right at read time, such as bank balances or inventory counts used to make decisions.	module-03
+What are a token bucket's two parameters, and what behaviour do they allow?	Capacity (burst size) and refill rate. Short bursts up to capacity are allowed while the long-run rate is enforced.	module-04
+L4 vs L7 load balancing?	L4 routes by IP and port without reading the request; L7 reads HTTP (paths, headers, cookies) and can route by content, at more CPU cost.	module-04
+Why must INCR and EXPIRE for a rate limiter be atomic?	A crash between two separate calls leaves a counter with no TTL, which becomes a permanent ban. Pipeline them or use a Lua script.	module-04
+What is the Kubernetes HPA scaling rule?	desired = ceil(current x metric / target), skipped within a +-10% tolerance. Scale-down uses the highest recommendation of the last 5 minutes; scale-up is immediate.	module-04
+Why isn't autoscaling overload protection?	New capacity takes minutes to detect, boot and warm up. Spikes faster than that hit existing capacity, so you also need headroom and load shedding.	module-04
+Is exactly-once delivery possible over a network?	No. You get at-least-once delivery plus idempotent processing, or exactly-once processing inside one system's transaction boundary (e.g. Kafka transactions).	module-05
+What problem does the transactional outbox solve?	The dual write: a database update and an event publish can't share a transaction. Write the event to an outbox table in the same transaction and relay it afterwards (or use CDC).	module-05
+Kafka guarantees ordering within what unit?	A partition. Messages that must stay in order need the same key, so they land on the same partition.	module-05
+What is a watermark in stream processing?	The processor's assertion that no more events older than time W are expected. Windows that end before W are emitted; later arrivals are late data.	module-05
+How do you make a stream job's output exactly-once in effect?	Upsert each window's final value keyed by (key, window) instead of incrementing, so a replay overwrites rather than double-counts.	module-05
+Backward vs forward schema compatibility?	Backward: new readers can read old data (add fields with defaults; upgrade consumers first). Forward: old readers can read new data (upgrade producers first).	module-05
+What is a saga?	A sequence of local transactions, each with a compensating action that undoes it if a later step fails. It replaces a distributed transaction across services.	module-06
+How do you rename a database column with zero downtime?	Expand/contract: add the new column, dual-write, backfill in batches, switch reads, stop writing the old column, then drop it later. Each step is deployable and reversible alone.	module-06
+Why can a metadata-only ALTER TABLE take a PostgreSQL site down?	It queues for an exclusive lock behind a long-running query, and every new query on the table queues behind it. Set lock_timeout and retry.	module-06
+What should a canary be compared against?	A fresh baseline of the current version, started at the same time and size, not the old fleet, which differs in uptime and warm caches.	module-06
+What is the difference between deploy and release?	Deploy puts code on servers; release exposes behaviour to users. Feature flags separate the two, so a release can be rolled out gradually or turned off in seconds.	module-06
+Why add jitter to retries?	Clients that failed together otherwise retry together in synchronized waves. Full jitter waits a random time between 0 and the backoff cap.	module-07
+What does a circuit breaker do?	After repeated failures it opens and fails fast without calling the dependency, then lets a trial request through (half-open) to test recovery.	module-07
+State Little's Law.	Requests in flight = throughput x latency. For example, 1,000 req/s at 200 ms means 200 concurrent requests.	module-07
+How much downtime does a 99.9% monthly SLO allow?	About 43 minutes per month: 0.1% of 43,200 minutes.	module-07
+Backpressure vs load shedding?	Backpressure rejects work early when a bounded queue is full, so callers slow down. Load shedding deliberately drops the least valuable work first when demand exceeds capacity.	module-07
+How many failures can a 5-node Raft cluster tolerate?	Two. A majority (3) is needed. Even sizes add nothing: 4 nodes tolerate 1 failure, the same as 3.	module-08
+What is a fencing token, and who issues it?	A monotonically increasing number issued by the lock service with each grant. Storage rejects writes carrying a lower token than the highest it has seen.	module-08
+Lamport clocks vs vector clocks?	Lamport timestamps give an order consistent with causality but can't detect concurrency. Vector clocks can tell “happened before” from “concurrent”.	module-08
+What does a phi accrual failure detector output?	A suspicion level, phi = -log10(probability a heartbeat would arrive even later), that adapts to observed jitter instead of using a fixed timeout.	module-08
+How fast does gossip spread news through N nodes?	In about O(log N) rounds, roughly log2 N + ln N with fanout 1: around 17 rounds for 1,000 nodes.	module-08
+Does W + R > N give linearizable reads?	No. It guarantees that read and write quorums overlap, but sloppy quorums, partially failed writes and concurrent updates still allow stale or conflicting reads.	module-08
+Why use Merkle trees for anti-entropy?	Replicas compare root hashes and descend only into subtrees that differ, finding a few stale keys among millions with tens of hash comparisons.	module-08
+How many codes do 7 base62 characters give?	62^7, about 3.5 trillion.	module-09
+Why not expose a sequential counter directly as the short code?	Sequential codes are trivial to enumerate. Run the counter through a secret bijection before making it public.	module-09
+Why is caching a URL shortener nearly free?	Mappings are immutable, so there is no invalidation problem; an in-process cache and long CDN TTLs absorb most reads.	module-09
+Fan-out on write vs fan-out on read?	Write: push each post into followers' feeds when posted (fast reads, explodes for celebrities). Read: assemble the feed at read time (cheap writes, slow reads). Production systems use a hybrid.	module-10
+What ordering should a chat system guarantee?	Order within a conversation, assigned server-side with sequence numbers. Global ordering is unnecessary, and client clocks can't be trusted.	module-10
+How does a chat server deliver a message to a user connected elsewhere?	Through a connection registry that maps each user to the server holding their WebSocket; no server can reach a user it doesn't know about.	module-10
+Why does a sync client split files into chunks?	Only changed chunks are uploaded (delta sync), uploads resume chunk by chunk, and identical chunks deduplicate by content hash.	module-11
+What is adaptive bitrate streaming?	Video is encoded at several bitrates and cut into short segments; the player picks each segment's quality from measured bandwidth (HLS, DASH).	module-11
+Why upload large files with presigned URLs?	The client uploads straight to object storage, so application servers never hold the bytes; the URL grants one operation on one key until it expires.	module-11
+RS(10,4) erasure coding vs 3x replication?	1.4x vs 3x storage. RS(10,4) survives any 4 lost fragments vs 2 lost copies, but repairing one fragment reads 10 others.	module-11
+Who should mint the idempotency key for a payment, client or server?	The client. A key the server generates on each retry defeats the mechanism.	module-12
+Why claim the idempotency key with SET NX before charging?	Check-then-set lets two concurrent retries both pass the check and double-charge. An atomic claim lets only one through.	module-12
+How should money be stored?	As integer minor units (cents), never floats, and totals recomputed server-side from authoritative prices.	module-12
+Why is reconciliation required in a payment system?	It is the only backstop for a charge that succeeded at the gateway but never reached your ledger (or the reverse).	module-12
+Authentication vs authorization?	Authentication proves who you are; authorization decides what that identity may do.	module-13
+How should passwords be stored?	With a slow, salted, memory-hard hash such as Argon2id. Never encrypted, and never with a fast hash like SHA-256.	module-13
+What is envelope encryption?	Data is encrypted with a data key (DEK), and the DEK is encrypted by a key held in a KMS, so keys can be rotated and access audited without re-encrypting everything.	module-13
+REST, gRPC or GraphQL: what should decide?	The consumer: REST for broad public APIs, gRPC for internal service-to-service calls, GraphQL for clients that need flexible, aggregated reads.	module-14
+Why prefer cursor pagination over offset pagination?	Offsets get slower as they grow and skip or repeat items when data changes; a cursor continues from a stable position.	module-14
+What makes an API change breaking?	Removing or renaming a field, tightening validation, changing a type, or changing a field's meaning. Adding an optional field or endpoint is safe.	module-14
+Why can't you average percentiles?	The p99 of several hosts is not the average of their p99s. Aggregate histogram buckets (distributions), then compute the percentile.	module-15
+What drives the cost of a metrics system?	Cardinality: the product of label values. Unbounded dimensions such as user IDs belong in traces and logs.	module-15
+Metrics, traces, logs: what does each do best?	Metrics detect, traces localize, logs explain, in that order.	module-15
+Mitigate or diagnose first during an incident?	Mitigate. A rollback or a flag flip ends user harm far faster than understanding the cause.	module-16
+What should a page be triggered by?	User-facing symptoms and error-budget burn rates, not causes or fixed thresholds such as CPU > 80%.	module-16
+What does the Incident Commander do?	Coordinates and decides, but fixes nothing; one other person makes changes to production, announcing each one.	module-16
+What is training/serving skew?	Features computed differently in training and in serving drift apart. Use one feature definition, or log the exact features served and train on them.	module-17
+How must features be joined for training data?	As of the prediction time (point-in-time correct), never as of query time, or future information leaks into training.	module-17
+Why does retrieval optimize recall in a ranking funnel?	Nothing downstream can recover a candidate that retrieval dropped; later stages trade recall for precision.	module-17
+What usually limits LLM serving throughput: compute or memory?	Memory, specifically the KV cache, which grows with batch size and sequence length.	module-18
+How do you size the KV cache per token?	2 x layers x KV heads x head dimension x bytes per value.	module-18
+What does PagedAttention change?	It stores the KV cache in fixed-size pages allocated on demand, like OS virtual memory, instead of contiguous pre-allocated blocks.	module-18
+Why is continuous batching standard?	Static batching waits for the slowest sequence while finished slots idle; continuous batching swaps in new requests every step.	module-18
+Why rerank retrieved results?	A cross-encoder reranker over the top candidates is the cheapest, highest-leverage retrieval quality improvement.	module-19
+Why does reciprocal rank fusion beat weighted score fusion?	It combines ranks, which are comparable across retrievers, instead of raw scores, which are not.	module-19
+Does a bigger context window remove the need for retrieval?	No. Cost, latency and lost-in-the-middle effects remain; more context is not more accuracy.	module-19
+What is the main design surface of an agent?	The harness: tools, middleware and context management, more than the choice of model.	module-20
+How should agent tools be designed?	Fewer, larger, orthogonal tools at the level of the agent's intent, with errors that say what to do next.	module-20
+Why treat the context window as a budget?	Quality degrades long before the hard limit, so context must be written, selected, compressed and isolated deliberately.	module-20
+Why report Cohen's kappa instead of raw agreement for an LLM judge?	Raw agreement is inflated by the base rate; kappa measures agreement beyond chance.	module-21
+Binary rubric questions or 1-5 scales?	Binary questions: they are more reliable and easier to validate against human labels.	module-21
+Why must eval results carry a confidence interval?	Small samples hide large differences: at n=50 an 80% pass rate has a 95% interval about +-11 points.	module-21
+Why route queries by complexity?	Sending every query to the largest model overspends severalfold; simple queries can go to cheaper models.	module-22
+How should retrieved documents and tool results be treated?	As untrusted data, never as instructions, because they are a prompt-injection vector.	module-22
+Why must guardrails cover both input and output?	An input filter alone still lets PII and unsafe content out through the model's responses.	module-22
+How does a trie serve autocomplete fast?	Each node caches the top-k completions for its prefix, so a keystroke is one lookup instead of a subtree walk.	module-23
+Why search 9 geohash cells for “nearby”?	Near points can sit in adjacent cells with no shared prefix; search the cell and its 8 neighbours, then filter by exact distance.	module-23
+Why partition a search index by document rather than by term?	Each shard answers multi-term queries locally and returns a small top-k; term partitioning ships large posting lists between shards.	module-23
+How do you stop a seat being sold twice?	A conditional update: UPDATE ... WHERE status = 'available' (or the hold expired), then check that the number of rows updated is what you asked for.	module-24
+Why does a hold expiry need no background job for correctness?	Expired holds are treated as free in the next buyer's WHERE clause; a sweeper only tidies the seat map.	module-24
+What does a virtual waiting room change?	The booking tier's load becomes a chosen admission rate instead of the size of the crowd; signed tokens enforce it at the gateway.	module-24
+How do you handle payment racing an expiring hold?	Authorize the card, confirm the seat conditionally on the hold, then capture, or void the authorization if the hold expired.	module-24
+What limits a polite crawler's throughput?	The number of distinct hosts with URLs ready, because each host gets about one request per second, not the number of machines.	module-25
+Why partition a crawl by host hash rather than URL hash?	Each host's queue and rate timer then live on one worker, so politeness needs no coordination.	module-25
+What is SimHash used for?	Near-duplicate detection: similar pages get 64-bit fingerprints that differ in a few bits (Google used a 3-bit threshold).	module-25
+Why give transactional notifications their own queues?	So a marketing blast can never delay a one-time passcode or a password reset.	module-25
+What does acks=all with min.insync.replicas=2 guarantee in Kafka?	An acknowledged write is on every in-sync replica, and on at least 2, so a leader failure can't lose it; with fewer in-sync replicas, writes are refused.	module-26
+What is the high watermark?	The highest offset present on every in-sync replica; consumers only see messages below it.	module-26
+Why does Gorilla compression work so well on metrics?	Regular scrape intervals make delta-of-delta timestamps usually zero (1 bit), and slowly changing values XOR to few differing bits.	module-26
+What should downsampling keep per interval?	Sum, count, min and max (and histogram buckets), so averages and percentiles can still be computed correctly.	module-26

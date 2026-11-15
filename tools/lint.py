@@ -3,7 +3,7 @@
 
     python3 tools/lint.py
 
-Six checks, all of which have caught real defects in this course:
+Seven checks, all of which guard against real defects in this course:
 
 1. Python code blocks compile. A missing dot once turned a whole example
    into a SyntaxError that sat in the course unnoticed.
@@ -20,6 +20,9 @@ Six checks, all of which have caught real defects in this course:
 6. Whitespace hygiene: no trailing whitespace, every file ends in a
    newline. Cosmetic, but it turns every later diff into noise.
    `python3 tools/lint.py --fix` repairs these automatically.
+7. Flashcards are in sync: flashcards/README.md must be exactly what
+   tools/build_flashcards.py generates from flashcards/cards.tsv, so the
+   GitHub page and the Anki deck never disagree.
 
 Exits non-zero if anything fails, so it works as a CI step or a
 pre-commit hook. It runs on every pull request via
@@ -337,6 +340,21 @@ def check_hygiene(fix=False):
     return len(_course_files()), failures
 
 
+# --- flashcards -------------------------------------------------------
+
+def check_flashcards():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import build_flashcards
+    target = build_flashcards.TARGET
+    try:
+        expected = build_flashcards.render()
+    except SystemExit as exc:
+        return 1, [str(exc)]
+    if not target.exists() or target.read_text() != expected:
+        return 1, ["flashcards/README.md is out of date: run python3 tools/build_flashcards.py"]
+    return 1, []
+
+
 def main():
     fix = "--fix" in sys.argv
     ok = True
@@ -347,6 +365,7 @@ def main():
         ("Anchors", check_anchors(), "anchors"),
         ("Mermaid", check_mermaid(), "blocks"),
         ("Hygiene", check_hygiene(fix=fix), "files"),
+        ("Flashcards", check_flashcards(), "deck"),
     ):
         if failures:
             ok = False
