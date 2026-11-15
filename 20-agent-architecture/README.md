@@ -966,4 +966,4 @@ Claude Code is an autonomous coding agent that demonstrates production agent arc
 
 ---
 
-*Module 20 of 24 in the System Design Playground*
+*Module 20 of 25 in the System Design Playground*

@@ -661,4 +661,4 @@ what stays the same?
 
 ---
 
-*Module 23 of 24 in the System Design Playground*
+*Module 23 of 25 in the System Design Playground*

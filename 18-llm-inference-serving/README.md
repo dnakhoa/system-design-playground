@@ -741,4 +741,4 @@ the compilation and operational cost.
 
 ---
 
-*Module 18 of 24 in the System Design Playground*
+*Module 18 of 25 in the System Design Playground*
