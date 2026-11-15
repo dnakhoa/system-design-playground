@@ -172,7 +172,7 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~65 hours)
+### Path D: Full Curriculum (~66 hours)
 
 Work through all 26 modules in order. Each builds on the previous —
 except Modules 23-26, design cases that were added last and fit best straight
@@ -188,6 +188,8 @@ go straight at it:
 | Can't estimate QPS/storage | [Module 01 — Fundamentals](01-fundamentals/README.md) |
 | Confused by CAP, or by "eventual consistency" | [Module 01 — Fundamentals](01-fundamentals/README.md) |
 | Don't know when to use SQL vs NoSQL | [Module 02 — Databases](02-databases-storage/README.md) |
+| Analytics queries slow down production | [Module 02 — Databases](02-databases-storage/README.md) |
+| Large file uploads fail or overload servers | [Module 11 — File Storage & Streaming](11-case-storage-streaming/README.md) |
 | Concurrent requests oversell stock or corrupt counters | [Module 02 — Databases](02-databases-storage/README.md) |
 | Cache invalidation keeps breaking | [Module 03 — Caching](03-caching/README.md) |
 | One key is melting one cache node | [Module 03 — Caching](03-caching/README.md) |
@@ -227,7 +229,7 @@ go straight at it:
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
 | [01](01-fundamentals/README.md) | [System Design Fundamentals](01-fundamentals/README.md) | 9-step framework, CAP theorem, estimation | ⭐ Beginner | ~2h |
-| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, B-tree vs LSM, sharding, replication, isolation levels and MVCC, Bloom filters | ⭐ Beginner | ~2.5h |
+| [02](02-databases-storage/README.md) | [Databases and Storage](02-databases-storage/README.md) | SQL vs NoSQL, B-tree vs LSM, sharding, replication, isolation levels, columnar and batch | ⭐ Beginner | ~3h |
 | [03](03-caching/README.md) | [Caching Strategies](03-caching/README.md) | Cache patterns, Redis, CDN, stampede, penetration, avalanche | ⭐⭐ Intermediate | ~3h |
 | [04](04-load-balancing/README.md) | [Load Balancing](04-load-balancing/README.md) | Algorithms, L4/L7, rate limiting, autoscaling, API gateway | ⭐⭐ Intermediate | ~3h |
 
@@ -246,7 +248,7 @@ go straight at it:
 |--------|-------|-------------|------------|------|
 | [09](09-case-url-shortener-rate-limiter/README.md) | [URL Shortener & Rate Limiter](09-case-url-shortener-rate-limiter/README.md) | ID generation, token bucket, distributed counting | ⭐⭐ Intermediate | ~1.5h |
 | [10](10-case-chat-newsfeed/README.md) | [Chat System & News Feed](10-case-chat-newsfeed/README.md) | WebSocket, fan-out, presence, ranking | ⭐⭐ Intermediate | ~1.5h |
-| [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~1.5h |
+| [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate, presigned and multipart uploads, erasure coding | ⭐⭐ Intermediate | ~2h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 | [23](23-case-search-proximity/README.md) | [Search Autocomplete & Proximity Search](23-case-search-proximity/README.md) | Tries, inverted index, geohash, quadtree, live location | ⭐⭐ Intermediate | ~2h |
 | [24](24-case-ticket-booking/README.md) | [Ticket Booking & Reservations](24-case-ticket-booking/README.md) | Double booking, conditional updates, holds, virtual waiting room | ⭐⭐⭐ Advanced | ~2h |
@@ -351,6 +353,7 @@ things that self-study doesn't naturally build:
 | **Cache Penetration** | Requests for keys that exist nowhere bypass the cache every time; fixed with negative caching or a Bloom filter |
 | **Canary Release** | Sending a small share of traffic to a new version and comparing it against a baseline before rolling out further |
 | **CDC** | Change Data Capture — turning a database's replication log into a stream of events |
+| **Columnar Storage** | Storing each column together so analytics reads only the columns it needs and compresses them well (Parquet, warehouses) |
 | **Conditional Update** | A write whose WHERE clause re-checks the condition it depends on (`... WHERE status = 'available'`), so the check and the write cannot be separated by a race |
 | **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
 | **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
@@ -358,6 +361,7 @@ things that self-study doesn't naturally build:
 | **Circuit Breaker** | Pattern that stops calls to a failing service to prevent cascading failures |
 | **Consistent Hashing** | Hash ring that minimizes reshuffling when nodes are added/removed |
 | **DLQ** | Dead Letter Queue — queue for messages that fail processing |
+| **Erasure Coding** | Splitting data into k fragments plus m parity fragments, any k of which rebuild it; cheaper than full replicas for equal or better durability |
 | **Error Budget** | The failure allowance implied by an SLO (99.9% ⇒ ~43 min/month) |
 | **Event Sourcing** | Store every state change as an immutable event, not just current state |
 | **Expand/Contract** | Changing a schema or API in additive steps (add, migrate, remove) so old and new code both work at every step |
@@ -382,7 +386,9 @@ things that self-study doesn't naturally build:
 | **LSM-Tree** | Storage engine that appends to sorted immutable files and merges them later; fast writes, used by Cassandra and RocksDB |
 | **Merkle Tree** | A tree of hashes over key ranges; replicas compare roots and descend only where they differ to find out-of-sync data |
 | **MVCC** | Multi-Version Concurrency Control — writes create new row versions so readers see a snapshot and never block writers |
+| **OLAP / OLTP** | Analytical processing (big scans, few columns) vs transactional processing (small reads and writes by key); they want different storage |
 | **Phi Accrual Detector** | Failure detector that reports a suspicion level from the observed heartbeat distribution instead of a fixed timeout |
+| **Presigned URL** | A time-limited URL signed by the server that lets a client upload or download one object directly from object storage |
 | **Quorum** | Read/write overlap rule (W + R > N) that guarantees a read sees the latest write |
 | **Quadtree** | Spatial index that splits a region into four only where it is dense, so every leaf holds a bounded number of points |
 | **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
