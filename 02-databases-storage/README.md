@@ -18,6 +18,7 @@
 - Understand sharding, replication, and partitioning strategies
 - Reason about ACID vs BASE trade-offs
 - Pick a transaction isolation level and name the anomalies it allows
+- Separate OLTP from OLAP, and explain why columnar storage and batch processing suit analytics
 - Evaluate NewSQL options for modern applications
 - Design data models that scale
 
@@ -32,13 +33,14 @@
 5. [Replication Strategies](#replication-strategies)
 6. [ACID vs BASE](#acid-vs-base)
 7. [Transaction Isolation Levels](#transaction-isolation-levels)
-8. [NewSQL: When You Need Both](#newsql-when-you-need-both)
-9. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
-10. [Data Modeling Patterns](#data-modeling-patterns)
-11. [Key References](#key-references)
-12. [Practice Exercise](#practice-exercise)
-13. [Common Mistakes](#common-mistakes)
-14. [Discussion Questions](#discussion-questions)
+8. [Analytics Storage: Columnar Formats and Batch Processing](#analytics-storage-columnar-formats-and-batch-processing)
+9. [NewSQL: When You Need Both](#newsql-when-you-need-both)
+10. [Case Study: Instagram's Data Layer](#case-study-instagrams-data-layer)
+11. [Data Modeling Patterns](#data-modeling-patterns)
+12. [Key References](#key-references)
+13. [Practice Exercise](#practice-exercise)
+14. [Common Mistakes](#common-mistakes)
+15. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -675,6 +677,133 @@ shows the inventory version of this problem.
 
 ---
 
+## Analytics Storage: Columnar Formats and Batch Processing
+
+Everything above is about **OLTP** (online transaction processing): many small
+reads and writes, each touching a few rows by key. Analytics is the opposite
+workload, **OLAP**: few queries, each scanning millions of rows but only a few
+columns ("revenue by country last quarter"). The two want different storage, and
+running analytics on the production OLTP database is a classic way to slow
+checkout down.
+
+| | OLTP | OLAP |
+|---|---|---|
+| Query shape | Fetch or update a few rows by key | Scan and aggregate many rows |
+| Columns touched | Most of a row | A few of many |
+| Freshness | Now | Seconds to a day behind is usually fine |
+| Layout | Row-oriented (PostgreSQL, MySQL) | Column-oriented (Parquet, BigQuery, Snowflake, ClickHouse) |
+| Bottleneck | Latency per request, contention | Bytes scanned |
+
+### Why Columns Win for Analytics
+
+A row store keeps each row's fields together, so reading one column means
+reading all of them. A column store keeps each column together, so a query
+reads only the columns it names, and similar values next to each other
+compress far better:
+
+```python
+"""Row vs column layout for one analytics query over 1M orders."""
+
+import random
+import zlib
+
+rng = random.Random(5)
+N = 1_000_000
+countries = ["US", "DE", "FR", "GB", "JP", "BR", "IN", "CA"]
+rows = [(i,                                   # order_id
+         rng.randrange(200_000),              # user_id
+         rng.choice(countries),               # country
+         round(rng.uniform(5, 500), 2),       # amount
+         rng.choice(["paid", "refunded"]),    # status
+         1_700_000_000 + i * 30)              # created_at
+        for i in range(N)]
+
+# Row layout: each row's fields stored together (an OLTP heap or a CSV file).
+row_bytes = "\n".join(",".join(map(str, r)) for r in rows).encode()
+
+# Column layout: each column stored together (Parquet, ORC, a warehouse).
+columns = {name: "\n".join(str(r[i]) for r in rows).encode()
+           for i, name in enumerate(["order_id", "user_id", "country", "amount",
+                                     "status", "created_at"])}
+
+# Query: SELECT avg(amount) FROM orders WHERE country = 'DE'
+needed = ["country", "amount"]
+mb = 1_000_000
+print(f"row layout reads   {len(row_bytes) / mb:6.1f} MB "
+      f"({len(zlib.compress(row_bytes)) / mb:5.1f} MB compressed)")
+col_raw = sum(len(columns[c]) for c in needed)
+col_zip = sum(len(zlib.compress(columns[c])) for c in needed)
+print(f"column layout reads {col_raw / mb:5.1f} MB ({col_zip / mb:5.1f} MB compressed)")
+for name, data in columns.items():
+    print(f"  {name:<10} compresses {len(data) / len(zlib.compress(data)):4.1f}x")
+```
+
+```
+row layout reads     41.0 MB ( 13.4 MB compressed)
+column layout reads   9.7 MB (  3.3 MB compressed)
+  order_id   compresses  3.3x
+  user_id    compresses  2.2x
+  country    compresses  5.1x
+  amount     compresses  2.5x
+  status     compresses 27.8x
+  created_at compresses  5.1x
+```
+
+The query reads about a quarter of the data, and compressed columns shrink it
+again. Real formats go much further than `zlib` on text: **dictionary encoding**
+stores `country` as a 3-bit code (8 distinct values), **run-length encoding**
+collapses sorted runs, and **min/max statistics** per block let the engine skip
+blocks that can't match (a block whose `created_at` range ends before the query's
+start is never read). Engines also process a column in batches with tight,
+vectorized loops instead of row by row.
+
+The costs: updating one row means touching every column file, so column stores
+batch writes and prefer appends. They suit data that is written once and read
+many times.
+
+### The Analytics Stack
+
+- **File formats**: Parquet and ORC store a table as files split into *row
+  groups*, each holding one compressed chunk per column with statistics.
+- **Table formats (lakehouse)**: Apache Iceberg, Delta Lake and Apache Hudi
+  add what a pile of Parquet files on object storage lacks: atomic commits,
+  snapshots for time travel, and schema evolution.
+- **Warehouses and engines**: BigQuery, Snowflake, Redshift, ClickHouse,
+  Trino and Spark SQL run SQL over columnar data, separating cheap storage
+  from elastic compute.
+- **Getting data there**: use CDC from the OLTP database
+  ([Module 05](../05-async-systems/README.md#the-dual-write-problem-outbox-and-cdc))
+  rather than nightly full dumps, which grow with the table and hammer the
+  primary.
+
+### Batch Processing
+
+Batch jobs (MapReduce originally, Apache Spark today) follow one shape: **read
+immutable input, transform it, write new output**. Because inputs are never
+modified, a failed job is simply rerun, and a buggy one is fixed and rerun over
+the same input, which makes batch the natural place for correct-by-recomputation
+results such as billing (compare the stream/batch split in
+[Module 05](../05-async-systems/README.md#worked-example-ad-click-aggregation)).
+
+```
+  map: read partitions, emit (key, value) ─▶ SHUFFLE: send each key to one
+  worker (network-heavy, the expensive step) ─▶ reduce: aggregate per key
+```
+
+The shuffle is where jobs get slow, and joins decide how much of it you pay:
+
+| Join strategy | How | When |
+|---------------|-----|------|
+| **Broadcast join** | Copy the small table to every worker; no shuffle of the big one | One side fits in memory (a dimension table) |
+| **Shuffle (sort-merge) join** | Partition both sides by the join key, then merge | Both sides are large |
+| **Bucketed join** | Both tables pre-partitioned on the key when written | Repeated joins on the same key |
+
+**Skew** hurts batch the same way it hurts streams: one key with a huge share
+of rows makes one worker run for hours while the rest sit idle. The fixes are
+the same too: salt the hot key and aggregate in two phases.
+
+---
+
 ## NewSQL: When You Need Both
 
 NewSQL systems promise SQL interfaces with horizontal scalability.
@@ -779,6 +908,8 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 | Database Internals (Alex Petrov) | Book | Storage engines, distributed database internals |
 | PostgreSQL Documentation | Docs | Indexing, query optimization |
 | Cassandra Documentation | Docs | Wide-column data modeling |
+| "Dremel: Interactive Analysis of Web-Scale Datasets" (Melnik et al., VLDB 2010) | Paper | Columnar storage for nested data; the basis of BigQuery and Parquet |
+| [Apache Parquet documentation](https://parquet.apache.org/docs/) | Docs | Row groups, column chunks, encodings |
 | DynamoDB Developer Guide | Docs | Key-value design patterns |
 
 ---
@@ -804,6 +935,7 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 | **Composite index in the wrong order** | `(user_id, date)` can't serve a `date`-only filter — an index is usable left-to-right only | Put equality columns first, range columns last |
 | **Reading from a replica right after writing** | Replication lag means the write may not be visible yet | Route read-your-writes to the primary, or pin the session until the replica catches up |
 | **Assuming the default isolation level is safe** | Read Committed allows lost updates and write skew; check-then-write logic races silently | Use atomic updates, `SELECT ... FOR UPDATE`, constraints, or `SERIALIZABLE` with retries |
+| **Running analytics on the OLTP primary** | Big scans evict hot pages from the buffer pool and compete with checkout for I/O | Replicate to a columnar warehouse via CDC; give analysts a replica at most |
 | **Confusing the two "consistency"s** | ACID's C means constraints hold; CAP's C means replicas agree | Say "integrity constraints" or "linearizable" and skip the ambiguous word |
 
 ---
@@ -824,6 +956,10 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY user_feed;
 
    **Model answer**: Read Committed gives each statement a fresh snapshot, so two transactions can both count 99 of 100 sold, both decide there is room, and both insert. The rows they insert are different, so nothing conflicts. This is write skew through a phantom. Fixes: (1) keep a per-event `remaining` counter and decrement it atomically with `UPDATE events SET remaining = remaining - 1 WHERE id = ? AND remaining > 0`, treating 0 rows updated as "sold out"; (2) lock the event row with `SELECT ... FOR UPDATE` before counting, which serializes sales per event; (3) run at `SERIALIZABLE` and retry on serialization failure. Option 1 is the usual production answer: one statement, no retries, and contention only on the hot event's row.
 
+
+7. Analysts run a nightly report directly on the production PostgreSQL primary: `SELECT country, sum(amount) FROM orders GROUP BY country` over 2 billion rows. It takes 40 minutes, and checkout latency doubles while it runs. What would you change?
+
+   **Model answer**: Two problems. The report reads every column of every row in a row store to use two of them, and it does so on the machine serving customers, evicting hot pages from the buffer pool. Short term, move it to a read replica so customers stop paying for it. Properly, stream changes with CDC into a columnar store (Parquet files under Iceberg, or a warehouse such as BigQuery, Snowflake or ClickHouse). There the query reads only `country` and `amount`, dictionary-encoded and compressed, and skips blocks using min/max statistics; it typically runs in seconds, on compute separate from production. If the report runs often, precompute daily aggregates so it reads thousands of rows, not billions.
 ---
 
 ## Related Modules

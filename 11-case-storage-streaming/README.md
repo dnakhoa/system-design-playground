@@ -18,6 +18,7 @@
 - Design a video streaming platform (YouTube/Netflix)
 - Implement chunking, deduplication, and sync protocols
 - Design transcoding pipelines and adaptive bitrate streaming
+- Upload and serve large objects with presigned URLs and multipart uploads, and choose between replication and erasure coding
 
 ---
 
@@ -28,10 +29,11 @@
 3. [Design Comparison](#design-comparison)
 4. [Deep Dive: Dropbox Sync Protocol](#deep-dive-dropbox-sync-protocol)
 5. [Deep Dive: Video Streaming Details](#deep-dive-video-streaming-details)
-6. [Practice Exercises](#practice-exercises)
-7. [Common Mistakes](#common-mistakes)
-8. [Discussion Questions](#discussion-questions)
-9. [Key References](#key-references)
+6. [Deep Dive: Large Objects — Uploads, Downloads, and Durability](#deep-dive-large-objects--uploads-downloads-and-durability)
+7. [Practice Exercises](#practice-exercises)
+8. [Common Mistakes](#common-mistakes)
+9. [Discussion Questions](#discussion-questions)
+10. [Key References](#key-references)
 
 ---
 
@@ -412,6 +414,120 @@ Only changed chunks are transferred, not the entire file.
 
 ---
 
+## Deep Dive: Large Objects — Uploads, Downloads, and Durability
+
+### Upload Directly to Object Storage
+
+Routing a 4 GB video through your application servers ties up a connection and
+a worker for minutes, and multiplies bandwidth costs. Instead, the app server
+hands out permission and gets out of the way:
+
+```
+  1. client ──▶ API: "I want to upload video.mp4, 4 GB"
+                API: create metadata row (status = 'pending'),
+                     return a presigned URL for key uploads/u42/abc123
+  2. client ──▶ object storage: PUT bytes directly (or multipart, below)
+  3. object storage ──▶ event: "object created: uploads/u42/abc123"
+  4. worker: verify size and type, virus-scan, start transcoding;
+             metadata status = 'ready'
+```
+
+A **presigned URL** is a URL signed with the server's credentials that grants
+one operation (PUT to this key, or GET of this object) until it expires. S3's
+signature version 4 allows at most 7 days, but minutes are the right default.
+Restrict what it allows: a fixed key the server chose (never a client-supplied
+path), and where supported, an exact content type and a maximum content length.
+
+Two clean-up rules follow from the flow: a background job deletes `pending`
+rows (and their objects) that never completed, and a bucket lifecycle rule
+aborts incomplete multipart uploads after a few days. **Parts of an abandoned
+multipart upload are stored, and billed, until aborted.**
+
+### Multipart and Resumable Uploads
+
+Large objects are uploaded in independent parts, then assembled with a final
+"complete" call. For S3:
+
+| Limit | Value |
+|-------|-------|
+| Single `PUT` | Up to 5 GB |
+| Part size | 5 MiB to 5 GiB (the last part may be smaller) |
+| Parts per upload | Up to 10,000 |
+| Maximum object size | 48.8 TiB (10,000 × 5 GiB) |
+
+Parts upload in parallel, which fills a fast link that one TCP stream can't,
+and each part is retried on its own. A phone that loses signal at 80% asks the
+service which parts already arrived and sends only the rest. Choose the part
+size from the object size: a 200 GB file needs parts of at least 20 MB to stay
+under 10,000 parts. Include a checksum per part so corruption is caught
+per part rather than after the whole upload.
+
+The same idea, done by the client instead of the storage service, is the
+[chunking](#file-chunking) that sync clients like Dropbox use.
+
+### Downloads
+
+Serve public objects through a CDN, and private ones with short-lived presigned
+`GET` URLs (or signed CDN URLs/cookies), so your servers again never stream
+bytes. Support HTTP **range requests**: video players, resumable downloads and
+parallel download tools all fetch byte ranges rather than whole files.
+
+### Durability: Replication vs Erasure Coding
+
+Storing three full copies costs 3× the raw storage. **Erasure coding**
+(Reed-Solomon) splits an object into *k* data fragments, computes *m* parity
+fragments, and can rebuild the object from any *k* of the *k + m*:
+
+```python
+"""Replication vs erasure coding: storage overhead and chance of losing an object."""
+
+from math import comb
+
+# Chance that one disk fails before a lost fragment is rebuilt:
+# 2% annual failure rate, 1-day repair window, failures independent.
+p = 0.02 / 365
+
+
+def loss_probability(total: int, tolerated: int) -> float:
+    """P(more than `tolerated` of `total` fragments fail in one repair window)."""
+    return sum(comb(total, k) * p**k * (1 - p)**(total - k)
+               for k in range(tolerated + 1, total + 1))
+
+
+schemes = [("3x replication", 1, 2),          # 1 data fragment + 2 copies
+           ("RS(6,3) erasure code", 6, 3),    # 6 data + 3 parity fragments
+           ("RS(10,4) erasure code", 10, 4)]
+print(f"{'scheme':<22}{'storage':>9}{'survives':>10}   P(loss) per repair window")
+for name, data, parity in schemes:
+    overhead = (data + parity) / data
+    print(f"{name:<22}{overhead:>8.1f}x{parity:>6} lost   {loss_probability(data + parity, parity):.1e}")
+```
+
+```
+scheme                  storage  survives   P(loss) per repair window
+3x replication             3.0x     2 lost   1.6e-13
+RS(6,3) erasure code       1.5x     3 lost   1.1e-15
+RS(10,4) erasure code      1.4x     4 lost   9.9e-19
+```
+
+Erasure coding is both cheaper and, under this simple model, more durable,
+because it survives more simultaneous losses. HDFS ships RS(6,3) as a standard
+policy, and Facebook's f4 warm-BLOB store used RS(10,4). The costs are why hot
+data is often still replicated:
+
+- **Repair is expensive**: rebuilding one lost fragment reads *k* others over
+  the network, not one copy.
+- **Small objects and hot reads suffer**: a read may touch several servers,
+  and every write pays the encoding CPU.
+
+The model's biggest assumption is *independent* failures. Real data loss comes
+from correlated ones (a rack's power, a bad firmware batch, a whole zone), so
+fragments must be spread across failure domains, and repair speed matters as
+much as the coding scheme, as [Module 01](../01-fundamentals/README.md#durability)
+explains.
+
+---
+
 ## Practice Exercises
 
 ### Exercise 1: File Storage Design (25 min)
@@ -454,6 +570,8 @@ Design a conflict resolution strategy. What happens when both come online? How d
 
 | Mistake | Why It's Wrong | What to Do Instead |
 |---------|---------------|-------------------|
+| **Proxying uploads through application servers** | Workers and bandwidth are tied up for minutes per large file | Presigned URLs: the client uploads straight to object storage |
+| **Never aborting incomplete multipart uploads** | Abandoned parts stay stored and billed indefinitely | A bucket lifecycle rule that aborts incomplete uploads after a few days |
 | **Confusing viewer count with origin requests** | 800K viewers of one video fetch the *same* segments; the CDN collapses them into one origin pull per edge | Size origin load by distinct objects, not concurrent users |
 | **Storing files as single blobs** | A failed upload restarts from zero, and a one-byte edit re-uploads gigabytes | Fixed-size chunks (~4MB) with per-chunk hashes |
 | **Hashing whole files for deduplication** | Any change alters the whole-file hash, so nothing dedupes | Content-address each *chunk*; identical chunks dedupe across files and users |
@@ -495,6 +613,10 @@ Design a conflict resolution strategy. What happens when both come online? How d
 
    **Model answer**: Hash the file content (SHA-256). If hash exists, create a reference (not a copy). Both users point to the same physical storage. Deduplication ratio for typical workloads: 5-10x. Challenge: finding duplicate chunks requires indexing all hashes. Solution: Bloom filter for fast negative checks, hash index for positive checks.
 
+
+6. Users upload videos up to 50 GB from phones on unreliable networks. Today uploads go through your API servers and about 30% of large uploads fail. Redesign the upload path.
+
+   **Model answer**: Take the API servers out of the data path. The client asks the API for an upload; the API creates a `pending` metadata row, starts a multipart upload on a server-chosen key, and returns presigned URLs for the parts (generated in batches as the upload progresses, each valid for minutes). The client uploads parts of, say, 64 MB in parallel, each with a checksum, and retries failed parts individually. After a dropped connection it asks which parts already arrived and sends only the rest. The client then calls "complete", and the storage event triggers validation and transcoding. Add a sweeper for `pending` uploads that never complete and a lifecycle rule that aborts incomplete multipart uploads. Failure is now per part rather than per file, so on unreliable networks most uploads can finish.
 ---
 
 ## Key References
@@ -506,6 +628,8 @@ Design a conflict resolution strategy. What happens when both come online? How d
 | Netflix Tech Blog | Blog | CDN, transcoding, recommendations |
 | YouTube Engineering Blog | Blog | Adaptive bitrate, scale |
 | HLS RFC 8216 | Spec | HTTP Live Streaming protocol |
+| [Amazon S3: multipart upload limits](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html) | Docs | Part sizes, part counts, maximum object size |
+| "f4: Facebook's Warm BLOB Storage System" (OSDI 2014) | Paper | Moving warm data from replication to Reed-Solomon (10,4) |
 
 ---
 
