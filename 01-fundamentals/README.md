@@ -186,6 +186,32 @@ Every system design interview starts here. You must convert vague requirements i
 | MySQL simple query | ~1-5ms |
 | LLM inference (per token) | ~20-50ms |
 
+**Conversions that make estimates fast:**
+
+| Fact | Value | Use it as |
+|------|-------|-----------|
+| Seconds per day | 86,400 | ≈ 10⁵ |
+| 1 million requests/day | ~12 per second | Divide daily volume by 10⁵ |
+| 1 billion requests/day | ~12,000 per second | Then multiply by 2–3 for the peak |
+| Seconds per month / year | ~2.6 million / ~31.5 million | ≈ 2.5 × 10⁶ / ≈ 3 × 10⁷ |
+| 2¹⁰ / 2²⁰ / 2³⁰ / 2⁴⁰ | KB / MB / GB / TB | ≈ 10³ / 10⁶ / 10⁹ / 10¹² |
+| 10 Gbps network link | ~1.25 GB/s | Divide bits by 8 |
+
+**Rough per-node ceilings** (order of magnitude, for deciding *how many*, not
+for capacity planning, which needs a load test):
+
+| Component | One node handles roughly | So at 100K QPS you need... |
+|-----------|--------------------------|----------------------------|
+| Stateless app server | 1K–10K requests/s (depends on work per request) | 10–100 instances |
+| Redis | ~100K simple ops/s | 1–2 nodes (plus replicas) |
+| PostgreSQL / MySQL | ~5K–20K simple indexed queries/s; fewer writes | Replicas for reads, or sharding |
+| Kafka broker | ~100s of MB/s | Partitions spread over a few brokers |
+| NVMe SSD | ~2–7 GB/s sequential, ~100K+ random IOPS | Rarely the first bottleneck |
+| HDD | ~100–200 MB/s sequential, ~100–200 random IOPS | Never for random-access hot data |
+
+The table's purpose is to catch impossible designs early: "one PostgreSQL
+primary for 200K writes/s" fails a sanity check before you draw a single box.
+
 ### Estimation Walkthrough: URL Shortener
 
 **Requirement**: "Build a URL shortener that handles 100M URLs created per month"
@@ -381,6 +407,24 @@ Be ready for:
 - "How do you handle URL expiration?"
 - "How do you prevent abuse?"
 - "How do you handle analytics at scale?"
+
+### What Interviewers Expect by Level
+
+The same question is graded differently by level. The difference is not how
+many components you draw, but **who drives the conversation and how deep the
+trade-offs go**:
+
+| | Mid-level (L4) | Senior (L5) | Staff (L6+) |
+|---|---|---|---|
+| **Scope** | A working design for the stated requirements | A design that holds at scale, with failure modes covered | Questions the requirements; finds the one or two things that decide the design |
+| **Driving** | Interviewer steers; you follow well | You drive; interviewer probes | You drive and set priorities; you say what you would skip and why |
+| **Depth** | Correct use of standard components | One or two deep dives with real mechanisms (e.g. *how* the cache stays consistent) | Deep dives chosen for risk, plus how the system evolves, gets operated and migrated |
+| **Trade-offs** | Names them when asked | States them unprompted, with numbers | Ties them to business cost, team and operational load |
+| **Typical miss** | Hand-waving the data model | Over-engineering what didn't need it | Staying abstract; never committing to a concrete design |
+
+Each design case in this course (Modules 09–12, 23, 24) covers enough depth for
+a senior-level answer. The Discussion Questions and "what breaks at 10×?"
+follow-ups are where staff-level answers are separated.
 
 ---
 
@@ -762,4 +806,4 @@ Never say "I'd use a relational database." Say:
 
 ---
 
-*Module 01 of 23 in the System Design Playground*
+*Module 01 of 24 in the System Design Playground*

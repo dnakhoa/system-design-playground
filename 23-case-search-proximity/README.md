@@ -11,7 +11,7 @@
 |--------|-------|------|
 | Module 22 | Production AI System Architecture | [../22-production-ai-system/](../22-production-ai-system/) |
 | **Module 23** | **Design Case — Search Autocomplete and Proximity Search** | **(current)** |
-| — | Course Home | [../README.md](../README.md) |
+| Module 24 | Design Case — Ticket Booking and Reservations | [../24-case-ticket-booking/](../24-case-ticket-booking/) |
 
 This module extends the design cases in Modules 09-12. It sits at the end
 of the course only because it was added after the others; it assumes
@@ -657,8 +657,8 @@ what stays the same?
 
 **Previous:** [Module 22: Production AI System Architecture](../22-production-ai-system/README.md)
 
-**Next:** [Course Home](../README.md)
+**Next:** [Module 24: Design Case — Ticket Booking and Reservations](../24-case-ticket-booking/README.md)
 
 ---
 
-*Module 23 of 23 in the System Design Playground*
+*Module 23 of 24 in the System Design Playground*

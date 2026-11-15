@@ -1025,4 +1025,4 @@ When a user places an order:
 
 ---
 
-*Module 05 of 23 in the System Design Playground*
+*Module 05 of 24 in the System Design Playground*

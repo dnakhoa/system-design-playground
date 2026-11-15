@@ -1,11 +1,11 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-23-blue.svg)](#curriculum)
+[![Modules](https://img.shields.io/badge/modules-24-blue.svg)](#curriculum)
 [![Lint](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml/badge.svg)](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml)
 [![Learning paths](https://img.shields.io/badge/start-learning%20paths-orange.svg)](#learning-paths)
 
-A free, self-paced course in 23 written modules. It starts at "what is a QPS
+A free, self-paced course in 24 written modules. It starts at "what is a QPS
 estimate" and ends at "how would you architect an LLM agent platform for a
 hundred million users" — and it explains the reasoning at every step, not just
 the conclusions.
@@ -112,14 +112,14 @@ opened:
 
 Choose your path based on your goals:
 
-### Path A: System Design Interview Prep (~15 hours)
+### Path A: System Design Interview Prep (~17 hours)
 
 Focus on the most commonly asked topics:
 
 ```
 Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News Feed)
-    → Module 12 (Payments) → Module 23 (Search/Nearby) → Module 03 (Caching)
-    → Module 04 (Load Balancing)
+    → Module 12 (Payments) → Module 23 (Search/Nearby) → Module 24 (Ticket Booking)
+    → Module 03 (Caching) → Module 04 (Load Balancing)
 ```
 
 | Priority | Module | Why |
@@ -129,6 +129,7 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Must** | 10 | Chat/news feed tests real-time design |
 | **Must** | 12 | Payments tests consistency and idempotency |
 | **Must** | 23 | Autocomplete and "find nearby" are among the most-asked questions |
+| **Must** | 24 | Ticket booking is the standard contention question: double booking, flash crowds |
 | **Should** | 03 | Caching comes up in every design |
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
@@ -169,10 +170,10 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~58 hours)
+### Path D: Full Curriculum (~60 hours)
 
-Work through all 23 modules in order. Each builds on the previous —
-except Module 23, a design case that was added last and fits best straight
+Work through all 24 modules in order. Each builds on the previous —
+except Modules 23 and 24, design cases that were added last and fit best straight
 after Module 12.
 
 ### Path E: Fill Your Gaps
@@ -196,6 +197,7 @@ go straight at it:
 | Need to design a chat system | [Module 10 — Chat/News Feed](10-case-chat-newsfeed/README.md) |
 | Need search-as-you-type or full-text search | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
 | Need "find what's near me" | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
+| Need ticketing, reservations, or a flash-crowd queue | [Module 24 — Ticket Booking](24-case-ticket-booking/README.md) |
 | Auth, encryption, password storage, or OWASP gaps | [Module 13 — Security](13-security/README.md) |
 | APIs keep breaking clients | [Module 14 — API Design](14-api-design/README.md) |
 | Outages take hours to diagnose | [Module 15 — Observability](15-observability/README.md) |
@@ -234,7 +236,7 @@ go straight at it:
 | [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
 | [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, leader election, failure detection, gossip, split brain, CRDTs | ⭐⭐⭐ Advanced | ~3h |
 
-### Phase 3: Design Cases (Modules 09-12, 23)
+### Phase 3: Design Cases (Modules 09-12, 23-24)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
@@ -243,9 +245,11 @@ go straight at it:
 | [11](11-case-storage-streaming/README.md) | [File Storage & Video Streaming](11-case-storage-streaming/README.md) | Chunking, sync, transcoding, adaptive bitrate | ⭐⭐ Intermediate | ~1.5h |
 | [12](12-case-payment-ecommerce/README.md) | [Payment System & E-commerce](12-case-payment-ecommerce/README.md) | Idempotency, inventory, flash sales, reconciliation | ⭐⭐⭐ Advanced | ~2h |
 | [23](23-case-search-proximity/README.md) | [Search Autocomplete & Proximity Search](23-case-search-proximity/README.md) | Tries, inverted index, geohash, quadtree, live location | ⭐⭐ Intermediate | ~2h |
+| [24](24-case-ticket-booking/README.md) | [Ticket Booking & Reservations](24-case-ticket-booking/README.md) | Double booking, conditional updates, holds, virtual waiting room | ⭐⭐⭐ Advanced | ~2h |
 
-Module 23 was added after the rest of the course, so it is numbered last; it
-assumes only Modules 01-05 and is best read straight after Module 12.
+Modules 23 and 24 were added after the rest of the course, so they are
+numbered last; they assume only Modules 01-05 and are best read straight
+after Module 12.
 
 ### Phase 4: Operating Systems in Production (Modules 13-16)
 
@@ -307,7 +311,7 @@ things that self-study doesn't naturally build:
 3. **Rehearse the trade-off sentence.** "I'd choose X because Y, and the cost
    is Z." If you can't finish that sentence for a component, you don't
    understand it yet.
-4. **Do Phase 3 twice.** The five design cases (Modules 09–12 and 23) map
+4. **Do Phase 3 twice.** The six design cases (Modules 09–12, 23 and 24) map
    onto most commonly asked questions. Second pass, do them from memory first.
 5. **Expect the follow-up.** Interviewers push on scale ("now 100×") and
    failure ("now that region is gone"). The Discussion Questions in each
@@ -328,7 +332,7 @@ things that self-study doesn't naturally build:
 
 ## Glossary
 
-### Distributed Systems Fundamentals (Modules 01-12, 23)
+### Distributed Systems Fundamentals (Modules 01-12, 23-24)
 
 | Term | Definition |
 |------|-----------|
@@ -341,6 +345,7 @@ things that self-study doesn't naturally build:
 | **Cache Penetration** | Requests for keys that exist nowhere bypass the cache every time; fixed with negative caching or a Bloom filter |
 | **Canary Release** | Sending a small share of traffic to a new version and comparing it against a baseline before rolling out further |
 | **CDC** | Change Data Capture — turning a database's replication log into a stream of events |
+| **Conditional Update** | A write whose WHERE clause re-checks the condition it depends on (`... WHERE status = 'available'`), so the check and the write cannot be separated by a race |
 | **Consensus** | Agreement among distributed nodes on a single value (e.g., Raft, Paxos) |
 | **CRDT** | Conflict-Free Replicated Data Type — data structure that merges without conflicts |
 | **CQRS** | Command Query Responsibility Segregation — separate write and read models |
@@ -382,6 +387,7 @@ things that self-study doesn't naturally build:
 | **Transactional Outbox** | Writing an event to the database in the same transaction as the business change, then relaying it — fixes the dual-write problem |
 | **Trie** | Prefix tree; with the top-k completions cached at each node, autocomplete becomes one walk of the prefix |
 | **Vector Clock** | Logical clock that tracks causality more precisely than Lamport timestamps |
+| **Virtual Waiting Room** | A queue in front of a system that admits users at a fixed rate with signed tokens, so a flash crowd waits outside instead of overloading it |
 | **Watermark** | A stream processor's estimate that no older events remain, which decides when an event-time window is complete |
 | **WebSocket** | Persistent bidirectional connection for real-time communication |
 | **2PC** | Two-Phase Commit — blocking distributed transaction protocol with a coordinator |
