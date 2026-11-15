@@ -324,6 +324,9 @@ things that self-study doesn't naturally build:
 5. **Expect the follow-up.** Interviewers push on scale ("now 100×") and
    failure ("now that region is gone"). The Discussion Questions in each
    module are written in that voice on purpose.
+6. **Review with the flashcards.** [The deck](flashcards/README.md) has 100+
+   cards across all modules: self-quiz on GitHub, or import the TSV into Anki
+   and let spaced repetition schedule the reviews.
 
 ## Using this with a team
 
@@ -561,16 +564,17 @@ Corrections and additions are welcome. Before opening a pull request, run:
 python3 tools/lint.py
 ```
 
-It checks six things that are easy to break and hard to spot in review:
+It checks seven things that are easy to break and hard to spot in review:
 
 | Check | Catches |
 |-------|---------|
-| Python blocks parse | Typos that make an example non-runnable |
+| Python blocks compile | Typos and misplaced statements that make an example non-runnable |
 | Diagram geometry | Box borders that drift out of alignment — invisible while editing, obvious once rendered |
 | Relative links | Broken cross-module references, especially after renumbering |
 | Anchor fragments | Table-of-contents and `#heading` links that point at nothing |
 | Mermaid blocks | Malformed diagrams that GitHub renders as a red error box |
 | Whitespace | Trailing spaces and missing final newlines — run `python3 tools/lint.py --fix` |
+| Flashcards | `flashcards/README.md` drifting from `flashcards/cards.tsv` — run `python3 tools/build_flashcards.py` |
 
 The same check runs automatically on every pull request, so a failing
 check on your PR means the linter found something — run it locally to see what.
