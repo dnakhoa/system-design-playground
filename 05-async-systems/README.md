@@ -19,6 +19,7 @@
 - Implement event sourcing and CQRS patterns
 - Handle delivery guarantees (at-least-once, exactly-once)
 - Compute over streams with event-time windows, watermarks and a late-data policy
+- Evolve event schemas without breaking old data or independently deployed consumers
 - Design dead letter queues for error handling
 
 ---
@@ -35,12 +36,13 @@
 8. [Delivery Guarantees](#delivery-guarantees)
 9. [The Dual-Write Problem: Outbox and CDC](#the-dual-write-problem-outbox-and-cdc)
 10. [Stream Processing: Windows, Watermarks, and Late Data](#stream-processing-windows-watermarks-and-late-data)
-11. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
-12. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
-13. [Key References](#key-references)
-14. [Practice Exercise](#practice-exercise)
-15. [Common Mistakes](#common-mistakes)
-16. [Discussion Questions](#discussion-questions)
+11. [Schema Evolution: Events Outlive Code](#schema-evolution-events-outlive-code)
+12. [Dead Letter Queues (DLQ)](#dead-letter-queues-dlq)
+13. [Case Study: Uber's Event-Driven Architecture](#case-study-ubers-event-driven-architecture)
+14. [Key References](#key-references)
+15. [Practice Exercise](#practice-exercise)
+16. [Common Mistakes](#common-mistakes)
+17. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -775,6 +777,190 @@ database, an email API) are still at-least-once unless the sink is
 transactional or idempotent, which brings back the rules from
 [Delivery Guarantees](#delivery-guarantees).
 
+### Worked Example: Ad-Click Aggregation
+
+A classic design question ("count ad clicks per minute, for billing and live
+dashboards") puts every idea in this section to work.
+
+**Requirements**: 10 billion clicks per day (≈116,000 per second on average,
+several times that at peak); clicks per ad per minute queryable within a minute;
+top 100 ads over the last minute; counts used for billing, so they must be
+exactly right eventually.
+
+```
+  ad servers ──▶ click log ──▶ Kafka "clicks"      ──▶ raw clicks to object
+                              (partition by ad_id)     storage (source of truth)
+                                    │
+                                    ▼
+                    stream job: dedupe by click_id; tumbling 1-min
+                    event-time windows per ad_id; watermark + late output
+                                    │
+                                    ▼
+                    OLAP store: upsert (ad_id, minute) → count
+                    serves dashboards and top-K queries
+                                    ▲
+  nightly batch over raw clicks ────┘  recomputes yesterday exactly;
+                                       billing uses this, not the live counts
+```
+
+The decisions worth defending:
+
+- **Event time with a watermark.** Billing counts a click in the minute it
+  happened, not when it arrived; late clicks go to a side output that the
+  batch job folds in.
+- **Deduplicate by click ID.** Retries from ad servers, and click fraud,
+  produce repeats. Keep recent click IDs per partition (a keyed state with a
+  TTL longer than the maximum lateness).
+- **Upsert, don't increment, in the sink.** If the job restarts from a
+  checkpoint and replays a minute, writing `count = 4,812` for `(ad_id,
+  minute)` is idempotent; `count += 4,812` double-counts. This one choice
+  turns at-least-once delivery into exactly-once *results*.
+- **Batch reconciliation.** The stream gives fresh numbers; a nightly job over
+  the raw clicks gives the final ones. Same logic, one codebase (Kappa-style
+  replay), with the batch result overwriting the streaming one.
+
+**Hot keys.** A viral ad can carry a large share of all clicks, and
+partitioning by `ad_id` sends all of them to one worker. The fix is **two-phase
+aggregation**: add a random salt to the key so partial counts spread across
+workers, then merge the partials (at most one per salt) in a second step:
+
+```python
+"""Two-phase aggregation: spread a hot ad across workers, then merge partial counts."""
+
+import random
+import zlib
+from collections import Counter
+
+WORKERS = 8
+rng = random.Random(3)
+
+
+def worker_for(key: str) -> int:
+    return zlib.crc32(key.encode()) % WORKERS          # stable across runs
+
+
+# 1M clicks in one minute; one viral ad gets 40% of them.
+clicks = ["ad-viral" if rng.random() < 0.4 else f"ad-{rng.randrange(50_000)}"
+          for _ in range(1_000_000)]
+
+# Phase 0 (naive): partition by ad_id. Every viral click lands on one worker.
+naive = Counter(worker_for(ad) for ad in clicks)
+
+# Phase 1: partition by (ad_id, random salt) and count partially on each worker.
+SALTS = 8
+partial = [Counter() for _ in range(WORKERS)]
+for ad in clicks:
+    salt = rng.randrange(SALTS)
+    partial[worker_for(f"{ad}#{salt}")][ad] += 1
+salted = [sum(c.values()) for c in partial]
+
+# Phase 2: merge the partial counts per ad (at most SALTS partials per ad).
+totals = Counter()
+for c in partial:
+    totals.update(c)
+
+print(f"busiest worker, partitioned by ad_id:    {max(naive.values()):>7,} clicks")
+print(f"busiest worker, partitioned by ad + salt: {max(salted):>7,} clicks")
+print(f"merged count for ad-viral: {totals['ad-viral']:,} "
+      f"(exact: {clicks.count('ad-viral'):,})")
+```
+
+```
+busiest worker, partitioned by ad_id:    474,537 clicks
+busiest worker, partitioned by ad + salt: 125,546 clicks
+merged count for ad-viral: 399,873 (exact: 399,873)
+```
+
+The busiest worker goes from almost half of all traffic to its fair share
+(1M ÷ 8), and the merged count is exact. **Top-K** then works per window:
+because each ad's final count lives in one place after the merge, each worker's
+local top 100 can be merged into an exact global top 100. When exact counts
+aren't required, a count-min sketch
+([Module 02](../02-databases-storage/README.md#storage-engines-b-tree-vs-lsm-tree))
+finds heavy hitters in fixed memory.
+
+---
+
+## Schema Evolution: Events Outlive Code
+
+A database migration changes data in one place at one time. Events don't work
+that way: a topic holds messages written by every producer version from the
+retention period, and a consumer replaying from the beginning reads all of
+them. Producers and consumers deploy independently, so **every schema change
+must work with versions written before it and readers deployed after it**.
+
+| Compatibility | Meaning | Safe change | Deploy order |
+|---------------|---------|-------------|--------------|
+| **Backward** | New readers can read old data | Add a field *with a default*; remove a field | Consumers first |
+| **Forward** | Old readers can read new data | Add a field; remove a field *that had a default* | Producers first |
+| **Full** | Both | Add or remove only fields with defaults | Either |
+
+Confluent Schema Registry, the common enforcement point for Kafka, defaults to
+backward compatibility and rejects incompatible schemas at publish time,
+before a bad producer can write anything. Note that the default checks a new
+schema only against the *previous* version. For topics that consumers replay
+from the beginning, use the transitive mode (`BACKWARD_TRANSITIVE`), which
+checks against every version still in the topic.
+
+The mechanism is **schema resolution**: the reader compares the writer's
+schema with its own, fills defaults for fields the writer didn't have, and
+ignores fields it doesn't know:
+
+```python
+"""Schema resolution: how a reader handles records written with another schema version."""
+
+V1 = {"fields": [{"name": "order_id"}, {"name": "amount"}]}
+V2 = {"fields": [{"name": "order_id"}, {"name": "amount"},
+                 {"name": "currency", "default": "USD"}]}   # added WITH a default
+
+
+def read(record: dict, reader_schema: dict) -> dict:
+    out = {}
+    for f in reader_schema["fields"]:
+        if f["name"] in record:
+            out[f["name"]] = record[f["name"]]
+        elif "default" in f:
+            out[f["name"]] = f["default"]          # old data, new field: use default
+        else:
+            raise ValueError(f"missing field {f['name']!r} with no default")
+    return out                                      # fields unknown to the reader are ignored
+
+
+old_event = {"order_id": "o-1", "amount": 30}                     # written by v1
+new_event = {"order_id": "o-2", "amount": 45, "currency": "EUR"}  # written by v2
+
+print("v2 reader, v1 data:", read(old_event, V2))   # backward compatible
+print("v1 reader, v2 data:", read(new_event, V1))   # forward compatible
+
+V3_BAD = {"fields": [{"name": "order_id"}, {"name": "amount"}, {"name": "region"}]}
+try:
+    read(old_event, V3_BAD)                         # added WITHOUT a default
+except ValueError as e:
+    print("v3 reader, v1 data: ERROR", e)
+```
+
+```
+v2 reader, v1 data: {'order_id': 'o-1', 'amount': 30, 'currency': 'USD'}
+v1 reader, v2 data: {'order_id': 'o-2', 'amount': 45}
+v3 reader, v1 data: ERROR missing field 'region' with no default
+```
+
+Rules per format:
+
+- **Avro**: the writer's schema travels with the data (or as a registry ID),
+  and resolution works as above. Renames need an alias; type changes only
+  along allowed promotions such as `int` → `long`.
+- **Protobuf**: fields are identified by **number**, not name. Adding fields is
+  safe; never reuse or renumber a field, and mark removed numbers `reserved` so
+  no one reuses them later. Proto3 has no `required`, deliberately.
+- **JSON**: nothing is enforced unless you add it (JSON Schema plus a registry).
+  Consumers must be tolerant readers, and the risky changes (changing a
+  field's meaning, unit or type) are the ones no tool catches.
+
+The same expand/contract discipline applies to events as to APIs and database
+columns ([Module 06](../06-microservices/README.md#deploying-safely-rollouts-flags-and-schema-migrations)):
+add, migrate readers, then remove, never all at once.
+
 ---
 
 ## Dead Letter Queues (DLQ)
@@ -919,6 +1105,9 @@ Uber processes millions of events per second across ride matching, pricing, driv
 | Uber Engineering Blog | Blog | Kafka at scale |
 | "Streaming 101" and "Streaming 102" (Tyler Akidau, O'Reilly Radar) | Article | Event time, windows, watermarks |
 | "Questioning the Lambda Architecture" (Jay Kreps, 2014) | Article | The case for Kappa |
+| System Design Interview Vol. 2 (Ch. 6, Ad Click Event Aggregation) — Alex Xu & Sahn Lam | Book | The worked example's full interview treatment |
+| Designing Data-Intensive Applications (Ch. 4, Encoding and Evolution) | Book | Avro, Protobuf and compatibility |
+| [Confluent: Schema evolution and compatibility](https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html) | Docs | Compatibility types and upgrade order |
 
 ---
 
@@ -951,6 +1140,8 @@ When a user places an order:
 | **Retrying non-retryable errors** | A malformed payload will fail identically 1,000 times | Split transient (network, 5xx) from permanent (validation) and DLQ the latter at once |
 | **Async for work the user is waiting on** | "Queued" isn't "done" — a checkout that returns before payment clears misleads the user | Keep the user-blocking path synchronous; make only side effects async |
 | **Windowing by processing time** | A consumer restart or lag spike moves hours of events into one window | Window by event time, with a watermark and an explicit late-data policy |
+| **Incrementing counters in the sink of a stream job** | A replay after a restart adds the same window twice | Upsert the window's final value keyed by (key, window) |
+| **Adding a required event field without a default** | Old events in the topic, and replays, can no longer be read | Add fields with defaults; enforce compatibility in a schema registry |
 | **Event sourcing with no snapshots** | Replay time grows without bound; a 10-year account takes minutes to load | Snapshot periodically and replay only events since the snapshot |
 | **Events carrying only IDs when consumers need data** | Every consumer calls back to the producer, recreating the coupling the queue removed | Event-carried state transfer for the fields consumers actually read |
 
@@ -972,6 +1163,10 @@ When a user places an order:
 
    **Model answer**: Most likely late events: clicks buffered on mobile devices or delayed by a lagging partition arrive after the watermark has closed their window and are dropped. First measure it: count late events per window instead of discarding them silently. Then pick a policy per consumer. The dashboard can keep its short delay, because freshness matters more than the last 2% there. Billing must not depend on it, so route late events to a side output that a correcting job merges, or allow lateness and emit updated window results to an upsert sink. Raising the delay to cover the long tail would fix completeness at the cost of a dashboard minutes behind. A Kappa design also lets you replay the log to recompute any window exactly.
 
+
+7. A team wants to rename the `amount` field in the `OrderPlaced` event to `amount_cents` and change it from dollars (float) to cents (integer). The topic has 30 days of retention and five consuming services. How do you roll this out?
+
+   **Model answer**: It is two breaking changes at once, a rename and a change of meaning, and no compatibility checker catches the unit change. Expand/contract instead: add `amount_cents` as a new optional field and have producers write both fields; migrate each consumer to read `amount_cents` and fall back to converting `amount` when it is absent, because events up to 30 days old (and any replay) won't have it; once every consumer is migrated and old events have aged out of retention (or a replay path is confirmed to handle the fallback), stop writing `amount` and remove it with a forward-compatible schema change. Never reuse the old name with a new meaning: a consumer you forgot would read cents as dollars and be off by 100× without any error.
 ---
 
 ## Related Modules

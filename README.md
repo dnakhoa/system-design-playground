@@ -136,7 +136,7 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | Nice to have | 06 | Microservices for architecture discussions |
 | Nice to have | 26 | Message queue and metrics system internals, for infrastructure-heavy roles |
 
-### Path B: ML Systems and Recommenders (~15 hours)
+### Path B: ML Systems and Recommenders (~15.5 hours)
 
 For the ML system design interview, and for anyone whose system ranks things:
 
@@ -172,7 +172,7 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~64 hours)
+### Path D: Full Curriculum (~65 hours)
 
 Work through all 26 modules in order. Each builds on the previous —
 except Modules 23-26, design cases that were added last and fit best straight
@@ -235,10 +235,10 @@ go straight at it:
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
-| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, CQRS, delivery guarantees, transactional outbox, CDC, stream processing | ⭐⭐ Intermediate | ~3h |
+| [05](05-async-systems/README.md) | [Async Systems](05-async-systems/README.md) | Kafka, CQRS, outbox and CDC, stream processing, ad-click aggregation, schema evolution | ⭐⭐ Intermediate | ~3.5h |
 | [06](06-microservices/README.md) | [Microservices](06-microservices/README.md) | DDD, saga pattern, canary and blue-green deploys, zero-downtime schema migrations | ⭐⭐ Intermediate | ~2.5h |
 | [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
-| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, leader election, failure detection, gossip, split brain, CRDTs | ⭐⭐⭐ Advanced | ~3h |
+| [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, leader election, failure detection, gossip, CRDTs, Dynamo-style KV store | ⭐⭐⭐ Advanced | ~3.5h |
 
 ### Phase 3: Design Cases (Modules 09-12, 23-26)
 
@@ -368,6 +368,7 @@ things that self-study doesn't naturally build:
 | **Geohash** | Encodes a location as a string so that places sharing a prefix share a grid cell; nearby search checks a cell plus its 8 neighbours |
 | **Gossip Protocol** | Peers exchange state with random peers each round; news reaches every node in O(log N) rounds |
 | **High Watermark** | The highest log offset copied to every in-sync replica; only messages below it are visible to consumers and safe from leader failure |
+| **Hinted Handoff** | A stand-in node accepts writes for a down replica and hands them over when it recovers |
 | **HyperLogLog** | Approximate distinct-count structure; Redis's version counts billions of items in 12 KB within ~1% |
 | **Idempotency** | Property where doing an operation multiple times has the same effect as once |
 | **Inverted Index** | Map from each term to the documents containing it (its posting list) — the core of full-text search |
@@ -379,6 +380,7 @@ things that self-study doesn't naturally build:
 | **Little's Law** | Requests in flight = throughput × latency — the arithmetic behind pool and concurrency-limit sizing |
 | **Load Shedding** | Deliberately dropping the least valuable work first when demand exceeds capacity |
 | **LSM-Tree** | Storage engine that appends to sorted immutable files and merges them later; fast writes, used by Cassandra and RocksDB |
+| **Merkle Tree** | A tree of hashes over key ranges; replicas compare roots and descend only where they differ to find out-of-sync data |
 | **MVCC** | Multi-Version Concurrency Control — writes create new row versions so readers see a snapshot and never block writers |
 | **Phi Accrual Detector** | Failure detector that reports a suspicion level from the observed heartbeat distribution instead of a fixed timeout |
 | **Quorum** | Read/write overlap rule (W + R > N) that guarantees a read sees the latest write |
@@ -386,9 +388,11 @@ things that self-study doesn't naturally build:
 | **Raft** | Understandable consensus algorithm used by etcd, TiKV, CockroachDB |
 | **RPO / RTO** | Recovery Point Objective (tolerable data loss) / Recovery Time Objective (tolerable downtime) |
 | **SAGA** | Distributed transaction pattern using compensating actions instead of locks |
+| **Schema Evolution** | Changing an event or message schema so old data and independently deployed readers keep working (backward/forward compatibility) |
 | **SimHash** | Fingerprint where similar documents differ in only a few bits; used to find near-duplicate web pages |
 | **SLI** | Service Level Indicator — what you measure (e.g., latency, error rate) |
 | **SLO** | Service Level Objective — what you promise internally (e.g., 99.9% availability) |
+| **Sloppy Quorum** | Counting writes to stand-in nodes toward W when home replicas are down; keeps writes available at the cost of guaranteed overlap |
 | **Snapshot Isolation** | Each transaction reads a consistent snapshot; prevents lost updates but still allows write skew |
 | **Split Brain** | Two sides of a partition each acting as leader; prevented by majority quorums and fencing tokens |
 | **Time-Series Database** | Storage for (timestamp, value) samples per labelled series; compresses regular data to 1-2 bytes per sample |
