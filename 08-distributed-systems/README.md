@@ -20,6 +20,7 @@
 - Reason about logical clocks and event ordering
 - Implement distributed transactions (2PC, sagas)
 - Use CRDTs for conflict-free replication
+- Design a leaderless key-value store with tunable quorums, hinted handoff and Merkle-tree repair
 
 ---
 
@@ -32,11 +33,12 @@
 5. [Logical Clocks](#logical-clocks)
 6. [Distributed Transactions](#distributed-transactions)
 7. [CRDTs (Conflict-Free Replicated Data Types)](#crdts-conflict-free-replicated-data-types)
-8. [Case Study: ZooKeeper / etcd](#case-study-zookeeper--etcd)
-9. [Key References](#key-references)
-10. [Practice Exercise](#practice-exercise)
-11. [Common Mistakes](#common-mistakes)
-12. [Discussion Questions](#discussion-questions)
+8. [Building a Dynamo-Style Key-Value Store](#building-a-dynamo-style-key-value-store)
+9. [Case Study: ZooKeeper / etcd](#case-study-zookeeper--etcd)
+10. [Key References](#key-references)
+11. [Practice Exercise](#practice-exercise)
+12. [Common Mistakes](#common-mistakes)
+13. [Discussion Questions](#discussion-questions)
 
 ---
 
@@ -844,6 +846,190 @@ print(f"After merge: {node_a.value}")  # "world" (higher timestamp wins)
 
 ---
 
+## Building a Dynamo-Style Key-Value Store
+
+Amazon's Dynamo paper (2007) answered one question: how do you build a
+key-value store that **always accepts writes**, even during failures and
+partitions? Its answer became the template for Cassandra, Riak and ScyllaDB.
+It is also a frequent design question ("design a distributed key-value store"),
+because it combines almost every technique in this module and in
+[Module 02](../02-databases-storage/README.md#replication-strategies).
+
+> **Naming trap:** Amazon *DynamoDB*, the managed service, is not built this
+> way. Its 2022 paper describes one leader per partition elected with
+> Multi-Paxos. The leaderless design below is the original Dynamo's.
+
+The paper's own summary table is the best map of the design:
+
+| Problem | Technique | Section |
+|---------|-----------|---------|
+| Partitioning | Consistent hashing with virtual nodes | [Module 02](../02-databases-storage/README.md#sharding-strategies) |
+| High availability for writes | Vector clocks; conflicts reconciled on read | [Logical Clocks](#logical-clocks) |
+| Temporary failures | Sloppy quorum and hinted handoff | below |
+| Permanent failures | Anti-entropy with Merkle trees | below |
+| Membership and failure detection | Gossip | [Failure Detection and Membership](#failure-detection-and-membership) |
+
+### Replication and Tunable Quorums
+
+Each key is stored on **N** nodes: the first N distinct physical nodes found
+walking clockwise on the hash ring from the key's position (its *preference
+list*). Any node can coordinate a request. A write succeeds after **W**
+replicas acknowledge it, and a read waits for **R** replies, returning the
+newest version it sees. If W + R > N, every read quorum overlaps every write
+quorum:
+
+```python
+"""Does every read quorum overlap every write quorum? Check all combinations."""
+
+from itertools import combinations
+
+
+def always_overlaps(n: int, w: int, r: int) -> bool:
+    nodes = range(n)
+    return all(set(ws) & set(rs)
+               for ws in combinations(nodes, w)
+               for rs in combinations(nodes, r))
+
+
+for n, w, r in [(3, 2, 2), (3, 1, 3), (3, 3, 1), (3, 1, 1), (5, 3, 3), (5, 2, 3)]:
+    print(f"N={n} W={w} R={r}  W+R>N: {w + r > n!s:<5}  "
+          f"quorums always overlap: {always_overlaps(n, w, r)}")
+```
+
+```
+N=3 W=2 R=2  W+R>N: True   quorums always overlap: True
+N=3 W=1 R=3  W+R>N: True   quorums always overlap: True
+N=3 W=3 R=1  W+R>N: True   quorums always overlap: True
+N=3 W=1 R=1  W+R>N: False  quorums always overlap: False
+N=5 W=3 R=3  W+R>N: True   quorums always overlap: True
+N=5 W=2 R=3  W+R>N: False  quorums always overlap: False
+```
+
+| Setting (N=3) | Effect |
+|---------------|--------|
+| W=2, R=2 | Balanced default: tolerates one slow or failed node on both paths |
+| W=1, R=3 | Fast, highly available writes; reads pay |
+| W=3, R=1 | Fast reads; one failed replica blocks writes |
+| W=1, R=1 | Lowest latency; reads may miss recent writes (eventual consistency) |
+
+**Overlap is not linearizability.** Even with W + R > N, a read concurrent
+with a write can see the new value from one replica and then a later read can
+miss it; a write that reached fewer than W nodes "failed" yet may persist on
+some of them; and concurrent writes to the same key still produce conflicting
+versions. Quorums give *probably fresh* reads, not the single-copy illusion
+of consensus.
+
+### Conflicts: Vector Clocks or Last-Write-Wins
+
+Two clients can update the same key through different coordinators at the same
+time, and both writes succeed. The store must then decide what a read returns:
+
+- **Vector clocks** (Dynamo, Riak) detect that the versions are concurrent and
+  return *both* to the application to merge. A shopping cart merges by union.
+- **Last-write-wins** (Cassandra) keeps the version with the highest
+  timestamp. Simple, but concurrent updates are silently discarded and clock
+  skew decides the winner.
+- **CRDTs** make the merge automatic for data types that support it (see
+  [CRDTs](#crdts-conflict-free-replicated-data-types)).
+
+### Temporary Failures: Sloppy Quorum and Hinted Handoff
+
+If one of a key's N home replicas is down, a strict quorum might not reach W.
+A **sloppy quorum** writes instead to the next healthy node on the ring, with a
+*hint*: "this belongs to node C". When C recovers, the stand-in **hands the
+write off** and deletes its copy. Writes stay available through node failures;
+the price is that during the outage a read quorum of the home replicas may not
+include the stand-in, so overlap is no longer guaranteed.
+
+### Repair: Read Repair and Merkle Trees
+
+Replicas drift: hints get lost, nodes are down longer than hints are kept,
+disks are replaced. Two mechanisms converge them:
+
+- **Read repair**: when a read sees replicas disagree, the coordinator writes
+  the newest version back to the stale ones. Cheap, but repairs only data that
+  is read.
+- **Anti-entropy**: replicas compare their whole data sets in the background.
+  Comparing every key would mean shipping the data set; a **Merkle tree**
+  (a tree of hashes over key ranges) finds the differences with a handful of
+  hash comparisons:
+
+```python
+"""Anti-entropy with Merkle trees: find what differs without comparing every key."""
+
+import hashlib
+
+
+def h(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
+
+
+def build_tree(store: dict, buckets: int) -> list[list[bytes]]:
+    """Leaves hash key ranges (buckets); each parent hashes its two children."""
+    leaves = [b""] * buckets
+    for key in sorted(store):
+        b = int.from_bytes(h(key.encode())[:4], "big") % buckets
+        leaves[b] = h(leaves[b] + key.encode() + store[key].encode())
+    levels = [leaves]
+    while len(levels[-1]) > 1:
+        prev = levels[-1]
+        levels.append([h(prev[i] + prev[i + 1]) for i in range(0, len(prev), 2)])
+    return levels                                    # levels[-1][0] is the root
+
+
+def diff(a: list, b: list) -> tuple[list[int], int]:
+    """Walk down from the root, descending only where hashes differ."""
+    compared, frontier = 0, [0]
+    for depth in range(len(a) - 1, -1, -1):
+        compared += len(frontier)
+        mismatched = [i for i in frontier if a[depth][i] != b[depth][i]]
+        if depth == 0:
+            return mismatched, compared
+        frontier = [c for i in mismatched for c in (2 * i, 2 * i + 1)]
+
+
+replica_a = {f"user:{i}": f"profile-v1-{i}" for i in range(100_000)}
+replica_b = dict(replica_a)
+for i in (17, 40_000, 99_999):                       # replica B missed three writes
+    replica_b[f"user:{i}"] = "stale"
+
+ta, tb = build_tree(replica_a, 1024), build_tree(replica_b, 1024)
+buckets, compared = diff(ta, tb)
+keys_to_sync = sum(1 for k in replica_a
+                   if int.from_bytes(h(k.encode())[:4], "big") % 1024 in buckets)
+print(f"roots equal: {ta[-1][0] == tb[-1][0]}")
+print(f"hash comparisons: {compared} (instead of comparing 100,000 keys)")
+print(f"differing buckets: {buckets} -> exchange {keys_to_sync} keys, not 100,000")
+```
+
+```
+roots equal: False
+hash comparisons: 47 (instead of comparing 100,000 keys)
+differing buckets: [13, 69, 178] -> exchange 316 keys, not 100,000
+```
+
+Equal roots mean the replicas are identical, one comparison. When they
+differ, descend only into subtrees whose hashes differ; three stale keys out of
+100,000 were found with 47 hash comparisons. Cassandra's `nodetool repair`
+works this way.
+
+**Deletes need special care.** A delete is written as a *tombstone* marker
+rather than removing the data, because a replica that missed the delete would
+otherwise "repair" the deleted value back to life. Tombstones are kept for a
+grace period (Cassandra's `gc_grace_seconds`, 10 days by default) and then
+purged, which is why repair must run on every replica more often than the
+grace period. Otherwise deleted data comes back.
+
+### The Single-Node Storage Engine
+
+Each node stores its share in an LSM-tree
+([Module 02](../02-databases-storage/README.md#storage-engines-b-tree-vs-lsm-tree)):
+writes append to a commit log and a memtable, flush to immutable SSTables, and
+compact in the background, with Bloom filters skipping SSTables that can't hold
+a key. That engine is what makes "accept every write, fast" practical.
+
+---
+
 ## Case Study: ZooKeeper / etcd
 
 Coordination services that provide distributed primitives.
@@ -898,6 +1084,8 @@ Coordination services that provide distributed primitives.
 | ZooKeeper Documentation | Docs | Distributed coordination |
 | etcd Documentation | Docs | Raft-based key-value store |
 | "Designing Data-Intensive Applications" | Book | Comprehensive distributed systems |
+| "Dynamo: Amazon's Highly Available Key-value Store" (DeCandia et al., SOSP 2007) | Paper | The leaderless design and its techniques table |
+| "Amazon DynamoDB: A Scalable, Predictably Performant, and Fully Managed NoSQL Database Service" (USENIX ATC 2022) | Paper | How the managed service differs: Multi-Paxos leaders per partition |
 | "The φ Accrual Failure Detector" (Hayashibara et al., 2004) | Paper | Adaptive failure detection used by Cassandra and Akka |
 | "SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol" (Das et al., 2002) | Paper | Gossip membership with indirect probes |
 | "How to do distributed locking" (Martin Kleppmann, 2016) | Blog | The Redlock critique and why locks need fencing tokens |
@@ -933,6 +1121,8 @@ Coordination services that provide distributed primitives.
 | **2PC for cross-service transactions** | Blocking protocol, coordinator is a SPOF, locks held through the stall | Saga with compensations, or TCC |
 | **Assuming a failed node is a stopped node** | Slow, partitioned, and dead are indistinguishable from outside | Design for "unreachable"; use leases and fencing rather than liveness guesses |
 | **One fixed heartbeat timeout everywhere** | Too short causes false failovers on noisy links; too long leaves real crashes undetected | An adaptive detector (phi accrual), indirect probes before eviction, and fencing so a wrong guess is safe |
+| **Treating W + R > N as strong consistency** | Sloppy quorums, partially failed writes and concurrent updates still produce stale or conflicting reads | Use consensus (Raft) when you need linearizability; treat quorums as "probably fresh" |
+| **Running repair less often than the tombstone grace period** | A replica that missed a delete resurrects the data after tombstones are purged | Schedule full repair on every replica within `gc_grace_seconds` |
 | **Building consensus yourself** | It is famously easy to get subtly, silently wrong | Use etcd, ZooKeeper, or Consul |
 
 ---
@@ -953,6 +1143,10 @@ Coordination services that provide distributed primitives.
 
    **Model answer**: The standby could not tell "the primary died" from "the link between us died", so it promoted itself while the primary was still serving clients: classic split brain. Two nodes cannot form a majority after a partition, so any rule that lets one side act alone will eventually let both sides act. Fixes: add a third vote (a witness node, or a lease in etcd/ZooKeeper or a cloud provider's lock) so promotion requires a majority; make the old primary fence itself, refusing writes once it cannot renew its lease; and give writes a fencing token (epoch number) so storage or replicas reject anything from the deposed epoch. Lengthening the timeout only makes the blip that triggers it rarer.
 
+
+7. Design a distributed key-value store for shopping carts that must accept writes even when a datacenter is partitioned. Which N, W and R would you choose, and what happens when two devices update the same cart during a partition?
+
+   **Model answer**: A Dynamo-style leaderless store: consistent hashing with virtual nodes, N=3 replicas spread across availability zones, W=2 and R=2 for the normal case, plus sloppy quorum and hinted handoff so writes still succeed when a home replica is unreachable. During a partition, two devices can both write successfully through different coordinators, producing concurrent versions. Track them with vector clocks (or dotted version vectors) and return both versions on read; the cart merges them by union of items, which is exactly the Dynamo paper's example, with the known cost that a deleted item can reappear. If that is unacceptable, model the cart as a CRDT such as an observed-remove set, which handles add and remove correctly. Background anti-entropy with Merkle trees then converges replicas after the partition heals.
 ---
 
 ## Related Modules

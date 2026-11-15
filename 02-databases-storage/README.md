@@ -456,7 +456,10 @@ PostgreSQL, and offline-first mobile sync (each device is effectively a leader).
   Quorum: W + R > N ensures consistency
 ```
 
-**Used by**: Cassandra, DynamoDB, Riak
+**Used by**: Cassandra, Riak, ScyllaDB, and Amazon's original Dynamo. (The
+managed service *DynamoDB* is different: it elects a leader per partition with
+Multi-Paxos.) The full design is in
+[Module 08](../08-distributed-systems/README.md#building-a-dynamo-style-key-value-store).
 
 ### Replication Trade-offs
 
