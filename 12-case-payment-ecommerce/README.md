@@ -643,4 +643,4 @@ Design a daily reconciliation system:
 
 ---
 
-*Module 12 of 25 in the System Design Playground*
+*Module 12 of 26 in the System Design Playground*

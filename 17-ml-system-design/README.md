@@ -1067,4 +1067,4 @@ exercise.
 
 ---
 
-*Module 17 of 25 in the System Design Playground*
+*Module 17 of 26 in the System Design Playground*

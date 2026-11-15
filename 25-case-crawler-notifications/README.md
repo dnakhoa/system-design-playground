@@ -11,7 +11,7 @@
 |--------|-------|------|
 | Module 24 | Design Case — Ticket Booking and Reservations | [../24-case-ticket-booking/](../24-case-ticket-booking/) |
 | **Module 25** | **Design Case — Web Crawler and Notification System** | **(current)** |
-| — | Course Home | [../README.md](../README.md) |
+| Module 26 | Design Case — Distributed Message Queue and Metrics Monitoring System | [../26-case-message-queue-metrics/](../26-case-message-queue-metrics/) |
 
 Like Modules 23-24, this design case extends Modules 09-12 and was added
 after them. It assumes Modules 01-05; the
@@ -610,8 +610,8 @@ comparison site.
 
 **Previous:** [Module 24: Design Case — Ticket Booking and Reservations](../24-case-ticket-booking/README.md)
 
-**Next:** [Course Home](../README.md)
+**Next:** [Module 26: Design Case — Distributed Message Queue and Metrics Monitoring System](../26-case-message-queue-metrics/README.md)
 
 ---
 
-*Module 25 of 25 in the System Design Playground*
+*Module 25 of 26 in the System Design Playground*

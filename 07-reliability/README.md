@@ -988,4 +988,4 @@ Google's SRE practices are the gold standard for reliability engineering.
 
 ---
 
-*Module 07 of 25 in the System Design Playground*
+*Module 07 of 26 in the System Design Playground*

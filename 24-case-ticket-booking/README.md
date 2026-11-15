@@ -608,4 +608,4 @@ is in Module 01.
 
 ---
 
-*Module 24 of 25 in the System Design Playground*
+*Module 24 of 26 in the System Design Playground*

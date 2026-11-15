@@ -1,11 +1,11 @@
 # System Design: From Fundamentals to LLM AI Systems
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Modules](https://img.shields.io/badge/modules-25-blue.svg)](#curriculum)
+[![Modules](https://img.shields.io/badge/modules-26-blue.svg)](#curriculum)
 [![Lint](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml/badge.svg)](https://github.com/dnakhoa/system-design-playground/actions/workflows/lint.yml)
 [![Learning paths](https://img.shields.io/badge/start-learning%20paths-orange.svg)](#learning-paths)
 
-A free, self-paced course in 25 written modules. It starts at "what is a QPS
+A free, self-paced course in 26 written modules. It starts at "what is a QPS
 estimate" and ends at "how would you architect an LLM agent platform for a
 hundred million users" — and it explains the reasoning at every step, not just
 the conclusions.
@@ -134,6 +134,7 @@ Module 01 (Fundamentals) → Module 09 (URL Shortener) → Module 10 (Chat/News 
 | **Should** | 03 | Caching comes up in every design |
 | **Should** | 04 | Rate limiting is a common follow-up |
 | Nice to have | 06 | Microservices for architecture discussions |
+| Nice to have | 26 | Message queue and metrics system internals, for infrastructure-heavy roles |
 
 ### Path B: ML Systems and Recommenders (~15 hours)
 
@@ -171,10 +172,10 @@ Module 18 (Inference Serving) → Module 19 (RAG at Scale)
 | **Should** | 15 | You cannot operate an AI system you cannot observe |
 | Nice to have | 01 | Foundation concepts still apply |
 
-### Path D: Full Curriculum (~62 hours)
+### Path D: Full Curriculum (~64 hours)
 
-Work through all 25 modules in order. Each builds on the previous —
-except Modules 23-25, design cases that were added last and fit best straight
+Work through all 26 modules in order. Each builds on the previous —
+except Modules 23-26, design cases that were added last and fit best straight
 after Module 12.
 
 ### Path E: Fill Your Gaps
@@ -200,6 +201,7 @@ go straight at it:
 | Need "find what's near me" | [Module 23 — Search & Proximity](23-case-search-proximity/README.md) |
 | Need ticketing, reservations, or a flash-crowd queue | [Module 24 — Ticket Booking](24-case-ticket-booking/README.md) |
 | Need a crawler, or push/SMS/email notifications | [Module 25 — Crawler & Notifications](25-case-crawler-notifications/README.md) |
+| Need to know how Kafka or Prometheus work inside | [Module 26 — Message Queue & Metrics](26-case-message-queue-metrics/README.md) |
 | Auth, encryption, password storage, or OWASP gaps | [Module 13 — Security](13-security/README.md) |
 | APIs keep breaking clients | [Module 14 — API Design](14-api-design/README.md) |
 | Outages take hours to diagnose | [Module 15 — Observability](15-observability/README.md) |
@@ -238,7 +240,7 @@ go straight at it:
 | [07](07-reliability/README.md) | [Reliability Engineering](07-reliability/README.md) | Circuit breakers, backpressure, load shedding, bulkheads, SLOs | ⭐⭐ Intermediate | ~3h |
 | [08](08-distributed-systems/README.md) | [Distributed Systems](08-distributed-systems/README.md) | Raft, leader election, failure detection, gossip, split brain, CRDTs | ⭐⭐⭐ Advanced | ~3h |
 
-### Phase 3: Design Cases (Modules 09-12, 23-25)
+### Phase 3: Design Cases (Modules 09-12, 23-26)
 
 | Module | Topic | Key Concepts | Difficulty | Time |
 |--------|-------|-------------|------------|------|
@@ -249,8 +251,9 @@ go straight at it:
 | [23](23-case-search-proximity/README.md) | [Search Autocomplete & Proximity Search](23-case-search-proximity/README.md) | Tries, inverted index, geohash, quadtree, live location | ⭐⭐ Intermediate | ~2h |
 | [24](24-case-ticket-booking/README.md) | [Ticket Booking & Reservations](24-case-ticket-booking/README.md) | Double booking, conditional updates, holds, virtual waiting room | ⭐⭐⭐ Advanced | ~2h |
 | [25](25-case-crawler-notifications/README.md) | [Web Crawler & Notification System](25-case-crawler-notifications/README.md) | URL frontier, politeness, SimHash, priority lanes, dedupe | ⭐⭐ Intermediate | ~2h |
+| [26](26-case-message-queue-metrics/README.md) | [Message Queue & Metrics Monitoring](26-case-message-queue-metrics/README.md) | Segmented logs, ISR and high watermark, consumer groups, TSDB compression, alerting | ⭐⭐⭐ Advanced | ~2h |
 
-Modules 23-25 were added after the rest of the course, so they are
+Modules 23-26 were added after the rest of the course, so they are
 numbered last; they assume only Modules 01-05 and are best read straight
 after Module 12.
 
@@ -314,7 +317,7 @@ things that self-study doesn't naturally build:
 3. **Rehearse the trade-off sentence.** "I'd choose X because Y, and the cost
    is Z." If you can't finish that sentence for a component, you don't
    understand it yet.
-4. **Do Phase 3 twice.** The seven design cases (Modules 09–12 and 23–25) map
+4. **Do Phase 3 twice.** The eight design cases (Modules 09–12 and 23–26) map
    onto most commonly asked questions. Second pass, do them from memory first.
 5. **Expect the follow-up.** Interviewers push on scale ("now 100×") and
    failure ("now that region is gone"). The Discussion Questions in each
@@ -335,7 +338,7 @@ things that self-study doesn't naturally build:
 
 ## Glossary
 
-### Distributed Systems Fundamentals (Modules 01-12, 23-25)
+### Distributed Systems Fundamentals (Modules 01-12, 23-26)
 
 | Term | Definition |
 |------|-----------|
@@ -364,9 +367,11 @@ things that self-study doesn't naturally build:
 | **G-Counter** | Grow-only counter CRDT — can only increment |
 | **Geohash** | Encodes a location as a string so that places sharing a prefix share a grid cell; nearby search checks a cell plus its 8 neighbours |
 | **Gossip Protocol** | Peers exchange state with random peers each round; news reaches every node in O(log N) rounds |
+| **High Watermark** | The highest log offset copied to every in-sync replica; only messages below it are visible to consumers and safe from leader failure |
 | **HyperLogLog** | Approximate distinct-count structure; Redis's version counts billions of items in 12 KB within ~1% |
 | **Idempotency** | Property where doing an operation multiple times has the same effect as once |
 | **Inverted Index** | Map from each term to the documents containing it (its posting list) — the core of full-text search |
+| **ISR** | In-Sync Replicas — the followers caught up with a partition leader; `acks=all` waits for all of them |
 | **Kafka** | Distributed event streaming platform for high-throughput message queues |
 | **Lamport Timestamp** | Logical clock that tracks causality in distributed systems |
 | **Leader Election** | Process of selecting one node to coordinate actions |
@@ -386,6 +391,7 @@ things that self-study doesn't naturally build:
 | **SLO** | Service Level Objective — what you promise internally (e.g., 99.9% availability) |
 | **Snapshot Isolation** | Each transaction reads a consistent snapshot; prevents lost updates but still allows write skew |
 | **Split Brain** | Two sides of a partition each acting as leader; prevented by majority quorums and fencing tokens |
+| **Time-Series Database** | Storage for (timestamp, value) samples per labelled series; compresses regular data to 1-2 bytes per sample |
 | **Token Bucket** | Rate limiting algorithm that allows controlled bursts |
 | **Tombstone** | A deletion marker in an LSM-tree; space is reclaimed only when compaction runs |
 | **Transactional Outbox** | Writing an event to the database in the same transaction as the business change, then relaying it — fixes the dual-write problem |
