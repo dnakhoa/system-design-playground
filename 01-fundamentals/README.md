@@ -422,7 +422,7 @@ trade-offs go**:
 | **Trade-offs** | Names them when asked | States them unprompted, with numbers | Ties them to business cost, team and operational load |
 | **Typical miss** | Hand-waving the data model | Over-engineering what didn't need it | Staying abstract; never committing to a concrete design |
 
-Each design case in this course (Modules 09–12 and 23–25) covers enough depth for
+Each design case in this course (Modules 09–12 and 23–26) covers enough depth for
 a senior-level answer. The Discussion Questions and "what breaks at 10×?"
 follow-ups are where staff-level answers are separated.
 
@@ -806,4 +806,4 @@ Never say "I'd use a relational database." Say:
 
 ---
 
-*Module 01 of 25 in the System Design Playground*
+*Module 01 of 26 in the System Design Playground*
